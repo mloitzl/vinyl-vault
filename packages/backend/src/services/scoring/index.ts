@@ -45,8 +45,17 @@ export {
   normalizeAndGroup,
 } from './normalize.js';
 
-// TODO: Phase 3 - Scoring
-// export { scoreRelease, selectPrimaryRelease } from './score.js';
+// Scoring (FR-SC-1, FR-SC-2, FR-SC-3, FR-SC-4, FR-SC-5)
+export {
+  scoreRelease,
+  scoreReleases,
+  selectPrimaryRelease,
+  scoreAndSelectPrimaryReleases,
+  formatScoringResult,
+} from './score.js';
+
+// TODO: Phase 4 - Aggregation
+// export { createAlbum, selectBestTrackList, aggregateGenresAndStyles } from './aggregate.js';
 
 // TODO: Phase 4 - Aggregation
 // export { createAlbum, selectBestTrackList, aggregateGenresAndStyles } from './aggregate.js';
