@@ -176,8 +176,261 @@ input UpsertUserInput {
   email: String
 }
 
+"""
+Result of a barcode lookup using the blended scoring approach.
+"""
 type LookupBarcodePayload {
-  releases: [Release!]!
+  """
+  Aggregated albums derived from releases across all sources.
+  Each album represents a unique normalized artist+title combination.
+  Albums are sorted by the score of their primary release (highest first).
+  """
+  albums: [Album!]!
+
+  """
+  Legacy field: flat list of releases for backward compatibility.
+  @deprecated Use albums instead for the full scoring and grouping benefits.
+  """
+  releases: [Release!]! @deprecated(reason: "Use albums instead")
+
+  """
+  Whether the result was served from cache.
+  """
   fromCache: Boolean!
+
+  """
+  Timing information for performance analysis.
+  """
+  timing: LookupTiming
+
+  """
+  Errors encountered during lookup (non-fatal).
+  The lookup may still return partial results.
+  """
   errors: [String!]
+}
+
+"""
+An aggregated album combining data from multiple release sources.
+Implements FR-AG-* requirements.
+"""
+type Album {
+  """
+  Unique album identifier (hash of normalized artist + title).
+  """
+  id: ID!
+
+  """
+  Normalized artist name (main artist, articles removed).
+  """
+  artist: String!
+
+  """
+  Normalized album title (parentheticals and articles removed).
+  """
+  title: String!
+
+  """
+  List of barcode(s) that match this album.
+  """
+  barcodes: [String!]!
+
+  """
+  The primary release selected by highest score.
+  """
+  primaryRelease: ScoredRelease!
+
+  """
+  All alternative releases for this album, sorted by score descending.
+  """
+  alternativeReleases: [AlternativeRelease!]!
+
+  """
+  Best available track list from highest-scoring release with tracks.
+  """
+  trackList: [Track!]
+
+  """
+  Aggregated genres from all releases (deduplicated).
+  """
+  genres: [String!]!
+
+  """
+  Aggregated styles from all releases (deduplicated).
+  """
+  styles: [String!]!
+
+  """
+  All external IDs grouped by source.
+  """
+  externalIds: ExternalIds!
+
+  """
+  Best available cover image URL.
+  """
+  coverImageUrl: String
+
+  """
+  Other title variations found (e.g., remasters, editions).
+  """
+  otherTitles: [String!]!
+
+  """
+  Edition notes collected from releases (e.g., "Remastered", "Deluxe").
+  """
+  editionNotes: [String!]!
+
+  """
+  Number of releases that were grouped into this album.
+  """
+  releaseCount: Int!
+
+  """
+  Score of the primary release (for sorting/display).
+  """
+  score: Int!
+}
+
+"""
+A release with its scoring information.
+"""
+type ScoredRelease {
+  """
+  Original release data.
+  """
+  release: Release!
+
+  """
+  Total score calculated by the scoring algorithm.
+  """
+  score: Int!
+
+  """
+  Detailed breakdown of how the score was calculated.
+  """
+  scoreBreakdown: ScoreBreakdown!
+}
+
+"""
+Score breakdown showing points from each scoring factor.
+Implements FR-SC-* requirements for traceability.
+"""
+type ScoreBreakdown {
+  """
+  Points from media type preference (FR-SC-1).
+  """
+  mediaType: Int!
+
+  """
+  Points from country preference (FR-SC-2).
+  """
+  countryPreference: Int!
+
+  """
+  Points from track list completeness (FR-SC-3).
+  """
+  trackListCompleteness: Int!
+
+  """
+  Points from cover art availability.
+  """
+  coverArt: Int!
+
+  """
+  Points from label information.
+  """
+  labelInfo: Int!
+
+  """
+  Points from catalog number.
+  """
+  catalogNumber: Int!
+
+  """
+  Points from year information.
+  """
+  yearInfo: Int!
+
+  """
+  Points from source bonus (e.g., Discogs base bonus).
+  """
+  sourceBonus: Int!
+}
+
+"""
+An alternative release for an album (simplified view).
+"""
+type AlternativeRelease {
+  """
+  External ID from the source.
+  """
+  externalId: String!
+
+  """
+  Source of this release.
+  """
+  source: ReleaseSource!
+
+  """
+  Country of release.
+  """
+  country: String
+
+  """
+  Year of release.
+  """
+  year: Int
+
+  """
+  Format/media type.
+  """
+  format: String
+
+  """
+  Label name.
+  """
+  label: String
+
+  """
+  Score for this release.
+  """
+  score: Int!
+
+  """
+  Edition notes if any.
+  """
+  editionNote: String
+}
+
+"""
+External IDs from various sources.
+"""
+type ExternalIds {
+  discogs: [String!]!
+  musicbrainz: [String!]!
+}
+
+"""
+Timing information for performance analysis.
+"""
+type LookupTiming {
+  """
+  Time spent fetching from Discogs (ms).
+  """
+  discogsMs: Int!
+
+  """
+  Time spent fetching from MusicBrainz (ms).
+  """
+  musicbrainzMs: Int!
+
+  """
+  Time spent on scoring and aggregation (ms).
+  """
+  scoringMs: Int!
+
+  """
+  Total lookup time (ms).
+  """
+  totalMs: Int!
 }

@@ -155,16 +155,41 @@ Security hardening on the Pi:
 **Release** (Backend MongoDB `releases` collection)
 - Cached metadata about a particular music release from an external source.
 
+**Album** (Aggregated from releases at query time)
+- Normalized album combining data from multiple release sources.
+- Contains: primary release, alternative releases, merged genres/styles, all external IDs.
+- Created by the scoring orchestrator during barcode lookup.
+
 **Relationships:**
 - User 1—N Record
 - Release 1—N Record (different owners or copies)
+- Album 1—N Release (grouped by normalized artist + title)
 
 ### 5.4 External Integration
 
-**Barcode Lookup Flow (Implemented):**
+**Barcode Lookup Flow (Implemented with Blended Scoring):**
 - Barcode scan from browser (camera or manual input) → BFF → Domain Backend.
 - The backend checks a local `releases` cache by barcode and returns cached candidates when available.
-- If no cached release is found, the backend queries external music APIs (Discogs / MusicBrainz), caches results in `releases`, and returns candidate releases to the BFF for the frontend to present to the user.
+- If no cached release is found, the backend:
+  1. Queries Discogs and MusicBrainz APIs **in parallel**.
+  2. Converts results to a unified `RawRelease` format.
+  3. **Normalizes** text fields (lowercase, trim, remove articles like "The", "A", "An").
+  4. **Groups** releases by normalized artist + title into album candidates.
+  5. **Scores** each release based on configurable weights:
+     - Media type preference (vinyl/LP: +20)
+     - Country preference (US/UK/AT/DE: +15, deprioritized: -10)
+     - Track list completeness (+25 for complete, +10 for partial)
+     - Cover art availability (+15)
+     - Label info (+10), Catalog number (+5)
+     - Discogs source bonus (+5)
+  6. **Selects primary release** (highest score, with deterministic tie-breaking).
+  7. **Aggregates** into `Album` objects with best track list, merged genres/styles, all external IDs.
+  8. Caches results and returns `Album` objects to the BFF.
+
+**Scoring Configuration:**
+- Stored in `packages/backend/config/scoring.json`.
+- JSON Schema validation via `scoring.schema.json`.
+- Configurable without code changes (FR-CF-1, FR-CF-2, FR-CF-3).
 
 **GitHub OAuth:**
 - Browser interacts only with BFF's auth endpoints.
@@ -211,6 +236,19 @@ vinylvault/
 │   ├── frontend/          # React + Relay + Vite
 │   ├── bff/               # Express + Apollo Server
 │   └── backend/           # Apollo Server (standalone)
+│       ├── config/        # Scoring configuration
+│       │   ├── scoring.json
+│       │   └── scoring.schema.json
+│       └── src/
+│           └── services/
+│               └── scoring/   # Blended scoring module
+│                   ├── types.ts
+│                   ├── config.ts
+│                   ├── normalize.ts
+│                   ├── score.ts
+│                   ├── aggregate.ts
+│                   ├── orchestrator.ts
+│                   └── index.ts
 ├── infra/                 # Docker, Caddy configs
 ├── docs/                  # Setup guides
 ├── .env                   # Environment variables (not in git)

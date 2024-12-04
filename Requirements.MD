@@ -69,9 +69,10 @@ FR-1 Barcode Scan and Lookup ✅ IMPLEMENTED
 - The system validates the barcode format and shows errors for invalid or unreadable codes.
 
 FR-2 External Metadata Retrieval ✅ IMPLEMENTED
-- The system searches for releases by barcode using external music data services (Discogs and MusicBrainz integrations are available).
-- If multiple releases match, the system displays a list of candidates for the user to choose from.
-- The system caches selected release metadata in MongoDB for future reuse.
+- The system searches for releases by barcode using external music data services (Discogs and MusicBrainz are queried in parallel).
+- Results are normalized, scored, and aggregated into Album objects using the blended scoring approach.
+- If multiple albums match, the system displays them sorted by score for the user to choose from.
+- The system caches release metadata in MongoDB for future reuse.
 
 ### FR-2.1 Release Normalization and Grouping
 
@@ -264,17 +265,20 @@ QR-04: Robustness to incomplete data
 - ✅ External metadata retrieval - basic (FR-2)
 
 ### In Progress
-- 🔄 Release normalization and grouping (FR-NG-1, FR-NG-2, FR-NG-3)
-- 🔄 Release scoring mechanism (FR-SC-1 through FR-SC-5)
-- 🔄 Album aggregation (FR-AG-1 through FR-AG-6)
-- 🔄 Scoring configuration (FR-CF-1, FR-CF-2, FR-CF-3)
 - 🔄 Record creation and management (FR-3, FR-4)
 - 🔄 Collection browsing (FR-5)
+
+### Recently Completed
+- ✅ Release normalization and grouping (FR-NG-1, FR-NG-2, FR-NG-3)
+- ✅ Release scoring mechanism (FR-SC-1 through FR-SC-5)
+- ✅ Album aggregation (FR-AG-1 through FR-AG-6)
+- ✅ Scoring configuration (FR-CF-1, FR-CF-2, FR-CF-3)
+- ✅ Quality requirements (QR-01 through QR-04)
 
 ## 7. Open Issues
 
 - ~~Decision between specific external music APIs (Discogs, MusicBrainz, or both).~~ **RESOLVED**: Use both APIs with blended scoring approach (FR-2.1 through FR-2.4).
 - Strategy for backup/restore (local NAS, cloud storage, etc.).
 - Mobile camera API integration for barcode scanning.
-- Definition of default scoring weights and country preference lists for FR-SC-2 and FR-SC-3.
-- Storage format and location for scoring configuration (FR-CF-1, FR-CF-2, FR-CF-3).
+- ~~Definition of default scoring weights and country preference lists for FR-SC-2 and FR-SC-3.~~ **RESOLVED**: Configured in `packages/backend/config/scoring.json` with weights (mediaType: 20, preferredCountry: 15, trackListComplete: 25, coverArt: 15, labelInfo: 10, catalogNumber: 5) and preferred countries (US, UK, AT, DE).
+- ~~Storage format and location for scoring configuration (FR-CF-1, FR-CF-2, FR-CF-3).~~ **RESOLVED**: JSON configuration file at `packages/backend/config/scoring.json` with JSON Schema validation.

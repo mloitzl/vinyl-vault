@@ -28,10 +28,10 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 - Implement SPA that communicates exclusively with the BFF GraphQL endpoint.
 - Manage authentication state via `AuthContext` and `/auth/me` endpoint.
-- Use Relay connections and fragments for records, releases, and viewer.
-- Display user profile (avatar, name, role) in header when authenticated. 
- - Provide barcode scanning UI (camera + manual input) and wire it to the BFF lookup flow (FR-1 implemented).
- - Surface external metadata lookup results to the user and allow selection (FR-2 implemented).
+- Use Relay connections and fragments for records, releases, albums, and viewer.
+- Display user profile (avatar, name, role) in header when authenticated.
+- Provide barcode scanning UI (camera + manual input) and wire it to the BFF lookup flow (FR-1 implemented).
+- Display scored and aggregated Album results from barcode lookup (FR-2 implemented with blended scoring).
 
 ## 3. Backend-for-Frontend (BFF) (`packages/bff`)
 
@@ -81,10 +81,27 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Responsibilities:**
 
-- Expose domain-centric GraphQL schema (User, Record, Release).
+- Expose domain-centric GraphQL schema (User, Record, Release, Album).
 - Implement business logic and data access.
 - Validate and decode JWTs from the BFF.
-- Integrate with external music APIs (Discogs/MusicBrainz) and maintain cached releases.
+- Integrate with external music APIs (Discogs/MusicBrainz) queried in parallel.
+- Normalize, score, and aggregate releases into Album objects.
+- Maintain cached releases in MongoDB.
+
+**Scoring Module (`src/services/scoring/`):**
+- `types.ts` - TypeScript interfaces for the scoring system
+- `config.ts` - Configuration loader with defaults
+- `normalize.ts` - Text normalization and release grouping
+- `score.ts` - Release scoring logic
+- `aggregate.ts` - Album aggregation from grouped releases
+- `orchestrator.ts` - Main orchestrator (parallel API queries)
+
+**Scoring Configuration (`config/scoring.json`):**
+- Configurable weights for media type, country, track list, cover art, label, catalog number
+- Preferred countries: US, UK, AT, DE
+- Preferred media types: vinyl, lp, 12", 10", 7", album
+- Discogs source bonus: +5 points
+- Tie-breaker: earliest release year
 
 ## 5. Database
 
