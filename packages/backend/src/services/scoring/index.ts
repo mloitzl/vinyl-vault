@@ -32,8 +32,18 @@ export {
   validateScoringConfig,
 } from './config.js';
 
-// TODO: Phase 2 - Normalization
-// export { normalizeText, normalizeRelease, createGroupingKey, groupReleases } from './normalize.js';
+// Normalization (FR-NG-1, FR-NG-2, FR-NG-3)
+export {
+  normalizeText,
+  extractMainArtist,
+  createGroupingKey,
+  getAffixesForSource,
+  normalizeRelease,
+  normalizeReleases,
+  groupReleases,
+  isUniqueRelease,
+  normalizeAndGroup,
+} from './normalize.js';
 
 // TODO: Phase 3 - Scoring
 // export { scoreRelease, selectPrimaryRelease } from './score.js';
