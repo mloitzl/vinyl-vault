@@ -54,8 +54,24 @@ export {
   formatScoringResult,
 } from './score.js';
 
-// TODO: Phase 4 - Aggregation
-// export { createAlbum, selectBestTrackList, aggregateGenresAndStyles } from './aggregate.js';
+// Aggregation (FR-AG-1, FR-AG-2, FR-AG-3, FR-AG-4, FR-AG-5, FR-AG-6)
+export {
+  generateAlbumId,
+  selectBestTrackList,
+  aggregateGenres,
+  aggregateStyles,
+  collectExternalIds,
+  createAlternativeReleases,
+  collectOtherTitles,
+  collectEditionNotes,
+  selectBestCoverImage,
+  createAlbum,
+  createAlbums,
+  formatAlbum,
+} from './aggregate.js';
+
+// TODO: Phase 5 - Orchestrator
+// export { lookupAndScoreBarcode } from './orchestrator.js';
 
 // TODO: Phase 4 - Aggregation
 // export { createAlbum, selectBestTrackList, aggregateGenresAndStyles } from './aggregate.js';
