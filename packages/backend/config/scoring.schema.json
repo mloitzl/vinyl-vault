@@ -1,0 +1,158 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vinylvault.local/schemas/scoring.schema.json",
+  "title": "VinylVault Scoring Configuration",
+  "description": "Configuration for release normalization, scoring, and aggregation. See Requirements.MD FR-CF-* for details.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Optional comment"
+    },
+    "weights": {
+      "type": "object",
+      "description": "Scoring weights for different factors (FR-CF-1)",
+      "properties": {
+        "mediaType": {
+          "type": "number",
+          "description": "Points for matching preferred media type (FR-SC-2)",
+          "default": 20
+        },
+        "preferredCountry": {
+          "type": "number",
+          "description": "Points for releases from preferred countries (FR-SC-3)",
+          "default": 15
+        },
+        "deprioritizedCountry": {
+          "type": "number",
+          "description": "Points (usually negative) for releases from de-prioritized countries (FR-SC-3)",
+          "default": -10
+        },
+        "trackListComplete": {
+          "type": "number",
+          "description": "Points for having a complete track list (FR-SC-4a)",
+          "default": 25
+        },
+        "trackListPartial": {
+          "type": "number",
+          "description": "Points for having a partial track list",
+          "default": 10
+        },
+        "coverArt": {
+          "type": "number",
+          "description": "Points for having cover art (FR-SC-4b)",
+          "default": 15
+        },
+        "labelInfo": {
+          "type": "number",
+          "description": "Points for having label information (FR-SC-4c)",
+          "default": 10
+        },
+        "catalogNumber": {
+          "type": "number",
+          "description": "Points for having catalog number (FR-SC-4c)",
+          "default": 5
+        }
+      },
+      "additionalProperties": false
+    },
+    "preferredMediaTypes": {
+      "type": "array",
+      "description": "Keywords that indicate preferred media types (FR-SC-2). Matched case-insensitively against release format.",
+      "items": {
+        "type": "string"
+      },
+      "default": ["vinyl", "lp", "12\"", "10\"", "7\"", "album"]
+    },
+    "preferredCountries": {
+      "type": "array",
+      "description": "Countries that should receive bonus points (FR-SC-3). Include both ISO codes and full names for best matching.",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "US",
+        "USA",
+        "United States",
+        "UK",
+        "United Kingdom",
+        "GB",
+        "AT",
+        "Austria",
+        "DE",
+        "Germany"
+      ]
+    },
+    "deprioritizedCountries": {
+      "type": "array",
+      "description": "Countries that should receive penalty points (FR-SC-3). Include both ISO codes and full names.",
+      "items": {
+        "type": "string"
+      },
+      "default": ["RU", "Russia", "CN", "China"]
+    },
+    "normalizationAffixes": {
+      "type": "array",
+      "description": "Text patterns to remove during normalization (FR-CF-2). Matched case-insensitively.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sources": {
+      "type": "object",
+      "description": "Source-specific configuration (FR-CF-3)",
+      "properties": {
+        "discogs": {
+          "$ref": "#/definitions/sourceConfig"
+        },
+        "musicbrainz": {
+          "$ref": "#/definitions/sourceConfig"
+        }
+      },
+      "additionalProperties": false
+    },
+    "minTracksForComplete": {
+      "type": "integer",
+      "description": "Minimum number of tracks to consider a track list 'complete'",
+      "minimum": 1,
+      "default": 4
+    },
+    "tieBreaker": {
+      "type": "string",
+      "description": "Strategy for breaking ties when releases have equal scores (FR-SC-5)",
+      "enum": ["earliestYear", "smallestId", "preferDiscogs", "preferMusicBrainz"],
+      "default": "earliestYear"
+    }
+  },
+  "definitions": {
+    "sourceConfig": {
+      "type": "object",
+      "description": "Configuration specific to a release source",
+      "properties": {
+        "baseScore": {
+          "type": "number",
+          "description": "Base score bonus/penalty for all releases from this source",
+          "default": 0
+        },
+        "trustTrackList": {
+          "type": "boolean",
+          "description": "Whether to trust track lists from this source",
+          "default": true
+        },
+        "additionalAffixes": {
+          "type": "array",
+          "description": "Additional normalization affixes specific to this source",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

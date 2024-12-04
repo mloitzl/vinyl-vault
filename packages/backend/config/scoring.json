@@ -1,0 +1,79 @@
+{
+  "$schema": "./scoring.schema.json",
+  "$comment": "Scoring configuration for VinylVault release aggregation. See Requirements.MD FR-CF-* for details.",
+
+  "weights": {
+    "mediaType": 20,
+    "preferredCountry": 15,
+    "deprioritizedCountry": -10,
+    "trackListComplete": 25,
+    "trackListPartial": 10,
+    "coverArt": 15,
+    "labelInfo": 10,
+    "catalogNumber": 5
+  },
+
+  "preferredMediaTypes": ["vinyl", "lp", "12\"", "10\"", "7\"", "album"],
+
+  "preferredCountries": [
+    "US",
+    "USA",
+    "United States",
+    "UK",
+    "United Kingdom",
+    "GB",
+    "AT",
+    "Austria",
+    "DE",
+    "Germany"
+  ],
+
+  "deprioritizedCountries": ["RU", "Russia", "CN", "China"],
+
+  "normalizationAffixes": [
+    "(remastered)",
+    "(remaster)",
+    "[remastered]",
+    "[remaster]",
+    "- remastered",
+    "- remaster",
+    "(deluxe)",
+    "(deluxe edition)",
+    "(deluxe version)",
+    "[deluxe]",
+    "[deluxe edition]",
+    "(special edition)",
+    "[special edition]",
+    "(expanded edition)",
+    "[expanded edition]",
+    "(anniversary edition)",
+    "[anniversary edition]",
+    "(vinyl)",
+    "[vinyl]",
+    "(lp)",
+    "[lp]",
+    "(album)",
+    "[album]",
+    "(bonus tracks)",
+    "[bonus tracks]",
+    "(with bonus tracks)",
+    "(bonus track version)"
+  ],
+
+  "sources": {
+    "discogs": {
+      "baseScore": 5,
+      "trustTrackList": true,
+      "additionalAffixes": ["(promo)", "[promo]", "(test pressing)", "(white label)"]
+    },
+    "musicbrainz": {
+      "baseScore": 0,
+      "trustTrackList": true,
+      "additionalAffixes": []
+    }
+  },
+
+  "minTracksForComplete": 4,
+
+  "tieBreaker": "earliestYear"
+}
