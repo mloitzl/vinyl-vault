@@ -70,8 +70,11 @@ export {
   formatAlbum,
 } from './aggregate.js';
 
-// TODO: Phase 5 - Orchestrator
-// export { lookupAndScoreBarcode } from './orchestrator.js';
+// Orchestrator (main entry point)
+export {
+  lookupAndScoreBarcode,
+  rescoreReleases,
+} from './orchestrator.js';
 
 // TODO: Phase 4 - Aggregation
 // export { createAlbum, selectBestTrackList, aggregateGenresAndStyles } from './aggregate.js';
