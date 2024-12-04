@@ -37,7 +37,7 @@ export const resolvers = {
       const { barcode } = _args;
       const ctx = _context;
 
-      if (!barcode) return { releases: [], errors: ['barcode is required'] };
+      if (!barcode) return { albums: [], releases: [], fromCache: false, timing: null, errors: ['barcode is required'] };
 
       // If user is authenticated, create a short-lived JWT to call backend.
       // Otherwise call backend without JWT (backend may allow unauthenticated lookups depending on policy).
@@ -46,16 +46,105 @@ export const resolvers = {
         jwt = signJwt({ sub: ctx.user.id, role: ctx.user.role, githubLogin: ctx.user.githubLogin });
       }
 
-      const query = `mutation Lookup($barcode: String!) { lookupBarcode(barcode: $barcode) { releases { id barcode artist title year format label country coverImageUrl externalId source genre style trackList { position title duration } } fromCache errors } }`;
+      // Query backend for albums (blended scoring) and legacy releases
+      const query = `mutation Lookup($barcode: String!) {
+        lookupBarcode(barcode: $barcode) {
+          albums {
+            id
+            artist
+            title
+            barcodes
+            primaryRelease {
+              release {
+                id
+                barcode
+                artist
+                title
+                year
+                format
+                label
+                country
+                coverImageUrl
+                externalId
+                source
+                genre
+                style
+                trackList { position title duration }
+              }
+              score
+              scoreBreakdown {
+                mediaType
+                countryPreference
+                trackListCompleteness
+                coverArt
+                labelInfo
+                catalogNumber
+                yearInfo
+                sourceBonus
+              }
+            }
+            alternativeReleases {
+              externalId
+              source
+              country
+              year
+              format
+              label
+              score
+              editionNote
+            }
+            trackList { position title duration }
+            genres
+            styles
+            externalIds { discogs musicbrainz }
+            coverImageUrl
+            otherTitles
+            editionNotes
+            releaseCount
+            score
+          }
+          releases {
+            id
+            barcode
+            artist
+            title
+            year
+            format
+            label
+            country
+            coverImageUrl
+            externalId
+            source
+            genre
+            style
+            trackList { position title duration }
+          }
+          fromCache
+          timing { discogsMs musicbrainzMs scoringMs totalMs }
+          errors
+        }
+      }`;
 
       try {
         const data = await queryBackend<{
-          lookupBarcode: { releases: any[]; fromCache: boolean; errors?: string[] };
+          lookupBarcode: {
+            albums: any[];
+            releases: any[];
+            fromCache: boolean;
+            timing?: { discogsMs: number; musicbrainzMs: number; scoringMs: number; totalMs: number };
+            errors?: string[];
+          };
         }>(query, { barcode }, { jwt });
         const payload = data.lookupBarcode;
-        return { releases: payload.releases || [], errors: payload.errors || [] };
+        return {
+          albums: payload.albums || [],
+          releases: payload.releases || [],
+          fromCache: payload.fromCache || false,
+          timing: payload.timing || null,
+          errors: payload.errors || [],
+        };
       } catch (err: any) {
-        return { releases: [], errors: [err?.message ?? String(err)] };
+        return { albums: [], releases: [], fromCache: false, timing: null, errors: [err?.message ?? String(err)] };
       }
     },
     createRecord: async (_parent: unknown, _args: unknown, _context: GraphQLContext) => {

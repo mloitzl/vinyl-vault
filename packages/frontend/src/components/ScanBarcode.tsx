@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BrowserMultiFormatReader } from '@zxing/browser';
 import { BrowserMultiFormatReader as ZXingBrowserMultiFormatReader } from '@zxing/browser';
 
-type ReleaseResult = {
+type Track = {
+  position?: string;
+  title: string;
+  duration?: string;
+};
+
+type Release = {
   id: string;
   barcode: string;
   artist: string;
@@ -10,19 +16,76 @@ type ReleaseResult = {
   year?: number | null;
   format?: string | null;
   label?: string | null;
+  country?: string | null;
   coverImageUrl?: string | null;
   externalId?: string | null;
   source?: string;
   genre?: string[];
   style?: string[];
-  trackList?: { position?: string; title: string; duration?: string }[];
+  trackList?: Track[];
+};
+
+type ScoreBreakdown = {
+  mediaType: number;
+  countryPreference: number;
+  trackListCompleteness: number;
+  coverArt: number;
+  labelInfo: number;
+  catalogNumber: number;
+  yearInfo: number;
+  sourceBonus: number;
+};
+
+type ScoredRelease = {
+  release: Release;
+  score: number;
+  scoreBreakdown?: ScoreBreakdown | null;
+};
+
+type AlternativeRelease = {
+  externalId: string;
+  source: string;
+  country?: string | null;
+  year?: number | null;
+  format?: string | null;
+  label?: string | null;
+  score: number;
+  editionNote?: string | null;
+};
+
+type Album = {
+  id: string;
+  artist: string;
+  title: string;
+  barcodes: string[];
+  primaryRelease: ScoredRelease;
+  alternativeReleases: AlternativeRelease[];
+  trackList?: Track[] | null;
+  genres: string[];
+  styles: string[];
+  externalIds: { discogs: string[]; musicbrainz: string[] };
+  coverImageUrl?: string | null;
+  otherTitles: string[];
+  editionNotes: string[];
+  releaseCount: number;
+  score: number;
+};
+
+type LookupTiming = {
+  discogsMs: number;
+  musicbrainzMs: number;
+  scoringMs: number;
+  totalMs: number;
 };
 
 export function ScanBarcode() {
-  const [barcode, setBarcode] = useState('0602475276197');
+  const [barcode, setBarcode] = useState('5099902988313');
   const [isLoading, setIsLoading] = useState(false);
-  const [results, setResults] = useState<ReleaseResult[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [timing, setTiming] = useState<LookupTiming | null>(null);
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [expandedAlbumId, setExpandedAlbumId] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -33,10 +96,44 @@ export function ScanBarcode() {
   const lookup = useCallback(async (bc: string) => {
     setIsLoading(true);
     setErrors([]);
-    setResults([]);
+    setAlbums([]);
+    setTiming(null);
+    setSelectedAlbumId(null);
+    setExpandedAlbumId(null);
 
-    // BFF exposes `scanBarcode` mutation. Call the BFF GraphQL endpoint.
-    const query = `mutation Scan($barcode: String!) { scanBarcode(barcode: $barcode) { releases { id barcode artist title year format label country coverImageUrl source genre style trackList { position title duration } } errors } }`;
+    // BFF exposes `scanBarcode` mutation with albums (blended scoring)
+    const query = `mutation Scan($barcode: String!) {
+      scanBarcode(barcode: $barcode) {
+        albums {
+          id
+          artist
+          title
+          barcodes
+          primaryRelease {
+            release {
+              id barcode artist title year format label country coverImageUrl externalId source genre style
+              trackList { position title duration }
+            }
+            score
+            scoreBreakdown {
+              mediaType countryPreference trackListCompleteness coverArt labelInfo catalogNumber yearInfo sourceBonus
+            }
+          }
+          alternativeReleases { externalId source country year format label score editionNote }
+          trackList { position title duration }
+          genres
+          styles
+          externalIds { discogs musicbrainz }
+          coverImageUrl
+          otherTitles
+          editionNotes
+          releaseCount
+          score
+        }
+        timing { totalMs }
+        errors
+      }
+    }`;
 
     try {
       const res = await fetch('/graphql', {
@@ -46,12 +143,22 @@ export function ScanBarcode() {
         body: JSON.stringify({ query, variables: { barcode: bc } }),
       });
       const body = await res.json();
+      
+      // Handle GraphQL errors
       if (body.errors) {
         setErrors(body.errors.map((e: any) => e.message));
-      } else {
-        const payload = body.data?.scanBarcode;
-        if (payload?.errors && payload.errors.length) setErrors(payload.errors);
-        if (payload?.releases) setResults(payload.releases);
+      }
+      
+      // Process data even if there were some errors
+      const payload = body.data?.scanBarcode;
+      if (payload) {
+        if (payload.errors && payload.errors.length) {
+          setErrors((prev) => [...prev, ...payload.errors]);
+        }
+        if (payload.albums) {
+          setAlbums(payload.albums);
+        }
+        if (payload.timing) setTiming(payload.timing);
       }
     } catch (err: any) {
       setErrors([err?.message ?? String(err)]);
@@ -235,86 +342,260 @@ export function ScanBarcode() {
         </div>
       )}
 
-      {results.length > 0 && (
-        <div className="mt-4 space-y-2">
-          {results.map((r, idx) => (
-            <div key={idx} className="p-3 border rounded bg-white">
-              <div className="flex items-center gap-3">
-                {r.coverImageUrl ? (
-                  <img
-                    src={r.coverImageUrl}
-                    alt={r.title}
-                    className="w-16 h-16 object-cover rounded"
-                  />
-                ) : (
-                  <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                    📀
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">
-                    {r.artist} — {r.title}
-                  </div>
-                  <div className="text-sm text-gray-500 truncate">
-                    {r.label ?? ''} {r.year ? `· ${r.year}` : ''} {r.source ? `· ${r.source}` : ''}
-                  </div>
+      {/* Timing info */}
+      {timing && (
+        <div className="mt-3 text-xs text-gray-500">
+          Found {albums.length} album{albums.length !== 1 ? 's' : ''} in {timing.totalMs}ms
+        </div>
+      )}
 
-                  {/* Genres and styles inline as small badges */}
-                  {(r.genre && r.genre.length > 0) || (r.style && r.style.length > 0) ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {r.genre && r.genre.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {r.genre.map((g, gi) => (
-                            <span
-                              key={`g-${gi}`}
-                              className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"
-                            >
-                              {g}
-                            </span>
-                          ))}
+      {/* Albums list */}
+      {albums.length > 0 && (
+        <div className="mt-6 space-y-3">
+          {albums.map((album) => {
+            const isSelected = selectedAlbumId === album.id;
+            const isExpanded = expandedAlbumId === album.id;
+            const primary = album.primaryRelease;
+            const breakdown = primary.scoreBreakdown;
+
+            return (
+              <div
+                key={album.id}
+                className={`border rounded-lg overflow-hidden transition-shadow ${
+                  isSelected
+                    ? 'border-emerald-500 shadow-md shadow-emerald-100'
+                    : 'border-gray-200 hover:shadow-sm'
+                }`}
+              >
+                {/* Main album card - clickable to select */}
+                <div
+                  className={`p-4 cursor-pointer ${isSelected ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'}`}
+                  onClick={() => setSelectedAlbumId(isSelected ? null : album.id)}
+                >
+                  <div className="flex gap-4">
+                    {/* Cover image */}
+                    <div className="flex-shrink-0">
+                      {album.coverImageUrl ? (
+                        <img
+                          src={album.coverImageUrl}
+                          alt={album.title}
+                          className="w-20 h-20 object-cover rounded shadow-sm"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 bg-gray-100 rounded shadow-sm flex items-center justify-center">
+                          <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/>
+                          </svg>
                         </div>
                       )}
-                      {r.style && r.style.length > 0 && (
+                    </div>
+
+                    {/* Album info - simplified */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <h3 className="font-semibold text-gray-900 truncate">{album.title}</h3>
+                      <p className="text-sm text-gray-600 truncate">{album.artist}</p>
+                      <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
+                        {primary.release.year && <span>{primary.release.year}</span>}
+                        {primary.release.year && primary.release.country && <span className="text-gray-300">|</span>}
+                        {primary.release.country && <span>{primary.release.country}</span>}
+                        {(primary.release.year || primary.release.country) && primary.release.label && <span className="text-gray-300">|</span>}
+                        {primary.release.label && <span className="truncate max-w-[120px]">{primary.release.label}</span>}
+                      </div>
+                    </div>
+
+                    {/* Right side - Score and meta */}
+                    <div className="flex-shrink-0 flex flex-col items-end justify-between">
+                      <div className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded text-sm font-semibold tabular-nums">
+                        {album.score}
+                      </div>
+                      <div className="text-xs text-gray-400 text-right">
+                        {album.releaseCount} {album.releaseCount === 1 ? 'release' : 'releases'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expand/collapse toggle */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedAlbumId(isExpanded ? null : album.id);
+                  }}
+                  className="w-full px-4 py-1.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 border-t border-gray-100 flex items-center justify-center gap-1 transition-colors"
+                >
+                  <svg
+                    className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span>{isExpanded ? 'Less' : 'More'}</span>
+                </button>
+
+                {/* Expanded details */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 bg-gray-50">
+                    {/* Quick info bar */}
+                    <div className="px-4 py-3 flex flex-wrap gap-x-4 gap-y-1 text-xs border-b border-gray-100">
+                      {primary.release.format && (
+                        <span className="text-gray-600">
+                          <span className="text-gray-400">Format:</span> {primary.release.format}
+                        </span>
+                      )}
+                      <span className="text-gray-600">
+                        <span className="text-gray-400">Source:</span>{' '}
+                        <span className={primary.release.source === 'DISCOGS' ? 'text-orange-600' : 'text-blue-600'}>
+                          {primary.release.source}
+                        </span>
+                      </span>
+                      {album.genres.length > 0 && (
+                        <span className="text-gray-600">
+                          <span className="text-gray-400">Genre:</span> {album.genres.slice(0, 2).join(', ')}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                      {/* Score breakdown - compact horizontal */}
+                      {breakdown && (
+                        <div>
+                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Score Breakdown</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { label: 'Media', value: breakdown.mediaType },
+                              { label: 'Country', value: breakdown.countryPreference },
+                              { label: 'Tracks', value: breakdown.trackListCompleteness },
+                              { label: 'Cover', value: breakdown.coverArt },
+                              { label: 'Label', value: breakdown.labelInfo },
+                              { label: 'Year', value: breakdown.yearInfo },
+                            ].filter(item => item.value !== 0).map((item, i) => (
+                              <span
+                                key={i}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+                                  item.value > 0
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : 'bg-red-50 text-red-700'
+                                }`}
+                              >
+                                <span className="text-gray-500">{item.label}</span>
+                                <span className="font-medium">{item.value > 0 ? '+' : ''}{item.value}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Track list - compact */}
+                      {album.trackList && album.trackList.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Tracks ({album.trackList.length})
+                          </h4>
+                          <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                            {album.trackList.map((t, ti) => (
+                              <div key={ti} className="px-3 py-1.5 flex items-center text-sm">
+                                <span className="w-8 text-gray-400 text-xs">{t.position ?? ti + 1}</span>
+                                <span className="flex-1 truncate text-gray-700">{t.title}</span>
+                                {t.duration && <span className="text-gray-400 text-xs ml-2">{t.duration}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Alternative releases - simplified table */}
+                      {album.alternativeReleases.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Other Releases ({album.alternativeReleases.length})
+                          </h4>
+                          <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100 max-h-32 overflow-y-auto">
+                            {album.alternativeReleases.map((alt, ai) => (
+                              <div key={ai} className="px-3 py-1.5 flex items-center text-xs gap-3">
+                                <span className={`w-16 ${alt.source === 'DISCOGS' ? 'text-orange-600' : 'text-blue-600'}`}>
+                                  {alt.source}
+                                </span>
+                                <span className="w-10 text-gray-600">{alt.country ?? '—'}</span>
+                                <span className="w-10 text-gray-600">{alt.year ?? '—'}</span>
+                                <span className="flex-1 text-gray-500 truncate">{alt.label ?? '—'}</span>
+                                <span className="text-gray-700 font-medium tabular-nums">{alt.score}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Styles as subtle tags */}
+                      {album.styles.length > 0 && (
                         <div className="flex flex-wrap gap-1">
-                          {r.style.map((s, si) => (
-                            <span
-                              key={`s-${si}`}
-                              className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"
-                            >
+                          {album.styles.map((s, si) => (
+                            <span key={si} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                               {s}
                             </span>
                           ))}
                         </div>
                       )}
                     </div>
-                  ) : null}
+                  </div>
+                )}
 
-                  {/* Expanded track list (scrollable on mobile) */}
-                  {r.trackList && r.trackList.length > 0 && (
-                    <div className="mt-3 max-h-56 overflow-y-auto text-sm">
-                      {r.trackList.map((t, ti) => (
-                        <div key={ti} className="py-1 border-b last:border-b-0">
-                          <div className="flex justify-between items-start gap-3">
-                            <div className="text-xs text-gray-500 w-12 flex-shrink-0">
-                              {t.position ?? ''}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="truncate">{t.title}</div>
-                            </div>
-                            <div className="text-xs text-gray-500 ml-3 flex-shrink-0">
-                              {t.duration ?? ''}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {/* Selection indicator */}
+                {isSelected && (
+                  <div className="bg-emerald-600 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Selected
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+
+      {/* Add to collection button (when album selected) */}
+      {selectedAlbumId && (
+        <div className="fixed bottom-14 md:bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-10">
+          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4 md:max-w-none">
+            <div className="min-w-0 flex-1">
+              {(() => {
+                const selected = albums.find((a) => a.id === selectedAlbumId);
+                return selected ? (
+                  <div className="flex items-center gap-3">
+                    {selected.coverImageUrl && (
+                      <img src={selected.coverImageUrl} alt="" className="w-10 h-10 rounded object-cover" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900 truncate">{selected.title}</div>
+                      <div className="text-sm text-gray-500 truncate">{selected.artist}</div>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const selected = albums.find((a) => a.id === selectedAlbumId);
+                if (selected) {
+                  // TODO: Implement createRecord mutation
+                  alert(`Adding "${selected.title}" by ${selected.artist} to your collection!`);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-medium flex-shrink-0 transition-colors"
+            >
+              Add to Collection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Spacer to prevent content from being hidden behind the fixed button */}
+      {selectedAlbumId && <div className="h-20 md:h-16" />}
     </div>
   );
 }

@@ -42,6 +42,9 @@ export const resolvers = {
       }
 
       // Check cache first (FR-2 / NFR-3)
+      // TODO: For now, skip cache to always use the scoring orchestrator
+      // In future, cache the Album structure directly instead of raw releases
+      /*
       try {
         const cached = await findReleasesByBarcode(barcode);
         if (Array.isArray(cached) && cached.length > 0) {
@@ -59,14 +62,17 @@ export const resolvers = {
         // don't fail the lookup if cache check errors — fall back to live APIs
         console.warn('Releases cache check failed:', err?.message ?? String(err));
       }
+      */
 
       // Use the new blended scoring orchestrator
       const result = await lookupAndScoreBarcode(barcode);
 
-      // Build a lookup map from rawReleases by externalId
+      console.log(`[lookupBarcode] Got ${result.albums.length} albums, ${result.rawReleases.length} raw releases`);
+
+      // Build a lookup map from rawReleases by id (format: SOURCE:externalId)
       const releaseMap = new Map<string, RawRelease>();
       for (const raw of result.rawReleases) {
-        releaseMap.set(raw.externalId, raw);
+        releaseMap.set(raw.id, raw);
       }
 
       // Build scoring details map for score breakdowns
