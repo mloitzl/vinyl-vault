@@ -1,0 +1,167 @@
+# BFF GraphQL Schema (Relay-friendly)
+
+type Query {
+  """
+  The currently authenticated user, or null if not logged in.
+  """
+  viewer: User
+
+  """
+  Fetch a single record by ID.
+  """
+  node(id: ID!): Node
+
+  """
+  Browse the record collection with pagination and filtering.
+  """
+  records(
+    first: Int
+    after: String
+    last: Int
+    before: String
+    filter: RecordFilter
+  ): RecordConnection!
+}
+
+type Mutation {
+  """
+  Scan a barcode and look up release candidates.
+  """
+  scanBarcode(barcode: String!): ScanBarcodePayload!
+
+  """
+  Create a new record in the collection.
+  """
+  createRecord(input: CreateRecordInput!): CreateRecordPayload!
+
+  """
+  Update an existing record.
+  """
+  updateRecord(input: UpdateRecordInput!): UpdateRecordPayload!
+
+  """
+  Delete a record from the collection.
+  """
+  deleteRecord(input: DeleteRecordInput!): DeleteRecordPayload!
+}
+
+interface Node {
+  id: ID!
+}
+
+type User implements Node {
+  id: ID!
+  githubLogin: String!
+  displayName: String!
+  avatarUrl: String
+  role: UserRole!
+  createdAt: String!
+  updatedAt: String!
+}
+
+enum UserRole {
+  ADMIN
+  CONTRIBUTOR
+  READER
+}
+
+type Record implements Node {
+  id: ID!
+  release: Release!
+  owner: User!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Release implements Node {
+  id: ID!
+  barcode: String!
+  artist: String!
+  title: String!
+  year: Int
+  format: String
+  label: String
+  country: String
+  coverImageUrl: String
+  source: ReleaseSource
+}
+
+enum ReleaseSource {
+  DISCOGS
+  MUSICBRAINZ
+  MANUAL
+}
+
+type RecordConnection {
+  edges: [RecordEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RecordEdge {
+  cursor: String!
+  node: Record!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+input RecordFilter {
+  artist: String
+  title: String
+  year: Int
+  format: String
+  location: String
+  search: String
+}
+
+input CreateRecordInput {
+  releaseId: ID!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+}
+
+input UpdateRecordInput {
+  id: ID!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+}
+
+input DeleteRecordInput {
+  id: ID!
+}
+
+type ScanBarcodePayload {
+  releases: [Release!]!
+  errors: [String!]
+}
+
+type CreateRecordPayload {
+  record: Record
+  errors: [String!]
+}
+
+type UpdateRecordPayload {
+  record: Record
+  errors: [String!]
+}
+
+type DeleteRecordPayload {
+  deletedRecordId: ID
+  errors: [String!]
+}

@@ -1,0 +1,183 @@
+# Domain Backend GraphQL Schema
+
+type Query {
+  """
+  Get a user by ID.
+  """
+  user(id: ID!): User
+
+  """
+  Get a record by ID.
+  """
+  record(id: ID!): Record
+
+  """
+  Get a release by ID.
+  """
+  release(id: ID!): Release
+
+  """
+  Search releases by barcode.
+  """
+  releasesByBarcode(barcode: String!): [Release!]!
+
+  """
+  List records with pagination and filtering.
+  """
+  records(userId: ID, first: Int, after: String, filter: RecordFilter): RecordConnection!
+}
+
+type Mutation {
+  """
+  Look up a barcode and return matching releases.
+  If not cached, fetches from external APIs.
+  """
+  lookupBarcode(barcode: String!): LookupBarcodePayload!
+
+  """
+  Create a new record.
+  """
+  createRecord(input: CreateRecordInput!): Record!
+
+  """
+  Update a record.
+  """
+  updateRecord(input: UpdateRecordInput!): Record!
+
+  """
+  Delete a record.
+  """
+  deleteRecord(id: ID!): Boolean!
+
+  """
+  Create or update a user from GitHub data.
+  """
+  upsertUser(input: UpsertUserInput!): User!
+
+  """
+  Update a user's role (admin only).
+  """
+  updateUserRole(userId: ID!, role: UserRole!): User!
+}
+
+type User {
+  id: ID!
+  githubId: String!
+  githubLogin: String!
+  displayName: String!
+  avatarUrl: String
+  email: String
+  role: UserRole!
+  createdAt: String!
+  updatedAt: String!
+  records: [Record!]!
+}
+
+enum UserRole {
+  ADMIN
+  CONTRIBUTOR
+  READER
+}
+
+type Record {
+  id: ID!
+  release: Release!
+  owner: User!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Release {
+  id: ID!
+  barcode: String!
+  artist: String!
+  title: String!
+  year: Int
+  format: String
+  genre: [String!]
+  style: [String!]
+  label: String
+  country: String
+  coverImageUrl: String
+  trackList: [Track!]
+  externalId: String
+  source: ReleaseSource!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Track {
+  position: String
+  title: String!
+  duration: String
+}
+
+enum ReleaseSource {
+  DISCOGS
+  MUSICBRAINZ
+  MANUAL
+}
+
+type RecordConnection {
+  edges: [RecordEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RecordEdge {
+  cursor: String!
+  node: Record!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+input RecordFilter {
+  artist: String
+  title: String
+  year: Int
+  format: String
+  location: String
+  search: String
+}
+
+input CreateRecordInput {
+  releaseId: ID!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+}
+
+input UpdateRecordInput {
+  id: ID!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+}
+
+input UpsertUserInput {
+  githubId: String!
+  githubLogin: String!
+  displayName: String!
+  avatarUrl: String
+  email: String
+}
+
+type LookupBarcodePayload {
+  releases: [Release!]!
+  fromCache: Boolean!
+  errors: [String!]
+}

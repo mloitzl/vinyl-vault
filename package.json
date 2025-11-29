@@ -1,0 +1,26 @@
+{
+  "name": "vinylvault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A web application for managing a personal vinyl record collection",
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "clean": "pnpm -r run clean"
+  },
+  "keywords": [
+    "vinyl",
+    "records",
+    "collection",
+    "music",
+    "graphql"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

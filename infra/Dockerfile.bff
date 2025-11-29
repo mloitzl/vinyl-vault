@@ -1,0 +1,39 @@
+# BFF Dockerfile
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy workspace files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY tsconfig.base.json ./
+COPY packages/bff ./packages/bff
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build
+WORKDIR /app/packages/bff
+RUN pnpm build
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy built files
+COPY --from=builder /app/packages/bff/dist ./dist
+COPY --from=builder /app/packages/bff/package.json ./
+COPY --from=builder /app/packages/bff/src/schema.graphql ./dist/
+
+# Install production dependencies only
+RUN pnpm install --prod
+
+EXPOSE 3001
+
+CMD ["node", "dist/index.js"]
