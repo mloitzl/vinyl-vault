@@ -2,93 +2,189 @@
 
 ## 1. Overview
 
-This document summarizes the technology choices for Vinyl Vault across frontend, backend, data, integration, and infrastructure. It is meant to guide implementation and onboarding. [web:21][web:35]
+This document summarizes the technology choices for Vinyl Vault across frontend, backend, data, integration, and infrastructure. It is meant to guide implementation and onboarding.
 
-## 2. Frontend
+**Monorepo Structure:** pnpm workspaces with three packages:
+- `packages/frontend` - React SPA
+- `packages/bff` - Backend-for-Frontend
+- `packages/backend` - Domain Backend
 
-- Language: TypeScript
-- UI Library: React
-- Data Layer: Relay (React Relay)
-- Build Tooling: Vite or Next.js (choose based on preference; default: Vite SPA).
-- Styling: Tailwind CSS or CSS Modules (to be decided). [web:35][web:38]
+## 2. Frontend (`packages/frontend`)
 
-Responsibilities:
+- **Language:** TypeScript (strict mode)
+- **UI Library:** React 18
+- **Data Layer:** Relay (React Relay)
+- **Build Tooling:** Vite 5
+- **Styling:** Tailwind CSS
+- **Dev Server:** Port 3000 with proxy to BFF
+
+**Key Dependencies:**
+- `react`, `react-dom` - UI framework
+- `react-relay` - GraphQL client
+- `tailwindcss` - Utility-first CSS
+- `vite` - Build tool and dev server
+
+**Responsibilities:**
 
 - Implement SPA that communicates exclusively with the BFF GraphQL endpoint.
-- Manage authentication state based on `viewer` query, not local tokens.
-- Use Relay connections and fragments for records, releases, and viewer. 
+- Manage authentication state via `AuthContext` and `/auth/me` endpoint.
+- Use Relay connections and fragments for records, releases, and viewer.
+- Display user profile (avatar, name, role) in header when authenticated. 
 
-## 3. Backend-for-Frontend (BFF)
+## 3. Backend-for-Frontend (BFF) (`packages/bff`)
 
-- Runtime: Node.js (LTS) on Raspberry Pi 5.
-- Language: TypeScript.
-- Web Framework: Express or Fastify (default: Express).
-- GraphQL: Apollo Server (standalone or integrated with Express). [web:11][web:14]
-- Auth:
-  - GitHub OAuth Web Application Flow.
-  - HTTP-only, Secure cookies for browser sessions. [web:18][web:22][web:25]
+- **Runtime:** Node.js (LTS) on Raspberry Pi 5
+- **Language:** TypeScript (strict mode)
+- **Web Framework:** Express 4
+- **GraphQL:** Apollo Server 4 with `expressMiddleware`
+- **Session Store:** `connect-mongo` 5.x (MongoDB-backed sessions)
+- **Dev Server:** Port 3001
 
-Responsibilities:
+**Key Dependencies:**
+- `express` - Web framework
+- `@apollo/server` - GraphQL server
+- `express-session` - Session middleware
+- `connect-mongo` - MongoDB session store
+- `jsonwebtoken` - JWT signing/verification
+- `dotenv` - Environment variable loading
+
+**Auth Endpoints:**
+- `GET /auth/github` - Initiate OAuth flow
+- `GET /auth/github/callback` - Handle OAuth callback
+- `POST /auth/logout` - Destroy session
+- `GET /auth/me` - Get current user
+
+**Responsibilities:**
 
 - Expose a Relay-friendly GraphQL schema (viewer, records, scanBarcode, etc.).
-- Handle GitHub login/logout endpoints.
-- Map GitHub identity to local user in MongoDB.
-- Maintain sessions via cookies and in-memory or MongoDB-backed session store.
-- Create and sign short-lived JWTs for calls to the domain backend. [web:14][web:23][web:26]
+- Handle GitHub OAuth Web Application Flow.
+- Map GitHub identity to local user in MongoDB `users` collection.
+- Maintain sessions via HTTP-only cookies and MongoDB session store.
+- Create and sign short-lived JWTs for calls to the domain backend.
 
-## 4. Domain Backend
+## 4. Domain Backend (`packages/backend`)
 
-- Runtime: Node.js (LTS).
-- Language: TypeScript.
-- GraphQL: Apollo Server.
-- ODM/DB Client: Official MongoDB Node.js driver or Mongoose (to be decided). [web:21][web:27]
+- **Runtime:** Node.js (LTS)
+- **Language:** TypeScript (strict mode)
+- **GraphQL:** Apollo Server 4 (standalone)
+- **DB Client:** Official MongoDB Node.js driver 6.x
+- **Dev Server:** Port 4000
 
-Responsibilities:
+**Key Dependencies:**
+- `@apollo/server` - GraphQL server
+- `mongodb` - Database driver
+- `jsonwebtoken` - JWT verification
+
+**Responsibilities:**
 
 - Expose domain-centric GraphQL schema (User, Record, Release).
 - Implement business logic and data access.
 - Validate and decode JWTs from the BFF.
-- Integrate with external music APIs (e.g., Discogs/MusicBrainz) and maintain cached releases. [web:3][web:21]
+- Integrate with external music APIs (Discogs/MusicBrainz) and maintain cached releases.
 
 ## 5. Database
 
-- DBMS: MongoDB (running locally on RPi 5, possibly via Docker). [web:21][web:27]
-- Collections:
-  - `users` (GitHub-linked users and roles).
-  - `records` (physical owned items).
-  - `releases` (cached external metadata).
-- Features:
-  - Indexes for common queries (user+barcode, barcodes, artist/title).
-  - Timestamps and minimal audit fields. [web:21][web:27]
+- **DBMS:** MongoDB 7 (running via Docker)
+- **Connection:** `mongodb://localhost:27017/vinylvault`
+- **Docker:** Configured in `infra/docker-compose.yml`
+
+**Collections:**
+- `users` - GitHub-linked users and roles
+- `sessions` - Session data (managed by connect-mongo)
+- `records` - Physical owned items (planned)
+- `releases` - Cached external metadata (planned)
+
+**User Schema:**
+```javascript
+{
+  githubId: string,      // GitHub user ID
+  username: string,      // GitHub username
+  displayName: string,   // Display name
+  email: string | null,  // Email (if provided)
+  avatarUrl: string,     // GitHub avatar URL
+  role: string,          // 'ADMIN' | 'CONTRIBUTOR' | 'READER'
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+**Features:**
+- Indexes for common queries (user+barcode, barcodes, artist/title).
+- Timestamps and minimal audit fields.
 
 ## 6. External Services
 
-- GitHub OAuth:
-  - Used for login.
-  - Required scopes: basic user info and optionally `user:email`. [web:22][web:25]
-- Music Metadata APIs:
-  - Discogs and/or MusicBrainz for barcode-based release lookup. [web:3][web:21]
-- TLS Certificates:
-  - Let’s Encrypt via reverse proxy (Caddy, Nginx, Traefik). [web:16]
+**GitHub OAuth:**
+- Used for login (Web Application Flow).
+- Required scopes: `read:user`, `user:email`.
+- Configuration:
+  - `GITHUB_CLIENT_ID` - OAuth App client ID
+  - `GITHUB_CLIENT_SECRET` - OAuth App client secret
+  - `GITHUB_CALLBACK_URL` - Callback URL (default: `http://localhost:3001/auth/github/callback`)
+- Setup guide: `docs/GITHUB_OAUTH_SETUP.md`
+
+**Music Metadata APIs:**
+- Discogs and/or MusicBrainz for barcode-based release lookup.
+- Configuration:
+  - `DISCOGS_API_KEY`
+  - `DISCOGS_API_SECRET`
+  - `MUSICBRAINZ_USER_AGENT`
+
+**TLS Certificates:**
+- Let's Encrypt via Caddy reverse proxy.
 
 ## 7. Infrastructure and DevOps
 
-- Host: Raspberry Pi 5 (Linux).
-- Containerization: Docker (optional but recommended for isolation). [web:16][web:21]
-- Reverse Proxy: Caddy or Nginx (default: Caddy for easy HTTPS). [web:16]
-- Process Management:
-  - Docker restart policies or systemd unit files for services.
-- Logging:
-  - Application logs to stdout with structured logging.
-  - System logs via journalctl, rotated regularly. [web:13][web:16]
-- Monitoring (optional):
-  - Lightweight tools (e.g., Prometheus node exporter + Grafana if desired).
+- **Host:** Raspberry Pi 5 (Linux)
+- **Containerization:** Docker with Docker Compose
+- **Reverse Proxy:** Caddy (configured in `infra/Caddyfile`)
+
+**Infrastructure Files (`infra/`):**
+- `docker-compose.yml` - Service orchestration
+- `Caddyfile` - Reverse proxy configuration
+- `Dockerfile.bff` - BFF container
+- `Dockerfile.backend` - Backend container
+- `Dockerfile.frontend` - Frontend container
+
+**Process Management:**
+- Docker restart policies for production.
+- `pnpm dev` for development (runs all services in parallel).
+
+**Logging:**
+- Application logs to stdout.
+- System logs via journalctl, rotated regularly.
+
+**Monitoring (optional):**
+- Lightweight tools (e.g., Prometheus node exporter + Grafana if desired).
 
 ## 8. Development Environment
 
-- IDE: Cursor with Vibe Coding.
-- Version Control: Git (GitHub repository).
-- Package Manager: npm, pnpm, or yarn (default: pnpm).
-- Code Quality:
-  - ESLint, Prettier, TypeScript strict mode.
-  - Basic test setup with Jest or Vitest. [web:35][web:38]
+- **IDE:** VS Code / Cursor
+- **Version Control:** Git (GitHub repository)
+- **Package Manager:** pnpm (workspaces for monorepo)
+- **Node Version:** LTS (see `.nvmrc`)
+
+**Scripts (from root):**
+- `pnpm dev` - Run all services in development mode
+- `pnpm build` - Build all packages
+- `pnpm lint` - Run ESLint across packages
+- `pnpm test` - Run tests
+
+**Code Quality:**
+- ESLint (configured in `.eslintrc.json`)
+- Prettier (configured in `.prettierrc`)
+- TypeScript strict mode
+- Shared base config in `tsconfig.base.json`
+
+**Environment Variables:**
+- Stored in `.env` file at project root (not committed)
+- Loaded via `dotenv` in BFF
+- See `.env` comments for all available options
+
+**Getting Started:**
+1. Clone repository
+2. Run `pnpm install`
+3. Copy `.env.example` to `.env` and configure
+4. Start MongoDB: `docker-compose -f infra/docker-compose.yml up -d mongodb`
+5. Run `pnpm dev`
+6. Open http://localhost:3000
