@@ -62,16 +62,16 @@ The system consists of:
 
 ## 3. Functional Requirements
 
-FR-1 Barcode Scan and Lookup 
-- The system shall allow the user to input a barcode via:
+FR-1 Barcode Scan and Lookup (Implemented)
+- The system allows the user to input a barcode via:
   - Camera-based scanning (in supported browsers) or
-  - Manual text input. 
-- The system shall validate the barcode format and show errors for invalid or unreadable codes.
+  - Manual text input.
+- The system validates the barcode format and shows errors for invalid or unreadable codes.
 
-FR-2 External Metadata Retrieval 
-- The system shall search for releases by barcode using at least one external music data service. 
-- If multiple releases match, the system shall display a list of candidates for the user to choose from. 
-- The system shall store selected release metadata in MongoDB for future reuse.
+FR-2 External Metadata Retrieval (Implemented)
+- The system searches for releases by barcode using external music data services (Discogs and MusicBrainz integrations are available).
+- If multiple releases match, the system displays a list of candidates for the user to choose from.
+- The system caches selected release metadata in MongoDB for future reuse.
 
 FR-3 Record Creation 
 - The system shall allow an ADMIN/CONTRIBUTOR to create a new record by:
@@ -161,8 +161,12 @@ NFR-6 Privacy
 - ✅ Caddy reverse proxy configuration
 
 ### In Progress
-- 🔄 Barcode scanning (FR-1)
-- 🔄 External metadata retrieval (FR-2)
+- 🔄 Record creation and management (FR-3, FR-4)
+- 🔄 Collection browsing (FR-5)
+
+### Completed
+- ✅ Barcode scanning (FR-1)
+- ✅ External metadata retrieval (FR-2)
 - 🔄 Record creation and management (FR-3, FR-4)
 - 🔄 Collection browsing (FR-5)
 

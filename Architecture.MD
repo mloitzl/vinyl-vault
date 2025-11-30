@@ -145,10 +145,10 @@ Security hardening on the Pi:
 
 ### 5.4 External Integration
 
-**Barcode Lookup Flow:**
-- Barcode scan from browser → BFF → backend.
-- Backend checks local `releases` cache by barcode.
-- If not found, queries external music APIs, stores a `release`, and returns candidates.
+**Barcode Lookup Flow (Implemented):**
+- Barcode scan from browser (camera or manual input) → BFF → Domain Backend.
+- The backend checks a local `releases` cache by barcode and returns cached candidates when available.
+- If no cached release is found, the backend queries external music APIs (Discogs / MusicBrainz), caches results in `releases`, and returns candidate releases to the BFF for the frontend to present to the user.
 
 **GitHub OAuth:**
 - Browser interacts only with BFF's auth endpoints.

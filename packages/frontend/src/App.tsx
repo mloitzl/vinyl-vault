@@ -1,7 +1,7 @@
 import { RelayEnvironmentProvider } from 'react-relay';
 import { RelayEnvironment } from './relay/environment';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Header, ErrorAlert, LoadingSpinner } from './components';
+import { Header, ErrorAlert, LoadingSpinner, ScanBarcode } from './components';
 
 function AppContent() {
   const { user, isLoading, error } = useAuth();
@@ -9,7 +9,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
-      
+
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {/* Error display */}
         {error && (
@@ -33,15 +33,16 @@ function AppContent() {
               Your vinyl collection awaits. Start by scanning a barcode or browsing your records.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <div className="bg-gray-50 rounded-lg p-4">
                 <div className="text-3xl mb-2">📀</div>
                 <h3 className="font-medium text-gray-900">My Records</h3>
                 <p className="text-sm text-gray-500">Browse your collection</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <div className="text-3xl mb-2">📷</div>
-                <h3 className="font-medium text-gray-900">Scan Barcode</h3>
-                <p className="text-sm text-gray-500">Add a new record</p>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-medium text-gray-900 mb-2">Scan Barcode</h3>
+                <div>
+                  <ScanBarcode />
+                </div>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
                 <div className="text-3xl mb-2">🔍</div>
@@ -54,16 +55,12 @@ function AppContent() {
           /* Unauthenticated content */
           <div className="bg-white rounded-lg shadow p-8 text-center">
             <div className="text-6xl mb-4">💿</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Welcome to Vinyl Vault
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Vinyl Vault</h2>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Manage your vinyl record collection with ease. Scan barcodes to automatically 
-              fetch album information from Discogs and MusicBrainz.
+              Manage your vinyl record collection with ease. Scan barcodes to automatically fetch
+              album information from Discogs and MusicBrainz.
             </p>
-            <p className="text-sm text-gray-500">
-              Sign in with GitHub to get started.
-            </p>
+            <p className="text-sm text-gray-500">Sign in with GitHub to get started.</p>
           </div>
         )}
       </main>

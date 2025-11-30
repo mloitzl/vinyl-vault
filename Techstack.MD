@@ -30,6 +30,8 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Manage authentication state via `AuthContext` and `/auth/me` endpoint.
 - Use Relay connections and fragments for records, releases, and viewer.
 - Display user profile (avatar, name, role) in header when authenticated. 
+ - Provide barcode scanning UI (camera + manual input) and wire it to the BFF lookup flow (FR-1 implemented).
+ - Surface external metadata lookup results to the user and allow selection (FR-2 implemented).
 
 ## 3. Backend-for-Frontend (BFF) (`packages/bff`)
 
