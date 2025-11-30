@@ -1,6 +1,9 @@
+name: vinylvault
+
 services:
   mongodb:
-    image: mongo:7
+    image: mongo:latest
+    command: ["--bind_ip_all"]
     container_name: vinylvault-mongodb
     restart: unless-stopped
     ports:
