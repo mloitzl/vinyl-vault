@@ -1,0 +1,39 @@
+# Backend Dockerfile
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy workspace files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY tsconfig.base.json ./
+COPY packages/backend ./packages/backend
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build
+WORKDIR /app/packages/backend
+RUN pnpm build
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy built files
+COPY --from=builder /app/packages/backend/dist ./dist
+COPY --from=builder /app/packages/backend/package.json ./
+COPY --from=builder /app/packages/backend/src/schema.graphql ./dist/
+
+# Install production dependencies only
+RUN pnpm install --prod
+
+EXPOSE 4000
+
+CMD ["node", "dist/index.js"]

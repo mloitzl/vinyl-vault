@@ -1,0 +1,38 @@
+# Caddyfile for Vinyl Vault
+# Replace yourdomain.com with your actual domain
+
+yourdomain.com {
+    # Serve frontend static files
+    root * /srv/frontend
+    file_server
+
+    # Proxy GraphQL requests to BFF
+    handle /graphql* {
+        reverse_proxy bff:3001
+    }
+
+    # Proxy auth requests to BFF
+    handle /auth/* {
+        reverse_proxy bff:3001
+    }
+
+    # SPA fallback - serve index.html for client-side routing
+    try_files { path } /index.html
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Enable gzip compression
+    encode gzip
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
