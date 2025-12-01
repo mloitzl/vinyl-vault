@@ -74,17 +74,17 @@ export function ScanBarcode() {
     detectedRef.current = false;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
       const BarcodeDetector = (window as any).BarcodeDetector;
       if (BarcodeDetector) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
         const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_e', 'upc_a'] });
 
         const loop = async () => {
@@ -117,8 +117,7 @@ export function ScanBarcode() {
           const reader = new ZXingBrowserMultiFormatReader();
           zxingRef.current = reader;
 
-          // decodeFromVideoDevice will continuously scan and call the callback on results
-          // passing `undefined` as deviceId lets the browser pick the default camera
+          // decodeFromVideoDevice will request and manage its own media stream and attach it to the video element
           reader.decodeFromVideoDevice(
             undefined,
             videoRef.current as HTMLVideoElement,
