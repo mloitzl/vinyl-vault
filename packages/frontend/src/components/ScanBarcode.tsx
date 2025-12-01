@@ -25,6 +25,7 @@ export function ScanBarcode() {
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
   const zxingRef = useRef<BrowserMultiFormatReader | null>(null);
+  const detectedRef = useRef(false);
 
   const lookup = useCallback(async (bc: string) => {
     setIsLoading(true);
@@ -70,6 +71,7 @@ export function ScanBarcode() {
     if (scanningRef.current) return;
     scanningRef.current = true;
     setErrors([]);
+    detectedRef.current = false;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -94,6 +96,8 @@ export function ScanBarcode() {
             }
             const detections = await detector.detect(videoRef.current);
             if (detections && detections.length > 0) {
+              if (detectedRef.current) return;
+              detectedRef.current = true;
               const code = detections[0].rawValue;
               setBarcode(code);
               stopCamera();
@@ -119,13 +123,18 @@ export function ScanBarcode() {
             undefined,
             videoRef.current as HTMLVideoElement,
             (result) => {
-              if (result) {
-                const code = result.getText();
-                setBarcode(code);
-                stopCamera();
-                lookup(code);
+              if (!result) return;
+              if (detectedRef.current) return;
+              detectedRef.current = true;
+              const code = result.getText();
+              setBarcode(code);
+              try {
+                (zxingRef.current as { reset?: () => void })?.reset?.();
+              } catch {
+                // ignore
               }
-              // ignore errors (NotFoundException) and continue scanning
+              stopCamera();
+              lookup(code);
             }
           );
         } catch {
