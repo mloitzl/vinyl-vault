@@ -26,7 +26,8 @@ async function main() {
   });
 
   const { url } = await startStandaloneServer(server, {
-    listen: { port: PORT },
+    // bind to all interfaces so the backend is reachable from the LAN
+    listen: { port: PORT, host: '0.0.0.0' },
     context: async ({ req }) => {
       const auth = req.headers.authorization as string | undefined;
       const token = extractTokenFromHeader(auth);

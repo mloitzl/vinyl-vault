@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { BrowserMultiFormatReader } from '@zxing/browser';
+import { BrowserMultiFormatReader as ZXingBrowserMultiFormatReader } from '@zxing/browser';
 
 type ReleaseResult = {
   id: string;
@@ -22,6 +24,7 @@ export function ScanBarcode() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
+  const zxingRef = useRef<BrowserMultiFormatReader | null>(null);
 
   const lookup = useCallback(async (bc: string) => {
     setIsLoading(true);
@@ -79,35 +82,57 @@ export function ScanBarcode() {
       }
 
       const BarcodeDetector = (window as any).BarcodeDetector;
-      if (!BarcodeDetector) {
-        setErrors((s) => [...s, 'BarcodeDetector API not available in this browser.']);
-        return;
-      }
+      if (BarcodeDetector) {
+        const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_e', 'upc_a'] });
 
-      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_e', 'upc_a'] });
+        const loop = async () => {
+          if (!scanningRef.current) return;
+          try {
+            if (!videoRef.current || videoRef.current.readyState < 2) {
+              requestAnimationFrame(loop);
+              return;
+            }
+            const detections = await detector.detect(videoRef.current);
+            if (detections && detections.length > 0) {
+              const code = detections[0].rawValue;
+              setBarcode(code);
+              stopCamera();
+              lookup(code);
+              return;
+            }
+          } catch (err) {
+            // detection errors
+          }
+          requestAnimationFrame(loop);
+        };
 
-      const loop = async () => {
-        if (!scanningRef.current) return;
-        try {
-          if (!videoRef.current || videoRef.current.readyState < 2) {
-            requestAnimationFrame(loop);
-            return;
-          }
-          const detections = await detector.detect(videoRef.current);
-          if (detections && detections.length > 0) {
-            const code = detections[0].rawValue;
-            setBarcode(code);
-            stopCamera();
-            lookup(code);
-            return;
-          }
-        } catch (err) {
-          // detection errors
-        }
         requestAnimationFrame(loop);
-      };
+      } else {
+        // Fallback for browsers without BarcodeDetector (e.g. Safari) using ZXing
+        try {
+          const reader = new ZXingBrowserMultiFormatReader();
+          zxingRef.current = reader;
 
-      requestAnimationFrame(loop);
+          // decodeFromVideoDevice will continuously scan and call the callback on results
+          // passing `undefined` as deviceId lets the browser pick the default camera
+          reader.decodeFromVideoDevice(
+            undefined,
+            videoRef.current as HTMLVideoElement,
+            (result) => {
+              if (result) {
+                const code = result.getText();
+                setBarcode(code);
+                stopCamera();
+                lookup(code);
+              }
+              // ignore errors (NotFoundException) and continue scanning
+            }
+          );
+        } catch (err: any) {
+          setErrors((s) => [...s, 'Barcode detection not available in this browser.']);
+          scanningRef.current = false;
+        }
+      }
     } catch (err: any) {
       setErrors([err?.message ?? String(err)]);
       scanningRef.current = false;
@@ -117,6 +142,14 @@ export function ScanBarcode() {
   const stopCamera = useCallback(() => {
     scanningRef.current = false;
     try {
+      if (zxingRef.current) {
+        try {
+          (zxingRef.current as any)?.reset?.();
+        } catch (_) {
+          // ignore
+        }
+        zxingRef.current = null;
+      }
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.srcObject = null;

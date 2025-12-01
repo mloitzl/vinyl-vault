@@ -31,12 +31,32 @@ interface GitHubUser {
 
 // GitHub OAuth login initiation
 // Redirects user to GitHub for authentication
-authRouter.get('/github', (_req: Request, res: Response) => {
+// Initiate GitHub OAuth flow
+// Optional query params:
+// - callback: one of the registered BFF callback URLs (must be allowed by GITHUB_CALLBACK_URLS or configured callback)
+// - return_to: frontend URL to redirect to after successful login
+authRouter.get('/github', (req: Request, res: Response) => {
+  const candidateCallback = typeof req.query.callback === 'string' ? req.query.callback : undefined;
+  const returnTo = typeof req.query.return_to === 'string' ? req.query.return_to : undefined;
+
+  // Build allowed callbacks list from env or config
+  const allowed = (process.env.GITHUB_CALLBACK_URLS || config.github.callbackUrl)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const redirectUri =
+    candidateCallback && allowed.includes(candidateCallback)
+      ? candidateCallback
+      : config.github.callbackUrl;
+
+  const state = generateState(redirectUri, returnTo);
+
   const params = new URLSearchParams({
     client_id: config.github.clientId,
-    redirect_uri: config.github.callbackUrl,
+    redirect_uri: redirectUri,
     scope: 'read:user user:email',
-    state: generateState(),
+    state,
   });
 
   const authUrl = `${GITHUB_AUTHORIZE_URL}?${params.toString()}`;
@@ -46,7 +66,7 @@ authRouter.get('/github', (_req: Request, res: Response) => {
 // GitHub OAuth callback
 // Exchanges code for token, fetches user, creates session
 authRouter.get('/github/callback', async (req: Request, res: Response) => {
-  const { code, error, error_description } = req.query;
+  const { code, error, error_description, state } = req.query;
 
   // Handle OAuth errors from GitHub
   if (error) {
@@ -58,19 +78,38 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     return res.redirect(`${config.frontend.url}?error=missing_code`);
   }
 
+  // Decode state to find which redirect_uri and optional return_to were used
+  let usedRedirectUri = config.github.callbackUrl;
+  let returnToUrl: string | undefined = undefined;
+  if (state && typeof state === 'string') {
+    try {
+      const parts = state.split('|');
+      if (parts.length >= 2) {
+        const decodedRedirect = Buffer.from(parts[1], 'base64').toString('utf-8');
+        if (decodedRedirect) usedRedirectUri = decodedRedirect;
+      }
+      if (parts.length >= 3) {
+        const decodedReturn = Buffer.from(parts[2], 'base64').toString('utf-8');
+        if (decodedReturn) returnToUrl = decodedReturn;
+      }
+    } catch {
+      // ignore malformed state
+    }
+  }
+
   try {
     // Exchange authorization code for access token
     const tokenResponse = await fetch(GITHUB_TOKEN_URL, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         client_id: config.github.clientId,
         client_secret: config.github.clientSecret,
         code,
-        redirect_uri: config.github.callbackUrl,
+        redirect_uri: usedRedirectUri,
       }),
     });
 
@@ -84,8 +123,8 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Fetch user profile from GitHub
     const userResponse = await fetch(GITHUB_USER_URL, {
       headers: {
-        'Authorization': `Bearer ${tokenData.access_token}`,
-        'Accept': 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${tokenData.access_token}`,
+        Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'VinylVault',
       },
     });
@@ -160,7 +199,10 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
         console.error('Session save error:', err);
         return res.redirect(`${config.frontend.url}?error=session_error`);
       }
-      res.redirect(config.frontend.url);
+      // If a returnToUrl was provided in the initial request and is present in state, redirect there.
+      // Otherwise fallback to configured frontend URL.
+      const dest = returnToUrl || config.frontend.url;
+      res.redirect(dest);
     });
   } catch (err) {
     console.error('OAuth callback error:', err);
@@ -190,6 +232,22 @@ authRouter.get('/me', (req: Request, res: Response) => {
 });
 
 // Generate a simple state parameter for CSRF protection
-function generateState(): string {
-  return Math.random().toString(36).substring(2, 15);
+function generateState(redirectUri?: string, returnTo?: string): string {
+  const rand = Math.random().toString(36).substring(2, 15);
+  const parts = [rand];
+  if (redirectUri) {
+    try {
+      parts.push(Buffer.from(redirectUri, 'utf-8').toString('base64'));
+    } catch {
+      parts.push('');
+    }
+  }
+  if (returnTo) {
+    try {
+      parts.push(Buffer.from(returnTo, 'utf-8').toString('base64'));
+    } catch {
+      parts.push('');
+    }
+  }
+  return parts.join('|');
 }
