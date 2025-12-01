@@ -46,7 +46,7 @@ export const resolvers = {
         jwt = signJwt({ sub: ctx.user.id, role: ctx.user.role, githubLogin: ctx.user.githubLogin });
       }
 
-      const query = `mutation Lookup($barcode: String!) { lookupBarcode(barcode: $barcode) { releases { id barcode artist title year format label country coverImageUrl externalId source } fromCache errors } }`;
+      const query = `mutation Lookup($barcode: String!) { lookupBarcode(barcode: $barcode) { releases { id barcode artist title year format label country coverImageUrl externalId source genre style trackList { position title duration } } fromCache errors } }`;
 
       try {
         const data = await queryBackend<{

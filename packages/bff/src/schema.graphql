@@ -91,6 +91,18 @@ type Release implements Node {
   source: ReleaseSource
 }
 
+type Track {
+  position: String
+  title: String!
+  duration: String
+}
+
+extend type Release {
+  genre: [String!]
+  style: [String!]
+  trackList: [Track!]
+}
+
 enum ReleaseSource {
   DISCOGS
   MUSICBRAINZ

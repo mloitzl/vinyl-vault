@@ -13,6 +13,9 @@ type ReleaseResult = {
   coverImageUrl?: string | null;
   externalId?: string | null;
   source?: string;
+  genre?: string[];
+  style?: string[];
+  trackList?: { position?: string; title: string; duration?: string }[];
 };
 
 export function ScanBarcode() {
@@ -33,7 +36,7 @@ export function ScanBarcode() {
     setResults([]);
 
     // BFF exposes `scanBarcode` mutation. Call the BFF GraphQL endpoint.
-    const query = `mutation Scan($barcode: String!) { scanBarcode(barcode: $barcode) { releases { id barcode artist title year format label country coverImageUrl source } errors } }`;
+    const query = `mutation Scan($barcode: String!) { scanBarcode(barcode: $barcode) { releases { id barcode artist title year format label country coverImageUrl source genre style trackList { position title duration } } errors } }`;
 
     try {
       const res = await fetch('/graphql', {
@@ -117,13 +120,14 @@ export function ScanBarcode() {
           const reader = new ZXingBrowserMultiFormatReader();
           zxingRef.current = reader;
 
-          // decodeFromVideoDevice will request and manage its own media stream and attach it to the video element
-          reader.decodeFromVideoDevice(
+          // Use single-shot decode to avoid continuous background streams in Safari
+          const result = await reader.decodeOnceFromVideoDevice(
             undefined,
-            videoRef.current as HTMLVideoElement,
-            (result) => {
-              if (!result) return;
-              if (detectedRef.current) return;
+            videoRef.current as HTMLVideoElement
+          );
+
+          if (result) {
+            if (!detectedRef.current) {
               detectedRef.current = true;
               const code = result.getText();
               setBarcode(code);
@@ -135,10 +139,21 @@ export function ScanBarcode() {
               stopCamera();
               lookup(code);
             }
-          );
-        } catch {
-          setErrors((s) => [...s, 'Barcode detection not available in this browser.']);
+          }
+        } catch (err: unknown) {
+          // decodeOnceFromVideoDevice may throw if no barcode is found or on other errors.
+          const message = err instanceof Error ? err.message : String(err);
+          setErrors((s) => [...s, message || 'Barcode detection not available in this browser.']);
           scanningRef.current = false;
+        } finally {
+          if (zxingRef.current) {
+            try {
+              (zxingRef.current as { reset?: () => void })?.reset?.();
+            } catch {
+              // ignore
+            }
+            zxingRef.current = null;
+          }
         }
       }
     } catch (err: unknown) {
@@ -233,13 +248,64 @@ export function ScanBarcode() {
                     📀
                   </div>
                 )}
-                <div>
-                  <div className="font-semibold">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold truncate">
                     {r.artist} — {r.title}
                   </div>
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-gray-500 truncate">
                     {r.label ?? ''} {r.year ? `· ${r.year}` : ''} {r.source ? `· ${r.source}` : ''}
                   </div>
+
+                  {/* Genres and styles inline as small badges */}
+                  {(r.genre && r.genre.length > 0) || (r.style && r.style.length > 0) ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {r.genre && r.genre.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {r.genre.map((g, gi) => (
+                            <span
+                              key={`g-${gi}`}
+                              className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"
+                            >
+                              {g}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {r.style && r.style.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {r.style.map((s, si) => (
+                            <span
+                              key={`s-${si}`}
+                              className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Expanded track list (scrollable on mobile) */}
+                  {r.trackList && r.trackList.length > 0 && (
+                    <div className="mt-3 max-h-56 overflow-y-auto text-sm">
+                      {r.trackList.map((t, ti) => (
+                        <div key={ti} className="py-1 border-b last:border-b-0">
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="text-xs text-gray-500 w-12 flex-shrink-0">
+                              {t.position ?? ''}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="truncate">{t.title}</div>
+                            </div>
+                            <div className="text-xs text-gray-500 ml-3 flex-shrink-0">
+                              {t.duration ?? ''}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
