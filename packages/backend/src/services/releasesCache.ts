@@ -23,10 +23,10 @@ export interface CachedRelease {
 export async function findReleasesByBarcode(barcode: string): Promise<CachedRelease[]> {
   if (!barcode) return [];
   const db = await connectToDatabase();
-  const col = db.collection(COLLECTIONS.RELEASES);
+  const col = db.collection<CachedRelease>(COLLECTIONS.RELEASES);
   // Find exact barcode matches. Stored documents contain `barcode` as normalized string.
   const docs = await col.find({ barcode }).toArray();
-  return docs as CachedRelease[];
+  return docs.map(({ _id, ...rest }) => rest as CachedRelease);
 }
 
 export async function upsertReleases(releases: CachedRelease[]): Promise<void> {

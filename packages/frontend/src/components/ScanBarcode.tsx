@@ -100,7 +100,7 @@ export function ScanBarcode() {
               lookup(code);
               return;
             }
-          } catch (err) {
+          } catch {
             // detection errors
           }
           requestAnimationFrame(loop);
@@ -128,13 +128,14 @@ export function ScanBarcode() {
               // ignore errors (NotFoundException) and continue scanning
             }
           );
-        } catch (err: any) {
+        } catch {
           setErrors((s) => [...s, 'Barcode detection not available in this browser.']);
           scanningRef.current = false;
         }
       }
-    } catch (err: any) {
-      setErrors([err?.message ?? String(err)]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrors([message]);
       scanningRef.current = false;
     }
   }, [lookup]);
@@ -144,8 +145,8 @@ export function ScanBarcode() {
     try {
       if (zxingRef.current) {
         try {
-          (zxingRef.current as any)?.reset?.();
-        } catch (_) {
+          (zxingRef.current as { reset?: () => void })?.reset?.();
+        } catch {
           // ignore
         }
         zxingRef.current = null;
@@ -158,7 +159,7 @@ export function ScanBarcode() {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
-    } catch (_) {
+    } catch {
       // ignore
     }
   }, []);
