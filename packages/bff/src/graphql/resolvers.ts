@@ -19,8 +19,8 @@ export const resolvers = {
         displayName: context.user.displayName,
         avatarUrl: context.user.avatarUrl || null,
         role: context.user.role,
-        createdAt: new Date().toISOString(), // TODO: Get from DB
-        updatedAt: new Date().toISOString(), // TODO: Get from DB
+        createdAt: context.user.createdAt,
+        updatedAt: context.user.updatedAt,
       };
     },
     node: async (_parent: unknown, _args: { id: string }, _context: GraphQLContext) => {

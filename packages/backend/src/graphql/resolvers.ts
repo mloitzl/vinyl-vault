@@ -1,13 +1,12 @@
 // Domain Backend GraphQL resolvers
-// TODO: Implement business logic
 
 import { findReleasesByBarcode, upsertReleases } from '../services/releasesCache.js';
+import { findUserById, upsertUser, updateUserRole } from '../services/users.js';
 
 export const resolvers = {
   Query: {
     user: async (_parent: unknown, _args: { id: string }) => {
-      // TODO: Fetch user from MongoDB
-      return null;
+      return findUserById(_args.id);
     },
     record: async (_parent: unknown, _args: { id: string }) => {
       // TODO: Fetch record from MongoDB
@@ -210,13 +209,15 @@ export const resolvers = {
       // TODO: Delete record from MongoDB
       throw new Error('Not implemented');
     },
-    upsertUser: async (_parent: unknown, _args: unknown) => {
-      // TODO: Create or update user
-      throw new Error('Not implemented');
+    upsertUser: async (_parent: unknown, _args: { input: { githubId: string; githubLogin: string; displayName: string; avatarUrl?: string; email?: string } }) => {
+      return upsertUser(_args.input);
     },
-    updateUserRole: async (_parent: unknown, _args: unknown) => {
-      // TODO: Update user role (admin only)
-      throw new Error('Not implemented');
+    updateUserRole: async (_parent: unknown, _args: { userId: string; role: 'ADMIN' | 'CONTRIBUTOR' | 'READER' }) => {
+      const user = await updateUserRole(_args.userId, _args.role);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      return user;
     },
   },
   User: {

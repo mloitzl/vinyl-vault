@@ -3,7 +3,7 @@
 
 import { Router, Request, Response, type IRouter } from 'express';
 import { config } from '../config/env.js';
-import { getDatabase } from '../db/connection.js';
+import { queryBackend } from '../services/backendClient.js';
 import type { SessionUser } from '../types/session.js';
 
 export const authRouter: IRouter = Router();
@@ -136,59 +136,61 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
     const githubUser = (await userResponse.json()) as GitHubUser;
 
-    // Create or update local user in MongoDB
-    const db = getDatabase();
-    const usersCollection = db.collection('users');
-
-    const now = new Date();
-    const existingUser = await usersCollection.findOne({ githubId: String(githubUser.id) });
-
-    let userId: string;
-    let userRole: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
-
-    if (existingUser) {
-      // Update existing user
-      await usersCollection.updateOne(
-        { githubId: String(githubUser.id) },
-        {
-          $set: {
-            githubLogin: githubUser.login,
-            displayName: githubUser.name || githubUser.login,
-            avatarUrl: githubUser.avatar_url,
-            email: githubUser.email,
-            updatedAt: now,
-          },
+    // Create or update user via Domain Backend
+    const UPSERT_USER_MUTATION = `
+      mutation UpsertUser($input: UpsertUserInput!) {
+        upsertUser(input: $input) {
+          id
+          githubId
+          githubLogin
+          displayName
+          avatarUrl
+          email
+          role
+          createdAt
+          updatedAt
         }
-      );
-      userId = existingUser._id.toString();
-      userRole = existingUser.role;
-    } else {
-      // Create new user - first user becomes ADMIN, others become READER
-      const userCount = await usersCollection.countDocuments();
-      userRole = userCount === 0 ? 'ADMIN' : 'READER';
+      }
+    `;
 
-      const result = await usersCollection.insertOne({
-        githubId: String(githubUser.id),
-        githubLogin: githubUser.login,
-        displayName: githubUser.name || githubUser.login,
-        avatarUrl: githubUser.avatar_url,
-        email: githubUser.email,
-        role: userRole,
-        createdAt: now,
-        updatedAt: now,
-      });
-      userId = result.insertedId.toString();
+    interface BackendUser {
+      id: string;
+      githubId: string;
+      githubLogin: string;
+      displayName: string;
+      avatarUrl?: string;
+      email?: string;
+      role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+      createdAt: string;
+      updatedAt: string;
     }
 
-    // Create session with user data
+    const backendResult = await queryBackend<{ upsertUser: BackendUser }>(
+      UPSERT_USER_MUTATION,
+      {
+        input: {
+          githubId: String(githubUser.id),
+          githubLogin: githubUser.login,
+          displayName: githubUser.name || githubUser.login,
+          avatarUrl: githubUser.avatar_url,
+          email: githubUser.email,
+        },
+      }
+    );
+
+    const user = backendResult.upsertUser;
+
+    // Create session with user data from backend
     const sessionUser: SessionUser = {
-      id: userId,
-      githubId: String(githubUser.id),
-      githubLogin: githubUser.login,
-      displayName: githubUser.name || githubUser.login,
-      avatarUrl: githubUser.avatar_url,
-      email: githubUser.email || undefined,
-      role: userRole,
+      id: user.id,
+      githubId: user.githubId,
+      githubLogin: user.githubLogin,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
 
     req.session.user = sessionUser;
