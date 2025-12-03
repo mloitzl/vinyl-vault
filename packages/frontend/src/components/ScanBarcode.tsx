@@ -195,20 +195,23 @@ export function ScanBarcode() {
     <div className="p-4">
       <form onSubmit={onSubmit} className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">Barcode</label>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap items-center">
           <input
             value={barcode}
             onChange={(e) => setBarcode(e.target.value)}
-            className="flex-1 border rounded px-3 py-2"
+            className="flex-1 min-w-0 border rounded px-3 py-2"
             placeholder="Enter or scan barcode (e.g. 0123456789012)"
           />
-          <button type="submit" className="bg-blue-600 text-white px-3 py-2 rounded">
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-3 py-2 rounded w-full sm:w-auto flex-shrink-0"
+          >
             {isLoading ? 'Searching...' : 'Lookup'}
           </button>
           <button
             type="button"
             onClick={() => (scanningRef.current ? stopCamera() : startCamera())}
-            className="bg-gray-200 px-3 py-2 rounded"
+            className="bg-gray-200 px-3 py-2 rounded w-full sm:w-auto flex-shrink-0"
           >
             {scanningRef.current ? 'Stop' : 'Use Camera'}
           </button>

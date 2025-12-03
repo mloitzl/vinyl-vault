@@ -62,13 +62,13 @@ The system consists of:
 
 ## 3. Functional Requirements
 
-FR-1 Barcode Scan and Lookup (Implemented)
+FR-1 Barcode Scan and Lookup ✅ IMPLEMENTED
 - The system allows the user to input a barcode via:
   - Camera-based scanning (in supported browsers) or
   - Manual text input.
 - The system validates the barcode format and shows errors for invalid or unreadable codes.
 
-FR-2 External Metadata Retrieval (Implemented)
+FR-2 External Metadata Retrieval ✅ IMPLEMENTED
 - The system searches for releases by barcode using external music data services (Discogs and MusicBrainz integrations are available).
 - If multiple releases match, the system displays a list of candidates for the user to choose from.
 - The system caches selected release metadata in MongoDB for future reuse.

@@ -136,6 +136,36 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
     const githubUser = (await userResponse.json()) as GitHubUser;
 
+    // GitHub's /user endpoint only includes `email` when the user has made
+    // their email public. If it's null, fetch the user's emails using the
+    // `user:email` scope and pick the primary verified email when available.
+    let primaryEmail: string | null = githubUser.email ?? null;
+    if (!primaryEmail) {
+      try {
+        const emailsResponse = await fetch(`${GITHUB_USER_URL}/emails`, {
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'VinylVault',
+          },
+        });
+        if (emailsResponse.ok) {
+          const emails = await emailsResponse.json();
+          if (Array.isArray(emails) && emails.length > 0) {
+            const primary =
+              emails.find((e: any) => e.primary && e.verified) ||
+              emails.find((e: any) => e.verified) ||
+              emails[0];
+            if (primary && primary.email) primaryEmail = String(primary.email);
+          }
+        } else {
+          console.warn('GitHub emails fetch failed:', emailsResponse.status);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch GitHub emails:', e);
+      }
+    }
+
     // Create or update user via Domain Backend
     const UPSERT_USER_MUTATION = `
       mutation UpsertUser($input: UpsertUserInput!) {
@@ -165,18 +195,15 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       updatedAt: string;
     }
 
-    const backendResult = await queryBackend<{ upsertUser: BackendUser }>(
-      UPSERT_USER_MUTATION,
-      {
-        input: {
-          githubId: String(githubUser.id),
-          githubLogin: githubUser.login,
-          displayName: githubUser.name || githubUser.login,
-          avatarUrl: githubUser.avatar_url,
-          email: githubUser.email,
-        },
-      }
-    );
+    const backendResult = await queryBackend<{ upsertUser: BackendUser }>(UPSERT_USER_MUTATION, {
+      input: {
+        githubId: String(githubUser.id),
+        githubLogin: githubUser.login,
+        displayName: githubUser.name || githubUser.login,
+        avatarUrl: githubUser.avatar_url,
+        email: primaryEmail,
+      },
+    });
 
     const user = backendResult.upsertUser;
 
