@@ -40,13 +40,19 @@ Main components:
   - Apollo Server (standalone).
   - Encapsulates business logic and data access.
   - Validates JWTs from the BFF (user id, role).
-  - Interacts with MongoDB for users, records, and releases.
+  - Interacts with Backend MongoDB for users, records, and releases.
   - Integrates with external music APIs (Discogs/MusicBrainz) behind the scenes.
 
-- **MongoDB**
-  - Running via Docker (see `infra/docker-compose.yml`).
-  - Stores users, roles, records, releases, and cached external metadata.
-  - Session store for BFF via `connect-mongo`.
+- **MongoDB (Two Separate Instances)**
+  - **BFF MongoDB** (`BFF_MONGODB_URI` / `MONGODB_URI`)
+    - Stores **only session information** via `connect-mongo`.
+    - Isolated from the Backend MongoDB instance.
+    - In production, this is a completely separate database not reachable by the Backend.
+  - **Backend MongoDB** (`BACKEND_MONGODB_URI`)
+    - Stores all domain data: users, records, releases, and cached external metadata.
+    - Isolated from the BFF MongoDB instance.
+    - In production, this is a completely separate database not reachable by the BFF.
+  - Running via Docker for development (see `infra/docker-compose.yml`).
 
 - **External APIs**
   - Music metadata APIs (Discogs, MusicBrainz) for barcode lookups.
@@ -87,17 +93,23 @@ Security hardening on the Pi:
 3. User authorizes on GitHub → GitHub redirects to `/auth/github/callback` with code.
 4. BFF exchanges code for access token via GitHub API.
 5. BFF fetches user profile from GitHub API.
-6. BFF creates/updates user in MongoDB `users` collection.
-7. BFF creates session (stored in MongoDB via `connect-mongo`).
+6. BFF calls Backend GraphQL mutation to create/update user in Backend MongoDB `users` collection.
+7. BFF creates session (stored in BFF MongoDB via `connect-mongo`).
 8. BFF sets HTTP-only session cookie and redirects to frontend.
 
 **Session Management:**
 
-- Sessions stored in MongoDB `sessions` collection.
+- Sessions stored in BFF MongoDB `sessions` collection (via `connect-mongo`).
 - Cookie: `vinylvault.sid`, HTTP-only, secure in production.
-- Session contains: `userId`, `githubId`, `username`, `role`, `avatarUrl`, `displayName`.
+- Session contains: `userId`, `githubId`, `username`, `role`, `avatarUrl`, `displayName`, `createdAt`, `updatedAt`.
 - Frontend fetches user via `/auth/me` endpoint on load.
 - No backend JWT is exposed to the browser.
+
+**Data Flow Between BFF and Backend:**
+
+- BFF never writes directly to the Backend MongoDB.
+- All user operations (create, update, fetch) are forwarded from BFF to Backend via GraphQL queries and mutations.
+- BFF stores only session data in its own MongoDB instance.
 
 ### 5.2 Authorization
 
@@ -117,7 +129,7 @@ Security hardening on the Pi:
 
 ### 5.3 Data Model (Logical)
 
-**User** (MongoDB `users` collection)
+**User** (Backend MongoDB `users` collection)
 ```
 {
   _id: ObjectId,
@@ -132,11 +144,15 @@ Security hardening on the Pi:
 }
 ```
 
-**Record** (MongoDB `records` collection)
+**Session** (BFF MongoDB `sessions` collection)
+- Managed automatically by `connect-mongo`.
+- Contains session ID, expiry, and user data snapshot.
+
+**Record** (Backend MongoDB `records` collection)
 - Represents a physical vinyl owned by a user.
 - Links to User and Release.
 
-**Release** (MongoDB `releases` collection)
+**Release** (Backend MongoDB `releases` collection)
 - Cached metadata about a particular music release from an external source.
 
 **Relationships:**

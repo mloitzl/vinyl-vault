@@ -106,7 +106,9 @@ FR-7 Authorization and Roles ✅ IMPLEMENTED
 
 FR-8 Session Management ✅ IMPLEMENTED
 - The system shall maintain user sessions using HTTP-only cookies between browser and BFF.
-- Sessions stored in MongoDB via `connect-mongo`.
+- Sessions stored in BFF MongoDB via `connect-mongo`.
+- BFF MongoDB is a separate instance from Backend MongoDB (not reachable by each other in production).
+- BFF MongoDB stores ONLY session information; all other data is stored in Backend MongoDB.
 - Cookie name: `vinylvault.sid`, secure in production, SameSite=lax.
 - The system shall not expose backend JWTs or GitHub tokens to the browser.
 - The system shall invalidate sessions upon user logout.
@@ -121,6 +123,8 @@ NFR-1 Security
 - All external access to the system shall use HTTPS. 
 - JWTs shall be used only between BFF and backend, with short expiration times. 
 - MongoDB shall not be directly exposed to the public network.
+- BFF MongoDB and Backend MongoDB are separate instances, not reachable by each other.
+- BFF MongoDB stores only session data; all domain data resides in Backend MongoDB.
 - OS and dependencies shall be kept up to date with security patches.
 
 NFR-2 Performance 
@@ -148,6 +152,11 @@ NFR-6 Privacy
 - The system must run on a single Raspberry Pi 5 in a home network with port forwarding or secure tunneling.
 - Only open-source or free-to-use components should be used, excluding paid proprietary dependencies for core functionality.
 - External APIs must be used according to their terms of service and rate limits.
+- The BFF MongoDB and Backend MongoDB shall be completely separate instances in production:
+  - BFF MongoDB stores only session information.
+  - Backend MongoDB stores all domain data (users, records, releases).
+  - These instances are not reachable by each other.
+  - All user-related operations from the BFF must be forwarded to the Backend via GraphQL.
 
 ## 6. Implementation Status
 

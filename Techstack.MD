@@ -60,9 +60,11 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 - Expose a Relay-friendly GraphQL schema (viewer, records, scanBarcode, etc.).
 - Handle GitHub OAuth Web Application Flow.
-- Map GitHub identity to local user in MongoDB `users` collection.
-- Maintain sessions via HTTP-only cookies and MongoDB session store.
+- Forward user operations (create, update, fetch) to Backend via GraphQL queries and mutations.
+- Maintain sessions via HTTP-only cookies and BFF MongoDB session store.
 - Create and sign short-lived JWTs for calls to the domain backend.
+
+**Important:** The BFF does NOT write directly to the Backend MongoDB. User data is stored exclusively in the Backend. The BFF MongoDB is used only for session storage.
 
 ## 4. Domain Backend (`packages/backend`)
 
@@ -87,14 +89,29 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 ## 5. Database
 
 - **DBMS:** MongoDB 7 (running via Docker)
-- **Connection:** `mongodb://localhost:27017/vinylvault`
 - **Docker:** Configured in `infra/docker-compose.yml`
+
+### 5.1 BFF MongoDB (Session Store Only)
+
+- **Purpose:** Stores only session information
+- **Connection:** `MONGODB_URI` or `BFF_MONGODB_URI` environment variable
+- **Default:** `mongodb://localhost:27017/vinylvault-sessions`
+
+**Collections:**
+- `sessions` - Session data (managed automatically by connect-mongo)
+
+**Important:** In production, the BFF MongoDB is a completely separate instance from the Backend MongoDB. They are not reachable by each other. The BFF should never write any data other than sessions to its MongoDB.
+
+### 5.2 Backend MongoDB (Domain Data)
+
+- **Purpose:** Stores all domain data (users, records, releases)
+- **Connection:** `BACKEND_MONGODB_URI` environment variable
+- **Default:** `mongodb://localhost:27017/vinylvault`
 
 **Collections:**
 - `users` - GitHub-linked users and roles
-- `sessions` - Session data (managed by connect-mongo)
-- `records` - Physical owned items (planned)
-- `releases` - Cached external metadata (planned)
+- `records` - Physical owned items
+- `releases` - Cached external metadata
 
 **User Schema:**
 ```javascript
@@ -180,8 +197,28 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Environment Variables:**
 - Stored in `.env` file at project root (not committed)
-- Loaded via `dotenv` in BFF
+- Loaded via `dotenv` in BFF and Backend
 - See `.env` comments for all available options
+
+**Key Environment Variables:**
+```
+# BFF MongoDB (sessions only)
+MONGODB_URI=mongodb://localhost:27017/vinylvault-sessions
+
+# Backend MongoDB (domain data: users, records, releases)
+BACKEND_MONGODB_URI=mongodb://localhost:27017/vinylvault
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
+
+# JWT for BFF-Backend communication
+JWT_SECRET=your_jwt_secret
+
+# Session
+SESSION_SECRET=your_session_secret
+```
 
 **Getting Started:**
 1. Clone repository
