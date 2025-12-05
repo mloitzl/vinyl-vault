@@ -261,24 +261,24 @@ QR-04: Robustness to incomplete data
 - ✅ User profile display in UI
 - ✅ Docker configuration for MongoDB
 - ✅ Caddy reverse proxy configuration
-- ✅ Barcode scanning (FR-1)
-- ✅ External metadata retrieval - basic (FR-2)
-
-### In Progress
-- 🔄 Record creation and management (FR-3, FR-4)
-- 🔄 Collection browsing (FR-5)
-
-### Recently Completed
+- ✅ Barcode scanning UI with camera and manual input (FR-1)
+- ✅ External metadata retrieval from Discogs and MusicBrainz (FR-2)
 - ✅ Release normalization and grouping (FR-NG-1, FR-NG-2, FR-NG-3)
 - ✅ Release scoring mechanism (FR-SC-1 through FR-SC-5)
 - ✅ Album aggregation (FR-AG-1 through FR-AG-6)
 - ✅ Scoring configuration (FR-CF-1, FR-CF-2, FR-CF-3)
 - ✅ Quality requirements (QR-01 through QR-04)
+- ✅ GraphQL schemas for BFF and Backend (Relay-friendly)
+- ✅ Frontend ScanBarcode component with album display
+- ✅ Score breakdown visualization in UI
+
+### In Progress
+- 🔄 Record creation and management (FR-3, FR-4) - GraphQL schema defined, resolvers pending
+- 🔄 Collection browsing (FR-5) - UI placeholder implemented, data fetching pending
+- 🔄 Release caching in MongoDB (partially implemented)
 
 ## 7. Open Issues
 
-- ~~Decision between specific external music APIs (Discogs, MusicBrainz, or both).~~ **RESOLVED**: Use both APIs with blended scoring approach (FR-2.1 through FR-2.4).
 - Strategy for backup/restore (local NAS, cloud storage, etc.).
-- Mobile camera API integration for barcode scanning.
-- ~~Definition of default scoring weights and country preference lists for FR-SC-2 and FR-SC-3.~~ **RESOLVED**: Configured in `packages/backend/config/scoring.json` with weights (mediaType: 20, preferredCountry: 15, trackListComplete: 25, coverArt: 15, labelInfo: 10, catalogNumber: 5) and preferred countries (US, UK, AT, DE).
-- ~~Storage format and location for scoring configuration (FR-CF-1, FR-CF-2, FR-CF-3).~~ **RESOLVED**: JSON configuration file at `packages/backend/config/scoring.json` with JSON Schema validation.
+- Mobile camera API integration refinements for barcode scanning.
+- Full release caching strategy (currently caching is partially disabled to always use live scoring orchestrator).

@@ -23,6 +23,9 @@ Main components:
   - Talks only to the BFF GraphQL endpoint.
   - Uses Tailwind CSS for styling.
   - AuthContext manages user state via `/auth/me` endpoint.
+  - Barcode scanning via @zxing/browser library (camera + manual input).
+  - Mobile-first design with bottom navigation for authenticated users.
+  - Views: Home (welcome), Scan (barcode lookup with album results), Collection (placeholder), Search (placeholder).
 
 - **GraphQL BFF** (`packages/bff`)
   - Express + Apollo Server 4.
@@ -41,7 +44,9 @@ Main components:
   - Encapsulates business logic and data access.
   - Validates JWTs from the BFF (user id, role).
   - Interacts with Backend MongoDB for users, records, and releases.
-  - Integrates with external music APIs (Discogs/MusicBrainz) behind the scenes.
+  - Integrates with external music APIs (Discogs/MusicBrainz) queried in parallel.
+  - Implements blended scoring system for release aggregation into Albums.
+  - Provides detailed score breakdowns for transparency and debugging.
 
 - **MongoDB (Two Separate Instances)**
   - **BFF MongoDB** (`BFF_MONGODB_URI` / `MONGODB_URI`)
@@ -157,8 +162,9 @@ Security hardening on the Pi:
 
 **Album** (Aggregated from releases at query time)
 - Normalized album combining data from multiple release sources.
-- Contains: primary release, alternative releases, merged genres/styles, all external IDs.
+- Contains: primary release with score breakdown, alternative releases, merged genres/styles, all external IDs.
 - Created by the scoring orchestrator during barcode lookup.
+- Includes score breakdown for traceability (QR-02): mediaType, countryPreference, trackListCompleteness, coverArt, labelInfo, catalogNumber, yearInfo, sourceBonus.
 
 **Relationships:**
 - User 1—N Record
@@ -168,28 +174,45 @@ Security hardening on the Pi:
 ### 5.4 External Integration
 
 **Barcode Lookup Flow (Implemented with Blended Scoring):**
-- Barcode scan from browser (camera or manual input) → BFF → Domain Backend.
-- The backend checks a local `releases` cache by barcode and returns cached candidates when available.
+- Barcode scan from browser (camera via @zxing/browser or manual input) → BFF → Domain Backend.
+- The backend checks a local `releases` cache by barcode and returns cached candidates when available (currently disabled to always use live scoring).
 - If no cached release is found, the backend:
-  1. Queries Discogs and MusicBrainz APIs **in parallel**.
+  1. Queries Discogs and MusicBrainz APIs **in parallel** via `orchestrator.ts`.
   2. Converts results to a unified `RawRelease` format.
-  3. **Normalizes** text fields (lowercase, trim, remove articles like "The", "A", "An").
+  3. **Normalizes** text fields (lowercase, trim, remove articles like "The", "A", "An", remove edition affixes like "Remastered", "Deluxe").
   4. **Groups** releases by normalized artist + title into album candidates.
   5. **Scores** each release based on configurable weights:
      - Media type preference (vinyl/LP: +20)
-     - Country preference (US/UK/AT/DE: +15, deprioritized: -10)
+     - Country preference (US/UK/AT/DE: +15, deprioritized RU/CN: -10)
      - Track list completeness (+25 for complete, +10 for partial)
      - Cover art availability (+15)
      - Label info (+10), Catalog number (+5)
      - Discogs source bonus (+5)
-  6. **Selects primary release** (highest score, with deterministic tie-breaking).
+  6. **Selects primary release** (highest score, with deterministic tie-breaking by earliest year).
   7. **Aggregates** into `Album` objects with best track list, merged genres/styles, all external IDs.
-  8. Caches results and returns `Album` objects to the BFF.
+  8. Returns `Album` objects to the BFF with full score breakdowns for traceability.
 
 **Scoring Configuration:**
 - Stored in `packages/backend/config/scoring.json`.
 - JSON Schema validation via `scoring.schema.json`.
 - Configurable without code changes (FR-CF-1, FR-CF-2, FR-CF-3).
+- Includes: weights, preferred/deprioritized countries, media types, normalization affixes, source-specific rules.
+
+### 5.5 GraphQL API Design
+
+**BFF GraphQL Schema (`packages/bff/src/schema.graphql`):**
+- Relay-friendly schema with `Node` interface for refetchable objects.
+- Queries: `viewer` (current user), `node` (by ID), `records` (paginated collection).
+- Mutations: `scanBarcode`, `createRecord`, `updateRecord`, `deleteRecord`.
+- Key types: `User`, `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
+- Connection types for pagination: `RecordConnection`, `RecordEdge`, `PageInfo`.
+
+**Backend GraphQL Schema (`packages/backend/src/schema.graphql`):**
+- Domain-centric schema for internal use by BFF.
+- Queries: `user`, `record`, `release`, `releasesByBarcode`, `records`.
+- Mutations: `lookupBarcode`, `createRecord`, `updateRecord`, `deleteRecord`, `upsertUser`, `updateUserRole`.
+- Full `Album` type with detailed scoring information and alternative releases.
+- `LookupBarcodePayload` includes timing information for performance analysis.
 
 **GitHub OAuth:**
 - Browser interacts only with BFF's auth endpoints.
@@ -198,10 +221,12 @@ Security hardening on the Pi:
   - `GITHUB_CLIENT_ID`
   - `GITHUB_CLIENT_SECRET`
   - `GITHUB_CALLBACK_URL`
+  - `GITHUB_CALLBACK_URLS` (comma-separated list for multiple environments)
 
 **Environment Configuration:**
 - All secrets stored in `.env` file (not committed to git).
 - See `docs/GITHUB_OAUTH_SETUP.md` for OAuth setup guide.
+- External API tokens: `DISCOGS_API_TOKEN`, `MUSICBRAINZ_USER_AGENT`.
 
 ## 6. Quality Attributes
 
@@ -234,14 +259,35 @@ Security hardening on the Pi:
 vinylvault/
 ├── packages/
 │   ├── frontend/          # React + Relay + Vite
+│   │   └── src/
+│   │       ├── components/    # UI components (Header, ScanBarcode, etc.)
+│   │       ├── contexts/      # React contexts (AuthContext)
+│   │       ├── hooks/         # Custom hooks
+│   │       ├── pages/         # Page components
+│   │       ├── relay/         # Relay environment configuration
+│   │       └── types/         # TypeScript type definitions
 │   ├── bff/               # Express + Apollo Server
+│   │   └── src/
+│   │       ├── auth/          # GitHub OAuth handlers, JWT utilities
+│   │       ├── config/        # Environment configuration
+│   │       ├── db/            # MongoDB connection
+│   │       ├── graphql/       # GraphQL schema and resolvers
+│   │       ├── services/      # Backend client for forwarding requests
+│   │       └── types/         # TypeScript types (context, session)
 │   └── backend/           # Apollo Server (standalone)
 │       ├── config/        # Scoring configuration
 │       │   ├── scoring.json
 │       │   └── scoring.schema.json
 │       └── src/
-│           └── services/
-│               └── scoring/   # Blended scoring module
+│           ├── db/            # MongoDB connection and collections
+│           ├── graphql/       # GraphQL schema and resolvers
+│           ├── models/        # Data models
+│           └── services/      # Business logic
+│               ├── discogs.ts     # Discogs API client
+│               ├── musicbrainz.ts # MusicBrainz API client
+│               ├── releasesCache.ts # Release caching
+│               ├── users.ts       # User management
+│               └── scoring/       # Blended scoring module
 │                   ├── types.ts
 │                   ├── config.ts
 │                   ├── normalize.ts

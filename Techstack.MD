@@ -23,6 +23,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `react-relay` - GraphQL client
 - `tailwindcss` - Utility-first CSS
 - `vite` - Build tool and dev server
+- `@zxing/browser` - Barcode scanning via camera
 
 **Responsibilities:**
 
@@ -30,8 +31,10 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Manage authentication state via `AuthContext` and `/auth/me` endpoint.
 - Use Relay connections and fragments for records, releases, albums, and viewer.
 - Display user profile (avatar, name, role) in header when authenticated.
-- Provide barcode scanning UI (camera + manual input) and wire it to the BFF lookup flow (FR-1 implemented).
-- Display scored and aggregated Album results from barcode lookup (FR-2 implemented with blended scoring).
+- Provide barcode scanning UI (camera + manual input) via `ScanBarcode` component (FR-1 implemented).
+- Display scored and aggregated Album results from barcode lookup with score breakdowns (FR-2 implemented with blended scoring).
+- Mobile-first responsive design with bottom navigation for authenticated users.
+- Views: Home, Scan, Collection (placeholder), Search (placeholder).
 
 ## 3. Backend-for-Frontend (BFF) (`packages/bff`)
 
@@ -87,6 +90,13 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Integrate with external music APIs (Discogs/MusicBrainz) queried in parallel.
 - Normalize, score, and aggregate releases into Album objects.
 - Maintain cached releases in MongoDB.
+- Provide detailed score breakdowns for traceability (QR-02).
+
+**External API Services (`src/services/`):**
+- `discogs.ts` - Discogs API integration (search by barcode, fetch release details)
+- `musicbrainz.ts` - MusicBrainz API integration (search by barcode, fetch release details with tracks)
+- `releasesCache.ts` - MongoDB caching layer for releases
+- `users.ts` - User CRUD operations
 
 **Scoring Module (`src/services/scoring/`):**
 - `types.ts` - TypeScript interfaces for the scoring system
@@ -94,14 +104,16 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `normalize.ts` - Text normalization and release grouping
 - `score.ts` - Release scoring logic
 - `aggregate.ts` - Album aggregation from grouped releases
-- `orchestrator.ts` - Main orchestrator (parallel API queries)
+- `orchestrator.ts` - Main orchestrator (parallel API queries, full pipeline)
 
 **Scoring Configuration (`config/scoring.json`):**
 - Configurable weights for media type, country, track list, cover art, label, catalog number
-- Preferred countries: US, UK, AT, DE
+- Preferred countries: US, UK, AT, DE (with variants)
+- Deprioritized countries: RU, CN
 - Preferred media types: vinyl, lp, 12", 10", 7", album
 - Discogs source bonus: +5 points
 - Tie-breaker: earliest release year
+- Normalization affixes: remastered, deluxe, special edition, etc.
 
 ## 5. Database
 
@@ -153,18 +165,19 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 **GitHub OAuth:**
 - Used for login (Web Application Flow).
 - Required scopes: `read:user`, `user:email`.
-- Configuration:
+**Configuration via environment variables:**
   - `GITHUB_CLIENT_ID` - OAuth App client ID
   - `GITHUB_CLIENT_SECRET` - OAuth App client secret
   - `GITHUB_CALLBACK_URL` - Callback URL (default: `http://localhost:3001/auth/github/callback`)
+  - `GITHUB_CALLBACK_URLS` - Comma-separated list of allowed callback URLs (for multiple environments)
 - Setup guide: `docs/GITHUB_OAUTH_SETUP.md`
 
 **Music Metadata APIs:**
-- Discogs and/or MusicBrainz for barcode-based release lookup.
+- Discogs and MusicBrainz APIs queried in parallel for barcode-based release lookup.
+- Results normalized, scored, and aggregated into Album objects.
 - Configuration:
-  - `DISCOGS_API_KEY`
-  - `DISCOGS_API_SECRET`
-  - `MUSICBRAINZ_USER_AGENT`
+  - `DISCOGS_API_TOKEN` - Discogs personal access token
+  - `MUSICBRAINZ_USER_AGENT` - User agent string for MusicBrainz API requests
 
 **TLS Certificates:**
 - Let's Encrypt via Caddy reverse proxy.
@@ -229,12 +242,17 @@ BACKEND_MONGODB_URI=mongodb://localhost:27017/vinylvault
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
 GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
+GITHUB_CALLBACK_URLS=http://localhost:3001/auth/github/callback,https://yourdomain.com/auth/github/callback
 
 # JWT for BFF-Backend communication
 JWT_SECRET=your_jwt_secret
 
 # Session
 SESSION_SECRET=your_session_secret
+
+# External APIs
+DISCOGS_API_TOKEN=your_discogs_token
+MUSICBRAINZ_USER_AGENT=VinylVault/0.1.0 (your@email.com)
 ```
 
 **Getting Started:**
