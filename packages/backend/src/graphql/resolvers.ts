@@ -1,6 +1,6 @@
 // Domain Backend GraphQL resolvers
 
-import { upsertReleases } from '../services/releasesCache.js';
+import { upsertReleases, findReleasesByBarcode } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserRole } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
@@ -9,6 +9,7 @@ import {
   addUserToTenant,
   getUserTenants,
 } from '../services/tenants.js';
+import { requireMember, requireAdmin, canRead } from '../utils/authorization.js';
 import type { Album, RawRelease, ScoringDetail } from '../services/scoring/types.js';
 import type { GraphQLContext } from '../types/context.js';
 import { ObjectId } from 'mongodb';
@@ -60,8 +61,17 @@ export const resolvers = {
     },
   },
   Mutation: {
-    lookupBarcode: async (_parent: unknown, _args: { barcode: string }) => {
+    lookupBarcode: async (
+      _parent: unknown,
+      _args: { barcode: string },
+      context: GraphQLContext
+    ) => {
       const { barcode } = _args;
+
+      // Verify user has read access (all roles can read)
+      if (!canRead(context)) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
 
       if (!barcode) {
         return {
@@ -73,28 +83,26 @@ export const resolvers = {
         };
       }
 
-      // Check cache first (FR-2 / NFR-3)
-      // TODO: For now, skip cache to always use the scoring orchestrator
-      // In future, cache the Album structure directly instead of raw releases
-      /*
-      try {
-        const cached = await findReleasesByBarcode(barcode);
-        if (Array.isArray(cached) && cached.length > 0) {
-          // For cached results, we return as legacy releases format
-          // TODO: In future, cache the Album structure directly
-          return {
-            albums: [],
-            releases: cached,
-            fromCache: true,
-            timing: null,
-            errors: [],
-          };
+      // Check cache first (FR-2 / NFR-3) - use tenant database
+      if (context.db) {
+        try {
+          const cached = await findReleasesByBarcode(context.db, barcode);
+          if (Array.isArray(cached) && cached.length > 0) {
+            // For cached results, we return as legacy releases format
+            // TODO: In future, cache the Album structure directly
+            return {
+              albums: [],
+              releases: cached,
+              fromCache: true,
+              timing: null,
+              errors: [],
+            };
+          }
+        } catch (err: any) {
+          // don't fail the lookup if cache check errors — fall back to live APIs
+          console.warn('Releases cache check failed:', err?.message ?? String(err));
         }
-      } catch (err: any) {
-        // don't fail the lookup if cache check errors — fall back to live APIs
-        console.warn('Releases cache check failed:', err?.message ?? String(err));
       }
-      */
 
       // Use the new blended scoring orchestrator
       const result = await lookupAndScoreBarcode(barcode);
@@ -172,10 +180,10 @@ export const resolvers = {
       // Build legacy releases array for backward compatibility
       const releases = result.rawReleases.map((raw: RawRelease) => toGraphQLRelease(raw, barcode));
 
-      // Persist fetched results to cache (best-effort)
-      if (releases.length > 0) {
+      // Persist fetched results to cache (best-effort, use tenant database)
+      if (releases.length > 0 && context.db) {
         try {
-          await upsertReleases(releases as any);
+          await upsertReleases(context.db, releases as any);
         } catch (err: any) {
           console.warn('Failed to upsert releases cache:', err?.message ?? String(err));
         }
@@ -194,16 +202,37 @@ export const resolvers = {
         errors: result.errors,
       };
     },
-    createRecord: async (_parent: unknown, _args: unknown) => {
-      // TODO: Create record in MongoDB
+    createRecord: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      // Require MEMBER or ADMIN role to create records
+      requireMember(context);
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      // TODO: Create record in tenant database (context.db)
       throw new Error('Not implemented');
     },
-    updateRecord: async (_parent: unknown, _args: unknown) => {
-      // TODO: Update record in MongoDB
+    updateRecord: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      // Require MEMBER or ADMIN role to update records
+      requireMember(context);
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      // TODO: Update record in tenant database (context.db)
       throw new Error('Not implemented');
     },
-    deleteRecord: async (_parent: unknown, _args: { id: string }) => {
-      // TODO: Delete record from MongoDB
+    deleteRecord: async (_parent: unknown, _args: { id: string }, context: GraphQLContext) => {
+      // Require MEMBER or ADMIN role to delete records
+      requireMember(context);
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      // TODO: Delete record from tenant database (context.db)
       throw new Error('Not implemented');
     },
     upsertUser: async (
@@ -247,6 +276,11 @@ export const resolvers = {
         throw new Error('Unauthorized: user not authenticated');
       }
 
+      // For ORGANIZATION tenants, require ADMIN role
+      if (_args.input.tenantType === 'ORGANIZATION') {
+        requireAdmin(context);
+      }
+
       const { tenantType, name, githubOrgId, githubOrgName } = _args.input;
 
       let tenant;
@@ -279,18 +313,16 @@ export const resolvers = {
       _args: { userId: string; tenantId: string; role: 'ADMIN' | 'MEMBER' | 'VIEWER' },
       context: GraphQLContext
     ) => {
-      // Verify caller has ADMIN role in the tenant
+      // Require ADMIN role to add users to tenant
+      requireAdmin(context);
+
       if (!context.userId) {
         throw new Error('Unauthorized: user not authenticated');
       }
 
-      // TODO: Verify caller has ADMIN role in target tenant before allowing user addition
-      // For now, allow authenticated users (in Phase 4, enforce authorization)
-
       const { userId, tenantId, role } = _args;
 
       // Convert userId string to ObjectId
-      const { ObjectId } = await import('mongodb');
       let userObjId;
       try {
         userObjId = new ObjectId(userId);

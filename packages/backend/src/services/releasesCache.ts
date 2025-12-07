@@ -1,4 +1,4 @@
-import { connectToDatabase } from '../db/connection.js';
+import { Db } from 'mongodb';
 import { COLLECTIONS } from '../db/collections.js';
 
 export interface CachedRelease {
@@ -20,18 +20,16 @@ export interface CachedRelease {
   updatedAt?: string;
 }
 
-export async function findReleasesByBarcode(barcode: string): Promise<CachedRelease[]> {
-  if (!barcode) return [];
-  const db = await connectToDatabase();
+export async function findReleasesByBarcode(db: Db, barcode: string): Promise<CachedRelease[]> {
+  if (!barcode || !db) return [];
   const col = db.collection<CachedRelease>(COLLECTIONS.RELEASES);
   // Find exact barcode matches. Stored documents contain `barcode` as normalized string.
   const docs = await col.find({ barcode }).toArray();
   return docs.map(({ _id, ...rest }) => rest as CachedRelease);
 }
 
-export async function upsertReleases(releases: CachedRelease[]): Promise<void> {
-  if (!Array.isArray(releases) || releases.length === 0) return;
-  const db = await connectToDatabase();
+export async function upsertReleases(db: Db, releases: CachedRelease[]): Promise<void> {
+  if (!Array.isArray(releases) || releases.length === 0 || !db) return;
   const col = db.collection(COLLECTIONS.RELEASES);
   const now = new Date().toISOString();
 

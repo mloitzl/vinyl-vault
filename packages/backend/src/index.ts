@@ -11,6 +11,8 @@ import { dirname, resolve, join } from 'path';
 import { resolvers } from './graphql/resolvers.js';
 import { extractTokenFromHeader, extractTenantContext } from './services/auth.js';
 import { config, validateConfig } from './config/index.js';
+import { getTenantDb } from './db/connection.js';
+import { getRegistryDb } from './db/registry.js';
 import type { GraphQLContext } from './types/context.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,6 +37,20 @@ async function main() {
       const auth = req.headers.authorization as string | undefined;
       const token = extractTokenFromHeader(auth);
       const tenantCtx = extractTenantContext(token ?? undefined);
+
+      let db = null;
+      let registryDb = null;
+
+      // If we have a valid tenant context, get the database connections
+      if (tenantCtx?.tenantId) {
+        try {
+          [db, registryDb] = await Promise.all([getTenantDb(tenantCtx.tenantId), getRegistryDb()]);
+        } catch (error) {
+          console.error('Failed to get database connections:', error);
+          // Continue without db/registryDb - resolvers should handle gracefully
+        }
+      }
+
       return {
         userId: tenantCtx?.userId ?? null,
         username: tenantCtx?.username ?? null,
@@ -42,11 +58,14 @@ async function main() {
         tenantId: tenantCtx?.tenantId ?? null,
         tenantRole: tenantCtx?.tenantRole ?? null,
         githubLogin: tenantCtx?.githubLogin ?? null,
+        db: db ?? undefined,
+        registryDb: registryDb ?? undefined,
       };
     },
   });
 
   console.log(`Domain Backend running at ${url}`);
 }
+
 
 main().catch(console.error);

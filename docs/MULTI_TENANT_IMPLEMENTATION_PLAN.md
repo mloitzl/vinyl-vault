@@ -273,62 +273,211 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 
 ## Phase 4: Tenant-Scoped Data Access
 
-**Goal:** Route all data operations to tenant-specific databases.
+**Goal:** Route all data operations to tenant-specific databases and enforce role-based authorization.
 
 **Duration:** 3-4 days
 
+**Phase 4 Checklist (execute in order):**
+1) Context type: add `packages/backend/src/types/context.ts` with GraphQLContext interface (userId, username, tenantId, tenantRole, db, registryDb fields).
+2) Apollo Server setup: update `packages/backend/src/index.ts` to extract JWT from Authorization header, validate, extract tenant context, get db/registryDb connections, populate resolver context.
+3) releasesCache service: update `packages/backend/src/services/releasesCache.ts` to accept `db` parameter in all functions; replace global `connection` usage with passed db.
+4) Resolvers - queries: update `packages/backend/src/graphql/resolvers.ts` query resolvers to use `context.db` for data operations (records, lookupBarcode); verify all queries read from correct tenant database.
+5) Resolvers - mutations: update mutation resolvers (createRecord, updateRecord, deleteRecord) to use `context.db` and add authorization checks (requireAdmin or requireMember).
+6) Authorization utils: create `packages/backend/src/utils/authorization.ts` with helpers `requireRole(context, allowedRoles)`, `isAdmin(context)`, `isMember(context)`, `canWrite(context)`, `canRead(context)`.
+7) Verification: test queries execute against tenant db, verify JWT tenant context routes to correct db, test authorization rejection for non-admin mutations, ensure barcode cache isolated per tenant, no TypeScript errors.
+
 ### Tasks
 
-#### 4.1 Resolver Context Setup
+#### 4.1 GraphQL Context Type
 - [ ] Create `packages/backend/src/types/context.ts`:
   ```typescript
-  interface GraphQLContext {
-    userId: string;
-    username: string;
-    tenantId: string;
+  import { Db } from 'mongodb';
+
+  export interface GraphQLContext {
+    userId: string;           // MongoDB ObjectId as string
+    username: string;         // GitHub username
+    tenantId: string;         // tenant identifier (user_{userId} or org_{orgId})
     tenantRole: 'ADMIN' | 'MEMBER' | 'VIEWER';
-    db: Db;  // tenant database connection
-    registryDb: Db;  // registry database connection
+    db: Db;                   // tenant database connection
+    registryDb: Db;           // central registry database connection
   }
   ```
-- [ ] Update Apollo Server initialization:
-  - Extract JWT from authorization header
-  - Validate JWT and extract tenant context
-  - Get tenant database connection via `getTenantDb(tenantId)`
-  - Get registry database connection via `getRegistryDb()`
-  - Populate context object
+- [ ] Export type for use in resolver definitions
+- [ ] Update `packages/backend/src/graphql/resolvers.ts` to import GraphQLContext
+- [ ] Update all resolver function signatures to receive `context: GraphQLContext`
 
-#### 4.2 Update All Resolvers
-- [ ] Update `packages/backend/src/graphql/resolvers.ts`:
-  - Change all resolvers to use `context.db` (tenant database)
-  - Update `lookupBarcode` to cache in tenant database
-  - Update `records` query to filter by tenant database
-  - Update `createRecord`, `updateRecord`, `deleteRecord` to use tenant database
+#### 4.2 Apollo Server Context Builder
+- [ ] Update `packages/backend/src/index.ts` (Apollo Server initialization):
+  - Add context builder function:
+    ```typescript
+    context: async ({ req }: { req: ExpressRequest }) => {
+      // 1. Extract JWT from Authorization header
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+      
+      // 2. If no token, return anonymous context (or reject)
+      if (!token) {
+        throw new AuthenticationError('No authorization token provided');
+      }
+      
+      // 3. Verify JWT and extract tenant context
+      const payload = verifyJwt(token);
+      
+      // 4. Get database connections
+      const registryDb = getRegistryDb();
+      const db = getTenantDb(payload.tenantId);
+      
+      // 5. Return populated context
+      return {
+        userId: payload.sub,
+        username: payload.username,
+        tenantId: payload.tenantId,
+        tenantRole: payload.tenantRole,
+        db,
+        registryDb,
+      };
+    }
+    ```
+  - Import: `verifyJwt` from `packages/backend/src/auth/jwt.ts`
+  - Import: `getTenantDb`, `getRegistryDb` from `packages/backend/src/db/connection.ts`
+  - Import: `AuthenticationError` from apollo-server-express
+- [ ] Test JWT extraction: verify context is populated correctly with valid token
+- [ ] Test token validation: verify invalid tokens throw error
+
+#### 4.3 ReleasesCache Service Update
 - [ ] Update `packages/backend/src/services/releasesCache.ts`:
-  - Accept `db` parameter (tenant database)
-  - All cache operations use passed database
-- [ ] Update `packages/backend/src/services/users.ts`:
-  - Split into two files: `users.ts` (registry) and `tenantUsers.ts` (tenant-scoped)
-  - Use `registryDb` for global user operations
-  - Use tenant `db` for tenant-specific user data if needed
+  - Change function signatures to accept `db: Db` as first parameter:
+    - `async function getCachedRelease(db: Db, releaseId: string): Promise<...>`
+    - `async function cacheRelease(db: Db, release: ...): Promise<void>`
+    - `async function clearCache(db: Db): Promise<void>`
+    - Any other cache functions
+  - Replace all `connection` or `db` references with passed `db` parameter
+  - Update collection references: `db.collection('releases_cache')`
+  - Update call sites in resolvers to pass `context.db`:
+    - `getCachedRelease(context.db, releaseId)`
+    - `cacheRelease(context.db, release)`
+- [ ] Verify all cache operations now use tenant database
 
-#### 4.3 Authorization Enforcement
+#### 4.4 Query Resolvers - Tenant-Scoped Data Access
+- [ ] Update `packages/backend/src/graphql/resolvers.ts` query resolvers:
+  - **records query**: 
+    - Change to use `context.db.collection('records')`
+    - Filter by `{ tenantId: context.tenantId }` if not already partitioned by database
+    - Return records from tenant database only
+  - **lookupBarcode query**:
+    - Use `getCachedRelease(context.db, ...)` for cache lookup
+    - Search Discogs/MusicBrainz
+    - Cache result via `cacheRelease(context.db, ...)`
+  - **viewer query** (BFF):
+    - Query registry for user info
+    - Query user's available tenants via backend query
+    - Return user with active tenant from session
+  - Any other queries: update to use `context.db`
+- [ ] Verify all queries read from correct tenant database
+
+#### 4.5 Mutation Resolvers - Authorization & Data Access
+- [ ] Update `packages/backend/src/graphql/resolvers.ts` mutation resolvers:
+  - **createRecord mutation**:
+    - Call `requireMember(context)` - throw if not MEMBER or ADMIN
+    - Use `context.db.collection('records')`
+    - Add `tenantId: context.tenantId` to record document
+    - Return created record
+  - **updateRecord mutation**:
+    - Call `requireMember(context)` 
+    - Use `context.db.collection('records')`
+    - Verify record belongs to current tenant (filter by tenantId)
+    - Return updated record
+  - **deleteRecord mutation**:
+    - Call `requireMember(context)`
+    - Use `context.db.collection('records')`
+    - Verify record belongs to current tenant
+    - Return deletion result
+  - **addUserToTenant mutation** (tenant management):
+    - Call `requireAdmin(context)` - throw if not ADMIN
+    - Call backend tenants service (already added in Phase 3)
+  - **updateUserTenantRole mutation** (if created):
+    - Call `requireAdmin(context)`
+    - Verify target user and role update
+- [ ] Add `tenantId` field to all record operations for tenant isolation verification
+
+#### 4.6 Authorization Utilities
 - [ ] Create `packages/backend/src/utils/authorization.ts`:
-  - `requireAdmin(context)` - throws if not ADMIN role
-  - `requireMember(context)` - throws if not ADMIN or MEMBER
-  - `canWrite(context)` - checks if user can modify data
-  - `canRead(context)` - checks if user can read data (all roles)
-- [ ] Apply authorization to mutations:
-  - Tenant management: admin only
-  - Record create/update/delete: admin or member
-  - Queries: all roles
+  ```typescript
+  import { AuthorizationError } from 'apollo-server-express';
+  import { GraphQLContext } from '../types/context';
 
-**Verification:**
-- [ ] All queries/mutations execute against tenant database
-- [ ] Switching JWT tenant switches database
-- [ ] No cross-tenant data leakage
-- [ ] Authorization properly enforced
-- [ ] Cache operations isolated per tenant
+  export function requireRole(
+    context: GraphQLContext,
+    allowedRoles: string[]
+  ): void {
+    if (!allowedRoles.includes(context.tenantRole)) {
+      throw new AuthorizationError(
+        `User role ${context.tenantRole} not authorized. Required: ${allowedRoles.join(', ')}`
+      );
+    }
+  }
+
+  export function isAdmin(context: GraphQLContext): boolean {
+    return context.tenantRole === 'ADMIN';
+  }
+
+  export function isMember(context: GraphQLContext): boolean {
+    return context.tenantRole === 'ADMIN' || context.tenantRole === 'MEMBER';
+  }
+
+  export function requireAdmin(context: GraphQLContext): void {
+    if (!isAdmin(context)) {
+      throw new AuthorizationError('Admin role required for this operation');
+    }
+  }
+
+  export function requireMember(context: GraphQLContext): void {
+    if (!isMember(context)) {
+      throw new AuthorizationError('Member or Admin role required for this operation');
+    }
+  }
+
+  export function canWrite(context: GraphQLContext): boolean {
+    return isMember(context);
+  }
+
+  export function canRead(context: GraphQLContext): boolean {
+    // All roles can read
+    return true;
+  }
+  ```
+- [ ] Import and use in resolvers:
+  - `requireAdmin(context)` before admin-only mutations (tenant management, user role updates)
+  - `requireMember(context)` before record mutations (create, update, delete)
+  - `canRead(context)` before queries (informational check, all roles pass)
+
+#### 4.7 Authorization Enforcement in Resolvers
+- [ ] Apply authorization checks in `packages/backend/src/graphql/resolvers.ts`:
+  - Import: `requireAdmin`, `requireMember`, `canWrite`, `canRead` from utils/authorization
+  - Tenant management mutations (createTenant, addUserToTenant, removeUserFromTenant, updateUserTenantRole):
+    - Add `requireAdmin(context)` at start of resolver
+  - Record mutations (createRecord, updateRecord, deleteRecord):
+    - Add `requireMember(context)` at start of resolver
+  - Queries (records, lookupBarcode):
+    - Call `canRead(context)` (verify all roles can read)
+    - Or add optional `canRead(context)` check for logging/auditing
+- [ ] Update error messages to be user-friendly
+- [ ] Ensure authorization errors bubble up to Apollo error handling
+
+**Verification Checklist:**
+- [ ] Context type defined with all required fields ✓
+- [ ] Apollo Server context builder extracts JWT and populates context ✓
+- [ ] Invalid JWT tokens are rejected with AuthenticationError ✓
+- [ ] releasesCache service accepts db parameter in all functions ✓
+- [ ] All query resolvers use context.db for data access ✓
+- [ ] All mutations have authorization checks ✓
+- [ ] Authorization utilities prevent unauthorized access ✓
+- [ ] Barcode cache isolated per tenant (different tenants can have different cache entries) ✓
+- [ ] Records query filters to current tenant only ✓
+- [ ] Cross-tenant data access impossible (queries always scoped to context.tenantId) ✓
+- [ ] No TypeScript compilation errors ✓
+- [ ] Lint passes ✓
+- [ ] Test with different tenant contexts (manually switch JWT) ✓
 
 ---
 
