@@ -176,15 +176,13 @@ GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
 JWT_SECRET=paste_your_first_generated_secret_here
 SESSION_SECRET=paste_your_second_generated_secret_here
 
-# MongoDB (use port 37017 as docker-compose exposes it there)
-MONGODB_URI=mongodb://localhost:37017/vinylvault-sessions
-BACKEND_MONGODB_URI=mongodb://localhost:37017/vinylvault
+# MongoDB (use port 27017 as docker-compose exposes it there)
+MONGODB_URI=mongodb://localhost:27017/vinylvault-sessions
+BACKEND_MONGODB_URI=mongodb://localhost:27017/vinylvault
 
 # URLs (keep defaults for local development)
 FRONTEND_URL=http://localhost:3000
 ```
-
-> ⚠️ **Important:** The MongoDB port is `37017` (not the default `27017`) because that's what the docker-compose file maps.
 
 ### 4.4 Optional: External Music APIs
 
@@ -192,8 +190,7 @@ For barcode scanning to retrieve album metadata, you can optionally configure:
 
 ```env
 # Discogs API (https://www.discogs.com/settings/developers)
-DISCOGS_API_KEY=your_discogs_consumer_key
-DISCOGS_API_SECRET=your_discogs_consumer_secret
+DISCOGS_API_TOKEN=your_discogs_api_token
 
 # MusicBrainz (just needs a user-agent, no API key required)
 MUSICBRAINZ_USER_AGENT=VinylVault/1.0 (your-email@example.com)
@@ -281,7 +278,7 @@ Make sure your `.env` file exists in the project root and contains valid GitHub 
 
 1. Check Docker is running: `docker ps`
 2. If no containers, start MongoDB: `docker compose -f infra/docker-compose.yml up -d mongodb`
-3. Verify the port in `.env` is `37017` (not `27017`)
+3. Verify the port in `.env` is `27017`
 
 ### "The redirect_uri is not valid" during GitHub login
 
