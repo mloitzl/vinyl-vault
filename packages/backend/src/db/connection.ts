@@ -35,3 +35,9 @@ export function getDatabase(): Db {
   }
   return db;
 }
+
+// Derive a tenant database name from a tenantId (user_{id} or org_{id}).
+// Naming convention: vinylvault_<tenantId>, e.g., vinylvault_user_123, vinylvault_org_98765.
+export function getTenantDbName(tenantId: string): string {
+  return `vinylvault_${tenantId}`;
+}

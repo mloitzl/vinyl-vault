@@ -26,9 +26,9 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 **Duration:** 2-3 days
 
 **Phase 1 Checklist (execute in order):**
-1) Env samples: add `MONGODB_URI_BASE`, `MONGODB_REGISTRY_URI`, `GITHUB_ORG_SYNC_ENABLED`, `GITHUB_ORG_SYNC_INTERVAL_HOURS` to `infra/.env.sample` and root `.env.sample`.
+1) Env samples: add `MONGODB_URI_BASE`, `MONGODB_REGISTRY_URI`, `GITHUB_ORG_SYNC_ENABLED` to `infra/.env.sample` and root `.env.sample`.
 2) Backend config: extend `packages/backend/src/config/env.ts` to read `MONGODB_URI_BASE` and `MONGODB_REGISTRY_URI`.
-3) BFF config: extend `packages/bff/src/config/env.ts` to read `GITHUB_ORG_SYNC_ENABLED` and `GITHUB_ORG_SYNC_INTERVAL_HOURS`.
+3) BFF config: extend `packages/bff/src/config/env.ts` to read `GITHUB_ORG_SYNC_ENABLED`.
 4) Registry connection: add `packages/backend/src/db/registry.ts` (connect once, export `getRegistryDb`).
 5) Tenant DB helper: add `getTenantDbName(tenantId)` helper in `packages/backend/src/db/connection.ts` (no tenant pooling yet, just name generation placeholder).
 6) Models: add `packages/backend/src/models/tenant.ts` and `userTenantRole.ts`; update `user.ts` to drop global role.
@@ -41,7 +41,6 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
   - `MONGODB_URI_BASE=mongodb://localhost:27017` (for tenant databases)
   - `MONGODB_REGISTRY_URI=mongodb://localhost:27017/vinylvault_registry` (registry)
   - `GITHUB_ORG_SYNC_ENABLED=true`
-  - `GITHUB_ORG_SYNC_INTERVAL_HOURS=6`
 - [ ] Update root `.env.sample` with same variables
 - [ ] Update `packages/backend/src/config/env.ts` to read new MongoDB vars
 - [ ] Update `packages/bff/src/config/env.ts` to read GitHub sync vars
