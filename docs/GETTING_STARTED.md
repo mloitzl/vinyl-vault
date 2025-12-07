@@ -177,8 +177,7 @@ JWT_SECRET=paste_your_first_generated_secret_here
 SESSION_SECRET=paste_your_second_generated_secret_here
 
 # MongoDB (use port 27017 as docker-compose exposes it there)
-MONGODB_URI=mongodb://localhost:27017/vinylvault-sessions
-BACKEND_MONGODB_URI=mongodb://localhost:27017/vinylvault
+MONGODB_URI=mongodb://localhost:27017/vinylvault
 
 # URLs (keep defaults for local development)
 FRONTEND_URL=http://localhost:3000

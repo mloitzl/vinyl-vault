@@ -119,28 +119,16 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 - **DBMS:** MongoDB 7 (running via Docker)
 - **Docker:** Configured in `infra/docker-compose.yml`
-
-### 5.1 BFF MongoDB (Session Store Only)
-
-- **Purpose:** Stores only session information
-- **Connection:** `MONGODB_URI` or `BFF_MONGODB_URI` environment variable
-- **Default:** `mongodb://localhost:27017/vinylvault-sessions`
-
-**Collections:**
-- `sessions` - Session data (managed automatically by connect-mongo)
-
-**Important:** In production, the BFF MongoDB is a completely separate instance from the Backend MongoDB. They are not reachable by each other. The BFF should never write any data other than sessions to its MongoDB.
-
-### 5.2 Backend MongoDB (Domain Data)
-
-- **Purpose:** Stores all domain data (users, records, releases)
-- **Connection:** `BACKEND_MONGODB_URI` environment variable
+- **Connection:** `MONGODB_URI` environment variable
 - **Default:** `mongodb://localhost:27017/vinylvault`
 
 **Collections:**
+- `sessions` - Session data (managed automatically by connect-mongo)
 - `users` - GitHub-linked users and roles
 - `records` - Physical owned items
 - `releases` - Cached external metadata
+
+**Important:** In production, you may want to use separate MongoDB instances for session storage (BFF) and domain data (Backend). If so, create separate environment variables and update the BFF and Backend code accordingly. For local development and simple deployments, a single instance works fine.
 
 **User Schema:**
 ```javascript
@@ -232,11 +220,8 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Key Environment Variables:**
 ```
-# BFF MongoDB (sessions only)
-MONGODB_URI=mongodb://localhost:27017/vinylvault-sessions
-
-# Backend MongoDB (domain data: users, records, releases)
-BACKEND_MONGODB_URI=mongodb://localhost:27017/vinylvault
+# MongoDB (session and domain data)
+MONGODB_URI=mongodb://localhost:27017/vinylvault
 
 # GitHub OAuth
 GITHUB_CLIENT_ID=your_client_id

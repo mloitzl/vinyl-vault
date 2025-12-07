@@ -48,15 +48,10 @@ Main components:
   - Implements blended scoring system for release aggregation into Albums.
   - Provides detailed score breakdowns for transparency and debugging.
 
-- **MongoDB (Two Separate Instances)**
-  - **BFF MongoDB** (`BFF_MONGODB_URI` / `MONGODB_URI`)
-    - Stores **only session information** via `connect-mongo`.
-    - Isolated from the Backend MongoDB instance.
-    - In production, this is a completely separate database not reachable by the Backend.
-  - **Backend MongoDB** (`BACKEND_MONGODB_URI`)
-    - Stores all domain data: users, records, releases, and cached external metadata.
-    - Isolated from the BFF MongoDB instance.
-    - In production, this is a completely separate database not reachable by the BFF.
+- **MongoDB** (`MONGODB_URI`)
+  - Stores both session information (via `connect-mongo`) and domain data (users, records, releases).
+  - In development, a single MongoDB instance is used.
+  - In production, you may want to use separate instances for BFF (sessions only) and Backend (domain data) for security and scaling. This would require creating separate environment variables and updating the BFF and Backend configuration.
   - Running via Docker for development (see `infra/docker-compose.yml`).
 
 - **External APIs**
