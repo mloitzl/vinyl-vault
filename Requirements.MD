@@ -208,8 +208,9 @@ FR-9 Tenant Management 🔄 IN PROGRESS
 
 FR-10 Organization Synchronization 🔄 IN PROGRESS
 - The system shall sync GitHub organization memberships for authenticated users **on login**.
-- The system shall create an organization tenant for at most one GitHub organization per user (2-tenant limit: 1 personal + 1 org).
-- The system shall assign default VIEWER role to organization members (ADMIN can promote later).
+- The system shall create an organization tenant for each GitHub organization the user is a member of.
+- The system shall assign **ADMIN role to the first user** added to an organization tenant.
+- Subsequent organization members shall receive **VIEWER role by default** (ADMIN can promote later).
 - The system shall respect GitHub organization admin status when assigning ADMIN roles within organization tenants (if promotion logic added later).
 - Synchronization occurs only on login; no background interval-based sync.
 

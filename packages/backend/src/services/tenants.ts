@@ -110,23 +110,40 @@ export async function getUserTenants(userId: ObjectId): Promise<(TenantDocument 
 }
 
 // Add a user to a tenant with a specific role
+// If this is the first user in an ORGANIZATION tenant, automatically assign ADMIN role
 // Throws if user already has a role in this tenant
 export async function addUserToTenant(userId: ObjectId, tenantId: string, role: TenantRole): Promise<UserTenantRoleDocument> {
   const registryDb = await getRegistryDb();
+
+  // For organization tenants, check if this is the first user
+  let effectiveRole = role;
+  if (tenantId.startsWith('org_') && role === 'VIEWER') {
+    const existingUsers = await registryDb
+      .collection('user_tenant_roles')
+      .countDocuments({ tenantId });
+
+    if (existingUsers === 0) {
+      // First user in org gets ADMIN role
+      effectiveRole = 'ADMIN';
+      console.log(`[tenants] First user ${userId} in org tenant ${tenantId}, assigning ADMIN role`);
+    }
+  }
 
   const now = new Date();
   const userTenantRole: UserTenantRoleDocument = {
     _id: new ObjectId(),
     userId,
     tenantId,
-    role,
+    role: effectiveRole,
     createdAt: now,
     updatedAt: now,
   };
 
   try {
     const result = await registryDb.collection('user_tenant_roles').insertOne(userTenantRole);
-    console.log(`[tenants] Added user ${userId} to tenant ${tenantId} with role ${role} (${result.insertedId})`);
+    console.log(
+      `[tenants] Added user ${userId} to tenant ${tenantId} with role ${effectiveRole} (${result.insertedId})`
+    );
     return userTenantRole;
   } catch (err: any) {
     if (err.code === 11000) {

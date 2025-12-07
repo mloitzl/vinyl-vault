@@ -375,15 +375,16 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 
 **Note:** No periodic background sync - only sync on login per decision #1.
 
-#### 5.4 Tenant Limit Validation
-- [ ] Implement validation in `syncUserOrganizations`:
-  - Query user's existing tenants from registry
-  - If count >= 2, skip org sync (already at limit)
-  - Log info message about tenant limit
-  - Return existing org tenant (if any)
+#### 5.4 Organization Membership Sync
+- [ ] Implement org membership sync in `syncUserOrganizations`:
+  - Query user's existing tenants from registry (separate personal and org tenants)
+  - Fetch user's GitHub organizations (via GitHub API)
+  - For each org: create tenant if missing, add/update user membership
+  - For each existing org tenant: verify user is still a member (remove if departed)
+  - Sync all org members: add missing, remove departed
 - [ ] Add error handling for edge cases:
-  - User removed from org → remove org tenant access
-  - User joins different org → replace org tenant (show warning in UI)
+  - User removed from org → remove org tenant access on next login
+  - User joins new org → auto-create tenant and add with VIEWER role
 
 **Verification:**
 - [ ] User organizations synced on login
@@ -691,9 +692,10 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 ### 3. Default Organization Role
 **Question:** When user joins GitHub org, what should their default role be in tenant?
 
-**Decision:** ✅ **VIEWER by default** (Option A)
-- Most secure default - least privilege principle
-- Organization ADMIN can promote users to MEMBER or ADMIN later
+**Decision:** ✅ **ADMIN for first user, VIEWER for subsequent members**
+- First user to access an org tenant gets ADMIN role automatically
+- Subsequent organization members get VIEWER role by default
+- ADMIN can promote members to MEMBER or ADMIN later
 - Prevents accidental data modification by new members
 - Clear permission escalation workflow
 
@@ -708,16 +710,16 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 - Implement in Phase 9 (Production Readiness)
 - Consider soft-delete with grace period for recovery
 
-### 5. Maximum Tenants Per User
+### 5. Multiple Organization Tenants Per User
 **Question:** Should we limit number of tenants per user?
 
-**Decision:** ✅ **Strict limit: 2 tenants maximum**
+**Decision:** ✅ **Allow multiple organization tenants**
 - 1 personal tenant (user_{userId}) - always created on signup
-- 1 organization tenant (optional) - user can join ONE GitHub organization
-- Prevents complexity and resource abuse
-- Validates in org sync: if user already has org tenant, skip additional orgs
-- Clear error message if user tries to join multiple orgs
-- Can be relaxed in future if needed
+- Multiple organization tenants (optional) - user can join any number of GitHub organizations
+- No artificial limits; each org becomes a separate tenant for data isolation
+- Org sync: create or sync tenant for each org the user is a member of
+- Provides flexibility for users active in multiple communities
+- Tenant switching allows users to select active context
 
 ---
 

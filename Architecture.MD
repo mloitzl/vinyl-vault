@@ -62,9 +62,10 @@ Main components:
   - **BFF MongoDB** (`MONGODB_URI`): Stores only session information via `connect-mongo`.
   - **Tenant MongoDB Databases** (Dynamic `MONGODB_URI_BASE` + tenantId):
     - Each tenant has a completely separate MongoDB database.
-    - Database naming: `vinylvault_user_{userId}` for personal tenants, `vinylvault_org_{orgName}` for organization tenants.
+    - Database naming: `vinylvault_user_{userId}` for personal tenants, `vinylvault_org_{orgId}` for organization tenants (using GitHub org ID for stability).
     - Stores tenant-specific data: users, records, and releases.
     - Complete logical and physical isolation between tenants.
+    - Users can be members of multiple organization tenants.
   - **Central Registry** (`MONGODB_REGISTRY_URI`): Stores user-tenant-role mappings and tenant metadata.
   - Running via Docker for development (see `infra/docker-compose.yml`).
 
