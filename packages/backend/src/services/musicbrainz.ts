@@ -1,6 +1,8 @@
 // MusicBrainz API service
 // Implements simple barcode search and release fetch using the MusicBrainz Web API.
 
+import { config } from '../config/index.js';
+
 const MUSICBRAINZ_API_BASE = 'https://musicbrainz.org/ws/2';
 
 export interface MusicBrainzRelease {
@@ -13,7 +15,7 @@ export interface MusicBrainzRelease {
 }
 
 function getUserAgent(): string {
-  return process.env.MUSICBRAINZ_USER_AGENT || 'VinylVault/0.1.0 (example@example.com)';
+  return config.musicbrainz.userAgent;
 }
 
 export async function searchByBarcode(barcode: string): Promise<MusicBrainzRelease[]> {

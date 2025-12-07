@@ -1,6 +1,6 @@
 // Domain Backend GraphQL resolvers
 
-import { findReleasesByBarcode, upsertReleases } from '../services/releasesCache.js';
+import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserRole } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import type { Album, RawRelease, ScoringDetail } from '../services/scoring/types.js';

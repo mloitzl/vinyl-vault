@@ -2,8 +2,7 @@
 // TODO: Implement JWT verification
 
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
+import { config } from '../config/index.js';
 
 export interface JwtPayload {
   sub: string; // User ID
@@ -15,7 +14,7 @@ export interface JwtPayload {
 
 export function verifyJwt(token: string): JwtPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    return jwt.verify(token, config.jwt.secret) as JwtPayload;
   } catch {
     return null;
   }

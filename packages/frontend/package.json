@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host --https --cert packages/frontend/certs/$HOST.pem --key packages/frontend/certs/$HOST-key.pem",
+    "dev": "vite",
     "dev:https": "sh ./scripts/dev-https.sh",
     "build": "tsc && vite build",
     "preview": "vite preview",

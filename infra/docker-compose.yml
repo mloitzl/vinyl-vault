@@ -24,9 +24,11 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/vinylvault
-      - BACKEND_PORT=4000
+      - MONGODB_URI=${MONGODB_URI}
+      - BACKEND_PORT=${BACKEND_PORT}
       - JWT_SECRET=${JWT_SECRET}
+      - DISCOGS_API_TOKEN=${DISCOGS_API_TOKEN}
+      - MUSICBRAINZ_USER_AGENT=${MUSICBRAINZ_USER_AGENT}
     depends_on:
       - mongodb
     networks:
@@ -41,9 +43,9 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/vinylvault
-      - BACKEND_URL=http://backend:4000/graphql
-      - BFF_PORT=3001
+      - MONGODB_URI=${MONGODB_URI}
+      - BACKEND_URL=${BACKEND_URL}
+      - BFF_PORT=${BFF_PORT}
       - JWT_SECRET=${JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
