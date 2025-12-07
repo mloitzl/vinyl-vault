@@ -10,6 +10,8 @@ export interface SessionUser {
   avatarUrl?: string;
   email?: string;
   role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  createdAt: string;
+  updatedAt: string;
 }
 
 declare module 'express-session' {

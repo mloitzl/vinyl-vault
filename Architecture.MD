@@ -23,6 +23,9 @@ Main components:
   - Talks only to the BFF GraphQL endpoint.
   - Uses Tailwind CSS for styling.
   - AuthContext manages user state via `/auth/me` endpoint.
+  - Barcode scanning via @zxing/browser library (camera + manual input).
+  - Mobile-first design with bottom navigation for authenticated users.
+  - Views: Home (welcome), Scan (barcode lookup with album results), Collection (placeholder), Search (placeholder).
 
 - **GraphQL BFF** (`packages/bff`)
   - Express + Apollo Server 4.
@@ -40,13 +43,21 @@ Main components:
   - Apollo Server (standalone).
   - Encapsulates business logic and data access.
   - Validates JWTs from the BFF (user id, role).
-  - Interacts with MongoDB for users, records, and releases.
-  - Integrates with external music APIs (Discogs/MusicBrainz) behind the scenes.
+  - Interacts with Backend MongoDB for users, records, and releases.
+  - Integrates with external music APIs (Discogs/MusicBrainz) queried in parallel.
+  - Implements blended scoring system for release aggregation into Albums.
+  - Provides detailed score breakdowns for transparency and debugging.
 
-- **MongoDB**
-  - Running via Docker (see `infra/docker-compose.yml`).
-  - Stores users, roles, records, releases, and cached external metadata.
-  - Session store for BFF via `connect-mongo`.
+- **MongoDB (Two Separate Instances)**
+  - **BFF MongoDB** (`BFF_MONGODB_URI` / `MONGODB_URI`)
+    - Stores **only session information** via `connect-mongo`.
+    - Isolated from the Backend MongoDB instance.
+    - In production, this is a completely separate database not reachable by the Backend.
+  - **Backend MongoDB** (`BACKEND_MONGODB_URI`)
+    - Stores all domain data: users, records, releases, and cached external metadata.
+    - Isolated from the BFF MongoDB instance.
+    - In production, this is a completely separate database not reachable by the BFF.
+  - Running via Docker for development (see `infra/docker-compose.yml`).
 
 - **External APIs**
   - Music metadata APIs (Discogs, MusicBrainz) for barcode lookups.
@@ -87,17 +98,23 @@ Security hardening on the Pi:
 3. User authorizes on GitHub → GitHub redirects to `/auth/github/callback` with code.
 4. BFF exchanges code for access token via GitHub API.
 5. BFF fetches user profile from GitHub API.
-6. BFF creates/updates user in MongoDB `users` collection.
-7. BFF creates session (stored in MongoDB via `connect-mongo`).
+6. BFF calls Backend GraphQL mutation to create/update user in Backend MongoDB `users` collection.
+7. BFF creates session (stored in BFF MongoDB via `connect-mongo`).
 8. BFF sets HTTP-only session cookie and redirects to frontend.
 
 **Session Management:**
 
-- Sessions stored in MongoDB `sessions` collection.
+- Sessions stored in BFF MongoDB `sessions` collection (via `connect-mongo`).
 - Cookie: `vinylvault.sid`, HTTP-only, secure in production.
-- Session contains: `userId`, `githubId`, `username`, `role`, `avatarUrl`, `displayName`.
+- Session contains: `userId`, `githubId`, `username`, `role`, `avatarUrl`, `displayName`, `createdAt`, `updatedAt`.
 - Frontend fetches user via `/auth/me` endpoint on load.
 - No backend JWT is exposed to the browser.
+
+**Data Flow Between BFF and Backend:**
+
+- BFF never writes directly to the Backend MongoDB.
+- All user operations (create, update, fetch) are forwarded from BFF to Backend via GraphQL queries and mutations.
+- BFF stores only session data in its own MongoDB instance.
 
 ### 5.2 Authorization
 
@@ -117,7 +134,7 @@ Security hardening on the Pi:
 
 ### 5.3 Data Model (Logical)
 
-**User** (MongoDB `users` collection)
+**User** (Backend MongoDB `users` collection)
 ```
 {
   _id: ObjectId,
@@ -132,23 +149,70 @@ Security hardening on the Pi:
 }
 ```
 
-**Record** (MongoDB `records` collection)
+**Session** (BFF MongoDB `sessions` collection)
+- Managed automatically by `connect-mongo`.
+- Contains session ID, expiry, and user data snapshot.
+
+**Record** (Backend MongoDB `records` collection)
 - Represents a physical vinyl owned by a user.
 - Links to User and Release.
 
-**Release** (MongoDB `releases` collection)
+**Release** (Backend MongoDB `releases` collection)
 - Cached metadata about a particular music release from an external source.
+
+**Album** (Aggregated from releases at query time)
+- Normalized album combining data from multiple release sources.
+- Contains: primary release with score breakdown, alternative releases, merged genres/styles, all external IDs.
+- Created by the scoring orchestrator during barcode lookup.
+- Includes score breakdown for traceability (QR-02): mediaType, countryPreference, trackListCompleteness, coverArt, labelInfo, catalogNumber, yearInfo, sourceBonus.
 
 **Relationships:**
 - User 1—N Record
 - Release 1—N Record (different owners or copies)
+- Album 1—N Release (grouped by normalized artist + title)
 
 ### 5.4 External Integration
 
-**Barcode Lookup Flow:**
-- Barcode scan from browser → BFF → backend.
-- Backend checks local `releases` cache by barcode.
-- If not found, queries external music APIs, stores a `release`, and returns candidates.
+**Barcode Lookup Flow (Implemented with Blended Scoring):**
+- Barcode scan from browser (camera via @zxing/browser or manual input) → BFF → Domain Backend.
+- The backend checks a local `releases` cache by barcode and returns cached candidates when available (currently disabled to always use live scoring).
+- If no cached release is found, the backend:
+  1. Queries Discogs and MusicBrainz APIs **in parallel** via `orchestrator.ts`.
+  2. Converts results to a unified `RawRelease` format.
+  3. **Normalizes** text fields (lowercase, trim, remove articles like "The", "A", "An", remove edition affixes like "Remastered", "Deluxe").
+  4. **Groups** releases by normalized artist + title into album candidates.
+  5. **Scores** each release based on configurable weights:
+     - Media type preference (vinyl/LP: +20)
+     - Country preference (US/UK/AT/DE: +15, deprioritized RU/CN: -10)
+     - Track list completeness (+25 for complete, +10 for partial)
+     - Cover art availability (+15)
+     - Label info (+10), Catalog number (+5)
+     - Discogs source bonus (+5)
+  6. **Selects primary release** (highest score, with deterministic tie-breaking by earliest year).
+  7. **Aggregates** into `Album` objects with best track list, merged genres/styles, all external IDs.
+  8. Returns `Album` objects to the BFF with full score breakdowns for traceability.
+
+**Scoring Configuration:**
+- Stored in `packages/backend/config/scoring.json`.
+- JSON Schema validation via `scoring.schema.json`.
+- Configurable without code changes (FR-CF-1, FR-CF-2, FR-CF-3).
+- Includes: weights, preferred/deprioritized countries, media types, normalization affixes, source-specific rules.
+
+### 5.5 GraphQL API Design
+
+**BFF GraphQL Schema (`packages/bff/src/schema.graphql`):**
+- Relay-friendly schema with `Node` interface for refetchable objects.
+- Queries: `viewer` (current user), `node` (by ID), `records` (paginated collection).
+- Mutations: `scanBarcode`, `createRecord`, `updateRecord`, `deleteRecord`.
+- Key types: `User`, `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
+- Connection types for pagination: `RecordConnection`, `RecordEdge`, `PageInfo`.
+
+**Backend GraphQL Schema (`packages/backend/src/schema.graphql`):**
+- Domain-centric schema for internal use by BFF.
+- Queries: `user`, `record`, `release`, `releasesByBarcode`, `records`.
+- Mutations: `lookupBarcode`, `createRecord`, `updateRecord`, `deleteRecord`, `upsertUser`, `updateUserRole`.
+- Full `Album` type with detailed scoring information and alternative releases.
+- `LookupBarcodePayload` includes timing information for performance analysis.
 
 **GitHub OAuth:**
 - Browser interacts only with BFF's auth endpoints.
@@ -157,10 +221,12 @@ Security hardening on the Pi:
   - `GITHUB_CLIENT_ID`
   - `GITHUB_CLIENT_SECRET`
   - `GITHUB_CALLBACK_URL`
+  - `GITHUB_CALLBACK_URLS` (comma-separated list for multiple environments)
 
 **Environment Configuration:**
 - All secrets stored in `.env` file (not committed to git).
 - See `docs/GITHUB_OAUTH_SETUP.md` for OAuth setup guide.
+- External API tokens: `DISCOGS_API_TOKEN`, `MUSICBRAINZ_USER_AGENT`.
 
 ## 6. Quality Attributes
 
@@ -193,8 +259,42 @@ Security hardening on the Pi:
 vinylvault/
 ├── packages/
 │   ├── frontend/          # React + Relay + Vite
+│   │   └── src/
+│   │       ├── components/    # UI components (Header, ScanBarcode, etc.)
+│   │       ├── contexts/      # React contexts (AuthContext)
+│   │       ├── hooks/         # Custom hooks
+│   │       ├── pages/         # Page components
+│   │       ├── relay/         # Relay environment configuration
+│   │       └── types/         # TypeScript type definitions
 │   ├── bff/               # Express + Apollo Server
+│   │   └── src/
+│   │       ├── auth/          # GitHub OAuth handlers, JWT utilities
+│   │       ├── config/        # Environment configuration
+│   │       ├── db/            # MongoDB connection
+│   │       ├── graphql/       # GraphQL schema and resolvers
+│   │       ├── services/      # Backend client for forwarding requests
+│   │       └── types/         # TypeScript types (context, session)
 │   └── backend/           # Apollo Server (standalone)
+│       ├── config/        # Scoring configuration
+│       │   ├── scoring.json
+│       │   └── scoring.schema.json
+│       └── src/
+│           ├── db/            # MongoDB connection and collections
+│           ├── graphql/       # GraphQL schema and resolvers
+│           ├── models/        # Data models
+│           └── services/      # Business logic
+│               ├── discogs.ts     # Discogs API client
+│               ├── musicbrainz.ts # MusicBrainz API client
+│               ├── releasesCache.ts # Release caching
+│               ├── users.ts       # User management
+│               └── scoring/       # Blended scoring module
+│                   ├── types.ts
+│                   ├── config.ts
+│                   ├── normalize.ts
+│                   ├── score.ts
+│                   ├── aggregate.ts
+│                   ├── orchestrator.ts
+│                   └── index.ts
 ├── infra/                 # Docker, Caddy configs
 ├── docs/                  # Setup guides
 ├── .env                   # Environment variables (not in git)

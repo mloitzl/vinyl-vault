@@ -1,6 +1,8 @@
 // BFF GraphQL resolvers
 
 import type { GraphQLContext } from '../types/context.js';
+import { signJwt } from '../auth/jwt.js';
+import { queryBackend } from '../services/backendClient.js';
 
 export const resolvers = {
   Query: {
@@ -17,8 +19,8 @@ export const resolvers = {
         displayName: context.user.displayName,
         avatarUrl: context.user.avatarUrl || null,
         role: context.user.role,
-        createdAt: new Date().toISOString(), // TODO: Get from DB
-        updatedAt: new Date().toISOString(), // TODO: Get from DB
+        createdAt: context.user.createdAt,
+        updatedAt: context.user.updatedAt,
       };
     },
     node: async (_parent: unknown, _args: { id: string }, _context: GraphQLContext) => {
@@ -32,8 +34,118 @@ export const resolvers = {
   },
   Mutation: {
     scanBarcode: async (_parent: unknown, _args: { barcode: string }, _context: GraphQLContext) => {
-      // TODO: Proxy to backend for barcode lookup
-      return { releases: [], errors: [] };
+      const { barcode } = _args;
+      const ctx = _context;
+
+      if (!barcode) return { albums: [], releases: [], fromCache: false, timing: null, errors: ['barcode is required'] };
+
+      // If user is authenticated, create a short-lived JWT to call backend.
+      // Otherwise call backend without JWT (backend may allow unauthenticated lookups depending on policy).
+      let jwt = '';
+      if (ctx.user) {
+        jwt = signJwt({ sub: ctx.user.id, role: ctx.user.role, githubLogin: ctx.user.githubLogin });
+      }
+
+      // Query backend for albums (blended scoring) and legacy releases
+      const query = `mutation Lookup($barcode: String!) {
+        lookupBarcode(barcode: $barcode) {
+          albums {
+            id
+            artist
+            title
+            barcodes
+            primaryRelease {
+              release {
+                id
+                barcode
+                artist
+                title
+                year
+                format
+                label
+                country
+                coverImageUrl
+                externalId
+                source
+                genre
+                style
+                trackList { position title duration }
+              }
+              score
+              scoreBreakdown {
+                mediaType
+                countryPreference
+                trackListCompleteness
+                coverArt
+                labelInfo
+                catalogNumber
+                yearInfo
+                sourceBonus
+              }
+            }
+            alternativeReleases {
+              externalId
+              source
+              country
+              year
+              format
+              label
+              score
+              editionNote
+            }
+            trackList { position title duration }
+            genres
+            styles
+            externalIds { discogs musicbrainz }
+            coverImageUrl
+            otherTitles
+            editionNotes
+            releaseCount
+            score
+          }
+          releases {
+            id
+            barcode
+            artist
+            title
+            year
+            format
+            label
+            country
+            coverImageUrl
+            externalId
+            source
+            genre
+            style
+            trackList { position title duration }
+          }
+          fromCache
+          timing { discogsMs musicbrainzMs scoringMs totalMs }
+          errors
+        }
+      }`;
+
+      try {
+        const data = await queryBackend<{
+          lookupBarcode: {
+            albums: any[];
+            releases: any[];
+            fromCache: boolean;
+            timing?: { discogsMs: number; musicbrainzMs: number; scoringMs: number; totalMs: number };
+            errors?: string[];
+          };
+        }>(query, { barcode }, { jwt });
+        const payload = data.lookupBarcode;
+        return {
+          albums: payload.albums || [],
+          releases: payload.releases || [],
+          fromCache: payload.fromCache || false,
+          timing: payload.timing || null,
+          errors: payload.errors || [],
+        };
+      } catch (err: any) {
+        return { albums: [], releases: [], fromCache: false, timing: null, errors: [err?.message ?? String(err)] };
+      }
     },
     createRecord: async (_parent: unknown, _args: unknown, _context: GraphQLContext) => {
       // TODO: Check role and proxy to backend

@@ -3,8 +3,6 @@
 
 import { MongoClient, Db } from 'mongodb';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vinylvault';
-
 let client: MongoClient | null = null;
 let db: Db | null = null;
 
@@ -12,6 +10,8 @@ export async function connectToDatabase(): Promise<Db> {
   if (db) {
     return db;
   }
+
+  const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vinylvault';
 
   client = new MongoClient(MONGODB_URI);
   await client.connect();

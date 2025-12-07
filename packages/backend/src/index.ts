@@ -3,30 +3,37 @@
 
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
+import { readFileSync } from 'fs';
+import { config as dotenvConfig } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve, join } from 'path';
+
+import { resolvers } from './graphql/resolvers.js';
+import { verifyJwt, extractTokenFromHeader } from './services/auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenvConfig({ path: resolve(__dirname, '../../../.env'), debug: true });
 
 const PORT = parseInt(process.env.BACKEND_PORT || '4000', 10);
 
 async function main() {
-  // TODO: Initialize MongoDB connection
-  // TODO: Load type definitions and resolvers
-  // TODO: Set up JWT validation context
+  const typeDefs = readFileSync(join(__dirname, './schema.graphql'), 'utf-8');
 
   const server = new ApolloServer({
-    typeDefs: `
-      type Query {
-        _placeholder: String
-      }
-    `,
-    resolvers: {
-      Query: {
-        _placeholder: () => 'Backend server running',
-      },
-    },
+    typeDefs,
+    resolvers,
   });
 
   const { url } = await startStandaloneServer(server, {
-    listen: { port: PORT },
-    // TODO: Add context function for JWT validation
+    // bind to all interfaces so the backend is reachable from the LAN
+    listen: { port: PORT, host: '0.0.0.0' },
+    context: async ({ req }) => {
+      const auth = req.headers.authorization as string | undefined;
+      const token = extractTokenFromHeader(auth);
+      const user = token ? verifyJwt(token) : null;
+      return { user };
+    },
   });
 
   console.log(`Domain Backend running at ${url}`);

@@ -3,7 +3,7 @@
 
 import { Router, Request, Response, type IRouter } from 'express';
 import { config } from '../config/env.js';
-import { getDatabase } from '../db/connection.js';
+import { queryBackend } from '../services/backendClient.js';
 import type { SessionUser } from '../types/session.js';
 
 export const authRouter: IRouter = Router();
@@ -31,12 +31,32 @@ interface GitHubUser {
 
 // GitHub OAuth login initiation
 // Redirects user to GitHub for authentication
-authRouter.get('/github', (_req: Request, res: Response) => {
+// Initiate GitHub OAuth flow
+// Optional query params:
+// - callback: one of the registered BFF callback URLs (must be allowed by GITHUB_CALLBACK_URLS or configured callback)
+// - return_to: frontend URL to redirect to after successful login
+authRouter.get('/github', (req: Request, res: Response) => {
+  const candidateCallback = typeof req.query.callback === 'string' ? req.query.callback : undefined;
+  const returnTo = typeof req.query.return_to === 'string' ? req.query.return_to : undefined;
+
+  // Build allowed callbacks list from env or config
+  const allowed = (process.env.GITHUB_CALLBACK_URLS || config.github.callbackUrl)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const redirectUri =
+    candidateCallback && allowed.includes(candidateCallback)
+      ? candidateCallback
+      : config.github.callbackUrl;
+
+  const state = generateState(redirectUri, returnTo);
+
   const params = new URLSearchParams({
     client_id: config.github.clientId,
-    redirect_uri: config.github.callbackUrl,
+    redirect_uri: redirectUri,
     scope: 'read:user user:email',
-    state: generateState(),
+    state,
   });
 
   const authUrl = `${GITHUB_AUTHORIZE_URL}?${params.toString()}`;
@@ -46,7 +66,7 @@ authRouter.get('/github', (_req: Request, res: Response) => {
 // GitHub OAuth callback
 // Exchanges code for token, fetches user, creates session
 authRouter.get('/github/callback', async (req: Request, res: Response) => {
-  const { code, error, error_description } = req.query;
+  const { code, error, error_description, state } = req.query;
 
   // Handle OAuth errors from GitHub
   if (error) {
@@ -58,19 +78,38 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     return res.redirect(`${config.frontend.url}?error=missing_code`);
   }
 
+  // Decode state to find which redirect_uri and optional return_to were used
+  let usedRedirectUri = config.github.callbackUrl;
+  let returnToUrl: string | undefined = undefined;
+  if (state && typeof state === 'string') {
+    try {
+      const parts = state.split('|');
+      if (parts.length >= 2) {
+        const decodedRedirect = Buffer.from(parts[1], 'base64').toString('utf-8');
+        if (decodedRedirect) usedRedirectUri = decodedRedirect;
+      }
+      if (parts.length >= 3) {
+        const decodedReturn = Buffer.from(parts[2], 'base64').toString('utf-8');
+        if (decodedReturn) returnToUrl = decodedReturn;
+      }
+    } catch {
+      // ignore malformed state
+    }
+  }
+
   try {
     // Exchange authorization code for access token
     const tokenResponse = await fetch(GITHUB_TOKEN_URL, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         client_id: config.github.clientId,
         client_secret: config.github.clientSecret,
         code,
-        redirect_uri: config.github.callbackUrl,
+        redirect_uri: usedRedirectUri,
       }),
     });
 
@@ -84,8 +123,8 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Fetch user profile from GitHub
     const userResponse = await fetch(GITHUB_USER_URL, {
       headers: {
-        'Authorization': `Bearer ${tokenData.access_token}`,
-        'Accept': 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${tokenData.access_token}`,
+        Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'VinylVault',
       },
     });
@@ -97,59 +136,88 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
     const githubUser = (await userResponse.json()) as GitHubUser;
 
-    // Create or update local user in MongoDB
-    const db = getDatabase();
-    const usersCollection = db.collection('users');
-
-    const now = new Date();
-    const existingUser = await usersCollection.findOne({ githubId: String(githubUser.id) });
-
-    let userId: string;
-    let userRole: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
-
-    if (existingUser) {
-      // Update existing user
-      await usersCollection.updateOne(
-        { githubId: String(githubUser.id) },
-        {
-          $set: {
-            githubLogin: githubUser.login,
-            displayName: githubUser.name || githubUser.login,
-            avatarUrl: githubUser.avatar_url,
-            email: githubUser.email,
-            updatedAt: now,
+    // GitHub's /user endpoint only includes `email` when the user has made
+    // their email public. If it's null, fetch the user's emails using the
+    // `user:email` scope and pick the primary verified email when available.
+    let primaryEmail: string | null = githubUser.email ?? null;
+    if (!primaryEmail) {
+      try {
+        const emailsResponse = await fetch(`${GITHUB_USER_URL}/emails`, {
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'VinylVault',
           },
+        });
+        if (emailsResponse.ok) {
+          const emails = await emailsResponse.json();
+          if (Array.isArray(emails) && emails.length > 0) {
+            const primary =
+              emails.find((e: any) => e.primary && e.verified) ||
+              emails.find((e: any) => e.verified) ||
+              emails[0];
+            if (primary && primary.email) primaryEmail = String(primary.email);
+          }
+        } else {
+          console.warn('GitHub emails fetch failed:', emailsResponse.status);
         }
-      );
-      userId = existingUser._id.toString();
-      userRole = existingUser.role;
-    } else {
-      // Create new user - first user becomes ADMIN, others become READER
-      const userCount = await usersCollection.countDocuments();
-      userRole = userCount === 0 ? 'ADMIN' : 'READER';
+      } catch (e) {
+        console.warn('Failed to fetch GitHub emails:', e);
+      }
+    }
 
-      const result = await usersCollection.insertOne({
+    // Create or update user via Domain Backend
+    const UPSERT_USER_MUTATION = `
+      mutation UpsertUser($input: UpsertUserInput!) {
+        upsertUser(input: $input) {
+          id
+          githubId
+          githubLogin
+          displayName
+          avatarUrl
+          email
+          role
+          createdAt
+          updatedAt
+        }
+      }
+    `;
+
+    interface BackendUser {
+      id: string;
+      githubId: string;
+      githubLogin: string;
+      displayName: string;
+      avatarUrl?: string;
+      email?: string;
+      role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    const backendResult = await queryBackend<{ upsertUser: BackendUser }>(UPSERT_USER_MUTATION, {
+      input: {
         githubId: String(githubUser.id),
         githubLogin: githubUser.login,
         displayName: githubUser.name || githubUser.login,
         avatarUrl: githubUser.avatar_url,
-        email: githubUser.email,
-        role: userRole,
-        createdAt: now,
-        updatedAt: now,
-      });
-      userId = result.insertedId.toString();
-    }
+        email: primaryEmail,
+      },
+    });
 
-    // Create session with user data
+    const user = backendResult.upsertUser;
+
+    // Create session with user data from backend
     const sessionUser: SessionUser = {
-      id: userId,
-      githubId: String(githubUser.id),
-      githubLogin: githubUser.login,
-      displayName: githubUser.name || githubUser.login,
-      avatarUrl: githubUser.avatar_url,
-      email: githubUser.email || undefined,
-      role: userRole,
+      id: user.id,
+      githubId: user.githubId,
+      githubLogin: user.githubLogin,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
 
     req.session.user = sessionUser;
@@ -160,7 +228,10 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
         console.error('Session save error:', err);
         return res.redirect(`${config.frontend.url}?error=session_error`);
       }
-      res.redirect(config.frontend.url);
+      // If a returnToUrl was provided in the initial request and is present in state, redirect there.
+      // Otherwise fallback to configured frontend URL.
+      const dest = returnToUrl || config.frontend.url;
+      res.redirect(dest);
     });
   } catch (err) {
     console.error('OAuth callback error:', err);
@@ -190,6 +261,22 @@ authRouter.get('/me', (req: Request, res: Response) => {
 });
 
 // Generate a simple state parameter for CSRF protection
-function generateState(): string {
-  return Math.random().toString(36).substring(2, 15);
+function generateState(redirectUri?: string, returnTo?: string): string {
+  const rand = Math.random().toString(36).substring(2, 15);
+  const parts = [rand];
+  if (redirectUri) {
+    try {
+      parts.push(Buffer.from(redirectUri, 'utf-8').toString('base64'));
+    } catch {
+      parts.push('');
+    }
+  }
+  if (returnTo) {
+    try {
+      parts.push(Buffer.from(returnTo, 'utf-8').toString('base64'));
+    } catch {
+      parts.push('');
+    }
+  }
+  return parts.join('|');
 }
