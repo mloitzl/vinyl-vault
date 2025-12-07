@@ -7,7 +7,7 @@ services:
     container_name: vinylvault-mongodb
     restart: unless-stopped
     ports:
-      - "37017:27017"
+      - "27017:27017"
     volumes:
       - mongodb_data:/data/db
     environment:
