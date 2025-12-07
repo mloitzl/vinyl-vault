@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { ScoringConfig } from './types.js';
+import { config } from '../../config/index.js';
 
 // Get the directory of this file for resolving config path
 const __filename = fileURLToPath(import.meta.url);
@@ -36,14 +37,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   },
 
   // Preferred media types - vinyl-focused (FR-SC-2)
-  preferredMediaTypes: [
-    'vinyl',
-    'lp',
-    '12"',
-    '10"',
-    '7"',
-    'album',
-  ],
+  preferredMediaTypes: ['vinyl', 'lp', '12"', '10"', '7"', 'album'],
 
   // Preferred countries (FR-SC-3)
   preferredCountries: [
@@ -60,12 +54,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   ],
 
   // De-prioritized countries (FR-SC-3)
-  deprioritizedCountries: [
-    'RU',
-    'Russia',
-    'CN',
-    'China',
-  ],
+  deprioritizedCountries: ['RU', 'Russia', 'CN', 'China'],
 
   // Non-semantic affixes to remove during normalization (FR-CF-2)
   normalizationAffixes: [
@@ -156,8 +145,8 @@ let cachedConfig: ScoringConfig | null = null;
  */
 function getConfigFilePath(): string {
   // Check environment variable first
-  if (process.env.SCORING_CONFIG_PATH) {
-    return process.env.SCORING_CONFIG_PATH;
+  if (config.scoring.configPath) {
+    return config.scoring.configPath;
   }
 
   // Default to packages/backend/config/scoring.json

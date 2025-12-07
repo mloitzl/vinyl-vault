@@ -1,6 +1,8 @@
 // Discogs API service
 // Implements barcode lookup via the Discogs database search API.
 
+import { config } from '../config/index.js';
+
 const DISCOGS_API_BASE = 'https://api.discogs.com';
 
 export interface DiscogsSearchResult {
@@ -15,7 +17,7 @@ export interface DiscogsSearchResult {
 }
 
 function getAuthHeader(): Record<string, string> {
-  const token = process.env.DISCOGS_API_TOKEN || '';
+  const token = config.discogs.apiToken;
   if (token) {
     return { Authorization: `Discogs token=${token}` };
   } else {
@@ -31,7 +33,7 @@ export async function searchByBarcode(barcode: string): Promise<DiscogsSearchRes
     barcode
   )}&type=release&per_page=10`;
   const headers = {
-    'User-Agent': process.env.MUSICBRAINZ_USER_AGENT || 'VinylVault/0.1.0 (googleapps@loitzl.com)',
+    'User-Agent': config.musicbrainz.userAgent,
     ...getAuthHeader(),
   };
 
@@ -84,7 +86,7 @@ export async function getReleaseDetails(releaseId: string | number): Promise<any
   const idStr = String(releaseId);
   const url = `${DISCOGS_API_BASE}/releases/${encodeURIComponent(idStr)}`;
   const headers = {
-    'User-Agent': process.env.MUSICBRAINZ_USER_AGENT || 'VinylVault/0.1.0 (example@example.com)',
+    'User-Agent': config.musicbrainz.userAgent,
     ...getAuthHeader(),
   };
   const res = await fetch(url, { headers });

@@ -2,6 +2,7 @@
 // TODO: Implement MongoDB connection
 
 import { MongoClient, Db } from 'mongodb';
+import { config } from '../config/index.js';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
@@ -11,9 +12,7 @@ export async function connectToDatabase(): Promise<Db> {
     return db;
   }
 
-  const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vinylvault';
-
-  client = new MongoClient(MONGODB_URI);
+  client = new MongoClient(config.mongodb.uri);
   await client.connect();
   db = client.db();
 
