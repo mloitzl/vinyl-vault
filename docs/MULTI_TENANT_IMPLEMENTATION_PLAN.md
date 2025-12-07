@@ -102,6 +102,13 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 
 **Duration:** 2-3 days
 
+**Phase 2 Checklist (execute in order):**
+1) BFF JWT payload: extend `packages/bff/src/auth/jwt.ts` payload to include tenantId, tenantRole, username, avatarUrl; update `signJwt`/`verifyJwt` signatures accordingly.
+2) Session state: update `packages/bff/src/types/session.ts` to add `activeTenantId?`; add helpers `setActiveTenant`/`getActiveTenant` (default to personal tenant on first login).
+3) Backend JWT validation: add `packages/backend/src/auth/jwt.ts` with `verifyJwt` and `extractTenantContext` (tenantId, tenantRole, userId, username, avatarUrl).
+4) GraphQL context wiring: in `packages/backend/src/graphql/resolvers.ts` (and server setup), extract JWT from Authorization header, validate, and populate resolver context with userId, tenantId, tenantRole.
+5) Verification: issue a test token from BFF util and ensure backend extraction returns tenant context; ensure invalid tokens are rejected.
+
 ### Tasks
 
 #### 2.1 JWT Token Extension

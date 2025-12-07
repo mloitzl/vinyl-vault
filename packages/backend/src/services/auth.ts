@@ -6,10 +6,22 @@ import { config } from '../config/index.js';
 
 export interface JwtPayload {
   sub: string; // User ID
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  username: string;
+  avatarUrl?: string;
+  tenantId: string;
+  tenantRole: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
   githubLogin?: string;
   iat?: number;
   exp?: number;
+}
+
+export interface TenantContext {
+  userId: string;
+  username: string;
+  avatarUrl?: string;
+  tenantId: string;
+  tenantRole: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  githubLogin?: string;
 }
 
 export function verifyJwt(token: string): JwtPayload | null {
@@ -18,6 +30,22 @@ export function verifyJwt(token: string): JwtPayload | null {
   } catch {
     return null;
   }
+}
+
+export function extractTenantContext(token?: string): TenantContext | null {
+  if (!token) return null;
+  const payload = verifyJwt(token);
+  if (!payload) return null;
+
+  const { sub, username, avatarUrl, tenantId, tenantRole, githubLogin } = payload;
+  return {
+    userId: sub,
+    username,
+    avatarUrl,
+    tenantId,
+    tenantRole,
+    githubLogin,
+  };
 }
 
 export function extractTokenFromHeader(authHeader?: string): string | null {

@@ -30,7 +30,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Accept web requests from browser clients (GraphQL queries/mutations + session cookies).
 - Proxy all GraphQL queries/mutations to the backend GraphQL endpoint with JWT authorization header.
 - Manage HTTP session lifecycle and authentication via GitHub OAuth.
-- Perform periodic GitHub organization sync (every 6 hours) to maintain tenant memberships.
+- Perform GitHub organization sync on login to maintain tenant memberships.
 - Create and sign JWT tokens containing user ID, username, avatar, current tenantId, and tenantRole.
 - Track active tenant selection in session and populate JWT accordingly.
 - Expose `/auth/me` REST endpoint for client-side authentication state.
@@ -201,8 +201,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
   - `GITHUB_CLIENT_SECRET` - OAuth App client secret
   - `GITHUB_CALLBACK_URL` - Callback URL (default: `http://localhost:3001/auth/github/callback`)
   - `GITHUB_CALLBACK_URLS` - Comma-separated list of allowed callback URLs (for multiple environments)
-  - `GITHUB_ORG_SYNC_ENABLED` - Enable/disable automatic organization sync (default: `true`)
-  - `GITHUB_ORG_SYNC_INTERVAL_HOURS` - Hours between organization sync runs (default: `6`)
+  - `GITHUB_ORG_SYNC_ENABLED` - Enable/disable organization sync on login
 - Setup guide: `docs/GITHUB_OAUTH_SETUP.md`
 
 **Music Metadata APIs:**
@@ -284,8 +283,7 @@ GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
 GITHUB_CALLBACK_URLS=http://localhost:3001/auth/github/callback,https://yourdomain.com/auth/github/callback
 
 # GitHub Organization Sync (Multi-tenant)
-GITHUB_ORG_SYNC_ENABLED=true                           # Enable automatic org sync
-GITHUB_ORG_SYNC_INTERVAL_HOURS=6                       # Sync interval in hours
+GITHUB_ORG_SYNC_ENABLED=true                           # Enable org sync on login
 
 # JWT for BFF-Backend communication
 JWT_SECRET=your_jwt_secret

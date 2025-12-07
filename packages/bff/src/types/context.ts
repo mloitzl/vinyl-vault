@@ -7,4 +7,5 @@ export interface GraphQLContext {
   req: Request;
   res: Response;
   user: SessionUser | null;
+  activeTenantId: string | null;
 }

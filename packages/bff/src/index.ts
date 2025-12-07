@@ -30,6 +30,7 @@ import { typeDefs } from './graphql/typeDefs.js';
 import { resolvers } from './graphql/resolvers.js';
 import type { GraphQLContext } from './types/context.js';
 import './types/session.js'; // Import session types
+import { getActiveTenant } from './types/session.js';
 
 async function main() {
   // Validate configuration
@@ -101,6 +102,7 @@ async function main() {
         req,
         res,
         user: req.session.user || null,
+        activeTenantId: getActiveTenant(req.session) ?? null,
       }),
     })
   );

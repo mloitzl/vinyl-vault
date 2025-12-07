@@ -207,11 +207,11 @@ FR-9 Tenant Management 🔄 IN PROGRESS
 - The system shall track user roles per tenant in a central user-tenant-roles mapping.
 
 FR-10 Organization Synchronization 🔄 IN PROGRESS
-- The system shall periodically sync GitHub organization memberships for authenticated users.
-- The system shall create organization tenants for each GitHub organization the user belongs to.
-- The system shall assign default CONTRIBUTOR role to organization members.
-- The system shall respect GitHub organization admin status when assigning ADMIN roles within organization tenants.
-- Synchronization frequency shall be configurable (default: on login and every 6 hours).
+- The system shall sync GitHub organization memberships for authenticated users **on login**.
+- The system shall create an organization tenant for at most one GitHub organization per user (2-tenant limit: 1 personal + 1 org).
+- The system shall assign default VIEWER role to organization members (ADMIN can promote later).
+- The system shall respect GitHub organization admin status when assigning ADMIN roles within organization tenants (if promotion logic added later).
+- Synchronization occurs only on login; no background interval-based sync.
 
 FR-9 Auditability (basic) 
 - The system shall store creation and update timestamps for records and users. 

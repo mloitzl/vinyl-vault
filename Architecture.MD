@@ -44,7 +44,7 @@ Main components:
   - HTTP-only secure cookies for browser sessions.
   - Session includes current tenant context (tenantId, tenantType).
   - Creates short-lived JWTs with tenant context for calls to the Domain Backend.
-  - Periodically syncs GitHub organization memberships to maintain tenant access.
+  - Syncs GitHub organization memberships on login to maintain tenant access.
 
 - **Domain Backend** (`packages/backend`)
   - Apollo Server (standalone).
@@ -280,8 +280,7 @@ Security hardening on the Pi:
   - `GITHUB_CLIENT_SECRET`
   - `GITHUB_CALLBACK_URL`
   - `GITHUB_CALLBACK_URLS` (comma-separated list for multiple environments)
-  - `GITHUB_ORG_SYNC_ENABLED` (enable/disable automatic organization sync)
-  - `GITHUB_ORG_SYNC_INTERVAL_HOURS` (hours between sync runs, default: 6)
+  - `GITHUB_ORG_SYNC_ENABLED` (enable/disable organization sync on login)
 
 **Environment Configuration:**
 - All secrets stored in `.env` file (not committed to git).

@@ -5,7 +5,10 @@ import { config } from '../config/env.js';
 
 export interface JwtPayload {
   sub: string; // User ID
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  username: string;
+  avatarUrl?: string;
+  tenantId: string;
+  tenantRole: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
   githubLogin?: string;
   iat?: number;
   exp?: number;

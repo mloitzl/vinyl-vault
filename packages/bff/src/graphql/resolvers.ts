@@ -43,7 +43,16 @@ export const resolvers = {
       // Otherwise call backend without JWT (backend may allow unauthenticated lookups depending on policy).
       let jwt = '';
       if (ctx.user) {
-        jwt = signJwt({ sub: ctx.user.id, role: ctx.user.role, githubLogin: ctx.user.githubLogin });
+        const tenantId = ctx.activeTenantId || `user_${ctx.user.id}`;
+        const username = ctx.user.displayName || ctx.user.githubLogin;
+        jwt = signJwt({
+          sub: ctx.user.id,
+          username,
+          avatarUrl: ctx.user.avatarUrl,
+          tenantId,
+          tenantRole: ctx.user.role,
+          githubLogin: ctx.user.githubLogin,
+        });
       }
 
       // Query backend for albums (blended scoring) and legacy releases
