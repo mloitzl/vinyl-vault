@@ -65,6 +65,17 @@ enum UserRole {
   READER
 }
 
+enum TenantType {
+  USER
+  ORGANIZATION
+}
+
+enum TenantRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
 type Record implements Node {
   id: ID!
   release: Release!

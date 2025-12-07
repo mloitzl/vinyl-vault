@@ -45,12 +45,18 @@ export const resolvers = {
       if (ctx.user) {
         const tenantId = ctx.activeTenantId || `user_${ctx.user.id}`;
         const username = ctx.user.displayName || ctx.user.githubLogin;
+        const tenantRole =
+          ctx.user.role === 'ADMIN'
+            ? 'ADMIN'
+            : ctx.user.role === 'CONTRIBUTOR'
+            ? 'MEMBER'
+            : 'VIEWER';
         jwt = signJwt({
           sub: ctx.user.id,
           username,
           avatarUrl: ctx.user.avatarUrl,
           tenantId,
-          tenantRole: ctx.user.role,
+          tenantRole,
           githubLogin: ctx.user.githubLogin,
         });
       }

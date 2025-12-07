@@ -23,9 +23,9 @@ declare module 'express-session' {
 }
 
 export function setActiveTenant(session: Session, tenantId: string): void {
-  session.activeTenantId = tenantId;
+  (session as Session & { activeTenantId?: string }).activeTenantId = tenantId;
 }
 
 export function getActiveTenant(session: Session): string | undefined {
-  return session.activeTenantId;
+  return (session as Session & { activeTenantId?: string }).activeTenantId;
 }

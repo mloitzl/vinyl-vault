@@ -34,7 +34,7 @@ async function main() {
     context: async ({ req }): Promise<GraphQLContext> => {
       const auth = req.headers.authorization as string | undefined;
       const token = extractTokenFromHeader(auth);
-      const tenantCtx = extractTenantContext(token);
+      const tenantCtx = extractTenantContext(token ?? undefined);
       return {
         userId: tenantCtx?.userId ?? null,
         username: tenantCtx?.username ?? null,

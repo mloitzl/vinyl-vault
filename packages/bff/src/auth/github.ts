@@ -4,6 +4,7 @@
 import { Router, Request, Response, type IRouter } from 'express';
 import { config } from '../config/env.js';
 import { queryBackend } from '../services/backendClient.js';
+import { signJwt } from './jwt.js';
 import type { SessionUser } from '../types/session.js';
 
 export const authRouter: IRouter = Router();
@@ -207,7 +208,98 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
     const user = backendResult.upsertUser;
 
-    // Create session with user data from backend
+    // Create personal tenant for user on first login (Phase 3)
+    // Check if user already has a personal tenant
+    const GET_USER_TENANTS_QUERY = `
+      query GetUserTenants($userId: ID!) {
+        userTenants(userId: $userId) {
+          userId
+          tenantId
+          role
+          createdAt
+        }
+      }
+    `;
+
+    interface UserTenant {
+      userId: string;
+      tenantId: string;
+      role: 'ADMIN' | 'MEMBER' | 'VIEWER';
+      createdAt: string;
+    }
+
+    interface GetUserTenantsResult {
+      userTenants: UserTenant[];
+    }
+
+    let userTenants: UserTenant[] = [];
+    let personalTenantId: string | undefined;
+
+    try {
+      const tenantResult = await queryBackend<GetUserTenantsResult>(GET_USER_TENANTS_QUERY, {
+        userId: user.id,
+      });
+      userTenants = tenantResult.userTenants || [];
+      personalTenantId = userTenants.find((t) => t.tenantId.startsWith('user_'))?.tenantId;
+    } catch (err) {
+      console.warn('Failed to fetch user tenants:', err);
+    }
+
+    // If no personal tenant exists, create one
+    if (!personalTenantId) {
+      const CREATE_TENANT_MUTATION = `
+        mutation CreateTenant($input: CreateTenantInput!) {
+          createTenant(input: $input) {
+            tenantId
+            tenantType
+            name
+            databaseName
+            createdAt
+          }
+        }
+      `;
+
+      interface CreateTenantPayload {
+        tenantId: string;
+        tenantType: string;
+        name: string;
+        databaseName: string;
+        createdAt: string;
+      }
+
+      // Sign a short-lived JWT so the backend sees the authenticated user in context
+      const serviceJwt = signJwt({
+        sub: user.id,
+        username: user.displayName || user.githubLogin,
+        avatarUrl: user.avatarUrl,
+        tenantId: `user_${user.id}`,
+        tenantRole: 'ADMIN',
+        githubLogin: user.githubLogin,
+      });
+
+      try {
+        const tenantCreateResult = await queryBackend<{ createTenant: CreateTenantPayload }>(
+          CREATE_TENANT_MUTATION,
+          {
+            input: {
+              tenantType: 'USER',
+              name: user.displayName || user.githubLogin,
+            },
+          },
+          { jwt: serviceJwt },
+        );
+        personalTenantId = tenantCreateResult.createTenant.tenantId;
+        console.log(`[github.callback] Created personal tenant for user: ${personalTenantId}`);
+      } catch (err) {
+        console.error('Failed to create personal tenant:', err);
+        // Non-fatal: continue without tenant (will be created on next login)
+      }
+    }
+
+    // Set activeTenantId in session to personal tenant
+    const activeTenantId = personalTenantId || `user_${user.id}`;
+
+    // Create session with user data and tenant context
     const sessionUser: SessionUser = {
       id: user.id,
       githubId: user.githubId,
@@ -221,6 +313,11 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     };
 
     req.session.user = sessionUser;
+
+    // Set activeTenantId in session (from session.ts helpers)
+    if (typeof req.session === 'object' && req.session) {
+      (req.session as any).activeTenantId = activeTenantId;
+    }
 
     // Save session and redirect to frontend
     req.session.save((err) => {

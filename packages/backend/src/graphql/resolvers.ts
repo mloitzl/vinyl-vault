@@ -3,7 +3,15 @@
 import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserRole } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
+import {
+  createPersonalTenant,
+  createOrganizationTenant,
+  addUserToTenant,
+  getUserTenants,
+} from '../services/tenants.js';
 import type { Album, RawRelease, ScoringDetail } from '../services/scoring/types.js';
+import type { GraphQLContext } from '../types/context.js';
+import { ObjectId } from 'mongodb';
 
 export const resolvers = {
   Query: {
@@ -25,6 +33,30 @@ export const resolvers = {
     records: async (_parent: unknown, _args: unknown) => {
       // TODO: Paginated record query
       return { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false }, totalCount: 0 };
+    },
+    userTenants: async (_parent: unknown, _args: { userId: string }) => {
+      const { userId } = _args;
+
+      // Convert userId string to ObjectId
+      let userObjId;
+      try {
+        userObjId = new ObjectId(userId);
+      } catch {
+        throw new Error(`Invalid userId: ${userId}`);
+      }
+
+      const tenants = await getUserTenants(userObjId);
+
+      // Convert to GraphQL format
+      return tenants.map((tenant) => ({
+        userId: tenant.userId.toString(),
+        tenantId: tenant.tenantId,
+        role: tenant.role,
+        tenantType: tenant.tenantType,
+        name: tenant.name,
+        databaseName: tenant.databaseName,
+        createdAt: tenant.createdAt.toISOString(),
+      }));
     },
   },
   Mutation: {
@@ -67,7 +99,9 @@ export const resolvers = {
       // Use the new blended scoring orchestrator
       const result = await lookupAndScoreBarcode(barcode);
 
-      console.log(`[lookupBarcode] Got ${result.albums.length} albums, ${result.rawReleases.length} raw releases`);
+      console.log(
+        `[lookupBarcode] Got ${result.albums.length} albums, ${result.rawReleases.length} raw releases`
+      );
 
       // Build a lookup map from rawReleases by id (format: SOURCE:externalId)
       const releaseMap = new Map<string, RawRelease>();
@@ -92,21 +126,25 @@ export const resolvers = {
           artist: album.artist,
           title: album.title,
           barcodes: [album.barcode], // Currently single barcode
-          primaryRelease: primaryRaw ? {
-            release: toGraphQLRelease(primaryRaw, barcode),
-            score: album.primaryReleaseScore,
-            scoreBreakdown: primaryScoring ? {
-              mediaType: primaryScoring.mediaTypeScore,
-              countryPreference: primaryScoring.countryScore,
-              trackListCompleteness: primaryScoring.completenessScore,
-              coverArt: 0, // Not tracked separately in ScoringDetail
-              labelInfo: 0,
-              catalogNumber: 0,
-              yearInfo: 0,
-              sourceBonus: 0,
-            } : null,
-          } : null,
-          alternativeReleases: album.alternativeReleases.map(alt => ({
+          primaryRelease: primaryRaw
+            ? {
+                release: toGraphQLRelease(primaryRaw, barcode),
+                score: album.primaryReleaseScore,
+                scoreBreakdown: primaryScoring
+                  ? {
+                      mediaType: primaryScoring.mediaTypeScore,
+                      countryPreference: primaryScoring.countryScore,
+                      trackListCompleteness: primaryScoring.completenessScore,
+                      coverArt: 0, // Not tracked separately in ScoringDetail
+                      labelInfo: 0,
+                      catalogNumber: 0,
+                      yearInfo: 0,
+                      sourceBonus: 0,
+                    }
+                  : null,
+              }
+            : null,
+          alternativeReleases: album.alternativeReleases.map((alt) => ({
             externalId: alt.externalId,
             source: alt.source.toUpperCase(),
             country: alt.country,
@@ -132,9 +170,7 @@ export const resolvers = {
       });
 
       // Build legacy releases array for backward compatibility
-      const releases = result.rawReleases.map((raw: RawRelease) =>
-        toGraphQLRelease(raw, barcode)
-      );
+      const releases = result.rawReleases.map((raw: RawRelease) => toGraphQLRelease(raw, barcode));
 
       // Persist fetched results to cache (best-effort)
       if (releases.length > 0) {
@@ -170,15 +206,107 @@ export const resolvers = {
       // TODO: Delete record from MongoDB
       throw new Error('Not implemented');
     },
-    upsertUser: async (_parent: unknown, _args: { input: { githubId: string; githubLogin: string; displayName: string; avatarUrl?: string; email?: string } }) => {
+    upsertUser: async (
+      _parent: unknown,
+      _args: {
+        input: {
+          githubId: string;
+          githubLogin: string;
+          displayName: string;
+          avatarUrl?: string;
+          email?: string;
+        };
+      }
+    ) => {
       return upsertUser(_args.input);
     },
-    updateUserRole: async (_parent: unknown, _args: { userId: string; role: 'ADMIN' | 'CONTRIBUTOR' | 'READER' }) => {
+    updateUserRole: async (
+      _parent: unknown,
+      _args: { userId: string; role: 'ADMIN' | 'CONTRIBUTOR' | 'READER' }
+    ) => {
       const user = await updateUserRole(_args.userId, _args.role);
       if (!user) {
         throw new Error('User not found');
       }
       return user;
+    },
+    createTenant: async (
+      _parent: unknown,
+      _args: {
+        input: {
+          tenantType: 'USER' | 'ORGANIZATION';
+          name: string;
+          githubOrgId?: string;
+          githubOrgName?: string;
+        };
+      },
+      context: GraphQLContext
+    ) => {
+      // Verify user is authenticated
+      if (!context.userId) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      const { tenantType, name, githubOrgId, githubOrgName } = _args.input;
+
+      let tenant;
+
+      if (tenantType === 'USER') {
+        // For USER tenants, only the user can create their own personal tenant
+        const userObjId = new ObjectId(context.userId);
+        tenant = await createPersonalTenant(userObjId, name);
+      } else if (tenantType === 'ORGANIZATION') {
+        // For ORGANIZATION tenants, require GitHub org details
+        if (!githubOrgId) {
+          throw new Error('githubOrgId is required for ORGANIZATION tenants');
+        }
+        tenant = await createOrganizationTenant(githubOrgId, name, githubOrgName);
+      } else {
+        throw new Error(`Invalid tenantType: ${tenantType}`);
+      }
+
+      // Convert to GraphQL format
+      return {
+        tenantId: tenant.tenantId,
+        tenantType: tenant.tenantType,
+        name: tenant.name,
+        databaseName: tenant.databaseName,
+        createdAt: tenant.createdAt.toISOString(),
+      };
+    },
+    addUserToTenant: async (
+      _parent: unknown,
+      _args: { userId: string; tenantId: string; role: 'ADMIN' | 'MEMBER' | 'VIEWER' },
+      context: GraphQLContext
+    ) => {
+      // Verify caller has ADMIN role in the tenant
+      if (!context.userId) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      // TODO: Verify caller has ADMIN role in target tenant before allowing user addition
+      // For now, allow authenticated users (in Phase 4, enforce authorization)
+
+      const { userId, tenantId, role } = _args;
+
+      // Convert userId string to ObjectId
+      const { ObjectId } = await import('mongodb');
+      let userObjId;
+      try {
+        userObjId = new ObjectId(userId);
+      } catch {
+        throw new Error(`Invalid userId: ${userId}`);
+      }
+
+      const userTenantRole = await addUserToTenant(userObjId, tenantId, role);
+
+      // Convert to GraphQL format
+      return {
+        userId: userTenantRole.userId.toString(),
+        tenantId: userTenantRole.tenantId,
+        role: userTenantRole.role,
+        createdAt: userTenantRole.createdAt.toISOString(),
+      };
     },
   },
   User: {

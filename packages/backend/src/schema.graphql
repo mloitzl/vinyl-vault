@@ -25,6 +25,11 @@ type Query {
   List records with pagination and filtering.
   """
   records(userId: ID, first: Int, after: String, filter: RecordFilter): RecordConnection!
+
+  """
+  Get all tenants for a user (including their role in each tenant).
+  """
+  userTenants(userId: ID!): [UserTenantRole!]!
 }
 
 type Mutation {
@@ -58,6 +63,16 @@ type Mutation {
   Update a user's role (admin only).
   """
   updateUserRole(userId: ID!, role: UserRole!): User!
+
+  """
+  Create a new tenant (personal or organization).
+  """
+  createTenant(input: CreateTenantInput!): Tenant!
+
+  """
+  Add a user to a tenant with a specific role.
+  """
+  addUserToTenant(userId: ID!, tenantId: String!, role: TenantRole!): UserTenantRole!
 }
 
 type User {
@@ -121,6 +136,118 @@ enum ReleaseSource {
   DISCOGS
   MUSICBRAINZ
   MANUAL
+}
+
+"""
+Tenant type: USER (personal) or ORGANIZATION (shared).
+"""
+enum TenantType {
+  USER
+  ORGANIZATION
+}
+
+"""
+User role within a tenant: ADMIN, MEMBER, or VIEWER.
+"""
+enum TenantRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+"""
+A tenant (personal or organization collection).
+"""
+type Tenant {
+  """
+  Unique tenant identifier (user_{userId} or org_{orgId}).
+  """
+  tenantId: String!
+
+  """
+  Type of tenant: USER or ORGANIZATION.
+  """
+  tenantType: TenantType!
+
+  """
+  Display name (user display name or organization name).
+  """
+  name: String!
+
+  """
+  Database name for this tenant.
+  """
+  databaseName: String!
+
+  """
+  When the tenant was created.
+  """
+  createdAt: String!
+}
+
+"""
+A user's role in a specific tenant.
+"""
+type UserTenantRole {
+  """
+  User ID (MongoDB ObjectId as string).
+  """
+  userId: ID!
+
+  """
+  Tenant identifier.
+  """
+  tenantId: String!
+
+  """
+  User's role in this tenant: ADMIN, MEMBER, or VIEWER.
+  """
+  role: TenantRole!
+
+  """
+  Tenant type: USER or ORGANIZATION.
+  """
+  tenantType: TenantType!
+
+  """
+  Tenant display name.
+  """
+  name: String!
+
+  """
+  Tenant database name.
+  """
+  databaseName: String!
+
+  """
+  When the role was created.
+  """
+  createdAt: String!
+}
+
+"""
+Input for creating a new tenant.
+"""
+input CreateTenantInput {
+  """
+  Type of tenant to create: USER or ORGANIZATION.
+  """
+  tenantType: TenantType!
+
+  """
+  Display name for the tenant.
+  """
+  name: String!
+
+  """
+  GitHub organization ID (for ORGANIZATION tenants only).
+  """
+  githubOrgId: String
+
+  """
+  GitHub organization name (for ORGANIZATION tenants only).
+  """
+  githubOrgName: String
 }
 
 type RecordConnection {

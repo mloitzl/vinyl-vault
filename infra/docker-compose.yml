@@ -7,7 +7,7 @@ services:
     container_name: vinylvault-mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "37017:27017"
     volumes:
       - mongodb_data:/data/db
     environment:
@@ -45,6 +45,7 @@ services:
     environment:
       - MONGODB_URI=${MONGODB_URI}
       - BACKEND_URL=${BACKEND_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
       - BFF_PORT=${BFF_PORT}
       - JWT_SECRET=${JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}

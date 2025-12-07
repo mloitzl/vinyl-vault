@@ -152,41 +152,122 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 
 **Duration:** 2 days
 
+**Phase 3 Checklist (execute in order):**
+1) GraphQL schema: add `TenantType` enum (USER, ORGANIZATION), `CreateTenantInput` input type, `Tenant` type, and mutations `createTenant` and `addUserToTenant` to `packages/backend/src/schema.graphql`.
+2) Tenant service: create `packages/backend/src/services/tenants.ts` with `createPersonalTenant`, `createOrganizationTenant`, `getUserTenants`, `addUserToTenant`, `removeUserFromTenant`, `updateUserTenantRole` functions.
+3) Backend resolvers: implement `createTenant` and `addUserToTenant` mutation resolvers in `packages/backend/src/graphql/resolvers.ts`; verify authorization and tenant creation logic.
+4) BFF GitHub callback: update `packages/bff/src/auth/github.ts` to create personal tenant on first login via backend mutation and set activeTenantId in session.
+5) Verification: test new user login creates personal tenant, database is created, user is ADMIN, session and JWT contain correct tenant context, no duplicate tenants on re-login.
+
 ### Tasks
 
-#### 3.1 Tenant Service
+#### 3.1 GraphQL Schema for Tenant Management
+- [ ] Update `packages/backend/src/schema.graphql`:
+  - Add `enum TenantType { USER ORGANIZATION }`
+  - Add `enum Role { ADMIN MEMBER VIEWER }`
+  - Add input type `CreateTenantInput`:
+    ```graphql
+    input CreateTenantInput {
+      tenantType: TenantType!
+      name: String!
+      githubOrgId: String
+      githubOrgName: String
+    }
+    ```
+  - Add type `Tenant`:
+    ```graphql
+    type Tenant {
+      tenantId: String!
+      tenantType: TenantType!
+      name: String!
+      databaseName: String!
+      createdAt: String!
+    }
+    ```
+  - Add type `UserTenantRole`:
+    ```graphql
+    type UserTenantRole {
+      userId: ID!
+      tenantId: String!
+      role: Role!
+      createdAt: String!
+    }
+    ```
+  - Add mutations:
+    ```graphql
+    extend type Mutation {
+      createTenant(input: CreateTenantInput!): Tenant!
+      addUserToTenant(userId: ID!, tenantId: String!, role: Role!): UserTenantRole!
+    }
+    ```
+
+#### 3.2 Tenant Service Implementation
 - [ ] Create `packages/backend/src/services/tenants.ts`:
-  - `createPersonalTenant(userId, username)` - creates USER tenant
-  - `createOrganizationTenant(orgName, orgId)` - creates ORGANIZATION tenant
-  - `getUserTenants(userId)` - returns all tenants for user
-  - `addUserToTenant(userId, tenantId, role)` - creates user_tenant_role
-  - `removeUserFromTenant(userId, tenantId)`
-  - `updateUserTenantRole(userId, tenantId, newRole)`
+  - Import `getRegistryDb` and `getTenantDbName` helpers
+  - Implement `createPersonalTenant(userId: ObjectId, username: string)`:
+    - Generate `tenantId = user_{userId}`
+    - Create tenant document in registry (tenantType: USER, name: username)
+    - Return created tenant
+  - Implement `createOrganizationTenant(orgId: string, orgName: string)`:
+    - Generate `tenantId = org_{orgId}`
+    - Create tenant document in registry (tenantType: ORGANIZATION, name: orgName, githubOrgId: orgId)
+    - Return created tenant
+  - Implement `getUserTenants(userId: ObjectId)`:
+    - Query user_tenant_roles collection filtered by userId
+    - Join with tenants collection to get full tenant info
+    - Return array of tenant documents with user roles
+  - Implement `addUserToTenant(userId: ObjectId, tenantId: string, role: Role)`:
+    - Insert into user_tenant_roles collection
+    - Handle duplicate key error (user already has role in tenant)
+    - Return user_tenant_role document
+  - Implement `removeUserFromTenant(userId: ObjectId, tenantId: string)`:
+    - Delete from user_tenant_roles collection
+    - Return deletion result
+  - Implement `updateUserTenantRole(userId: ObjectId, tenantId: string, newRole: Role)`:
+    - Update role in user_tenant_roles collection
+    - Return updated document
 
-#### 3.2 Authentication Flow Update
-- [ ] Update `packages/bff/src/auth/github.ts` callback handler:
-  1. Exchange GitHub code for access token (existing)
-  2. Fetch GitHub user profile (existing)
-  3. Upsert user in registry database via backend mutation
-  4. Check if personal tenant exists for user
-  5. If not, create personal tenant via backend mutation
-  6. Add user as ADMIN of personal tenant
-  7. Set activeTenantId to personal tenant in session
-  8. Sign JWT with personal tenant context
-  9. Redirect to frontend
+#### 3.3 Backend Resolver Implementation
+- [ ] Update `packages/backend/src/graphql/resolvers.ts`:
+  - Add `createTenant` resolver:
+    - Input: CreateTenantInput
+    - Verify user is authenticated (context.userId required)
+    - For USER tenants: only creator can create own personal tenant (userId-based tenantId)
+    - Call `createPersonalTenant(context.userId, input.name)` or `createOrganizationTenant(input.githubOrgId, input.name)`
+    - Return created tenant
+  - Add `addUserToTenant` resolver:
+    - Verify user has ADMIN role in target tenant (query user_tenant_roles)
+    - Call `addUserToTenant(userId, tenantId, role)`
+    - Return user_tenant_role document
+  - Error handling: throw GraphQL errors for authorization failures and duplicate tenants
 
-#### 3.3 Backend Mutations
-- [ ] Add GraphQL mutations to `packages/backend/src/schema.graphql`:
-  - `createTenant(input: CreateTenantInput!): Tenant`
-  - `addUserToTenant(userId: ID!, tenantId: String!, role: Role!): UserTenantRole`
-- [ ] Implement resolvers in `packages/backend/src/graphql/resolvers.ts`
+#### 3.4 BFF GitHub OAuth Callback Update
+- [ ] Update `packages/bff/src/auth/github.ts`:
+  - In callback handler after fetching GitHub user profile:
+    1. Extract GitHub user ID and username from profile
+    2. Create/upsert user in registry via backend mutation (or internal logic)
+    3. Query backend for user's existing tenants via `getUserTenants` query
+    4. If no USER tenant exists, call backend `createTenant` mutation with tenantType: USER
+    5. Add user as ADMIN of personal tenant (call `addUserToTenant` if not already)
+    6. Get user's ADMIN role in personal tenant (verify step 5)
+    7. Call `setActiveTenant(req.session, personalTenantId)` to set session
+    8. Sign JWT with tenant context: `signJwt({sub: userId, tenantId: personalTenantId, tenantRole: 'ADMIN', username, avatarUrl})`
+    9. Redirect to frontend with JWT in query param or auth header
+  - Error handling: log errors, redirect to login with error message if tenant creation fails
+  - Idempotency: check existing tenant before creation (avoid duplicates)
 
-**Verification:**
-- [ ] New user login creates personal tenant automatically
-- [ ] Personal tenant has database created
-- [ ] User is ADMIN of their personal tenant
-- [ ] Session contains activeTenantId
-- [ ] JWT contains correct tenant context
+**Verification Checklist:**
+- [ ] GraphQL schema compiles without errors
+- [ ] Tenant service functions work in isolation (unit test or manual)
+- [ ] Personal tenant created on first user login
+- [ ] Personal tenant database is accessible via `getTenantDb(personalTenantId)`
+- [ ] User is ADMIN role in personal tenant (verified in user_tenant_roles)
+- [ ] Session contains activeTenantId set to personal tenant
+- [ ] JWT contains tenantId=user_{userId}, tenantRole=ADMIN, username, avatarUrl
+- [ ] Re-login by same user doesn't create duplicate personal tenant
+- [ ] Backend resolvers properly authorize mutation calls
+- [ ] No TypeScript compilation errors
+- [ ] Lint passes
 
 ---
 

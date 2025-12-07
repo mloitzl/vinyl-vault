@@ -8,7 +8,7 @@ export interface JwtPayload {
   username: string;
   avatarUrl?: string;
   tenantId: string;
-  tenantRole: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  tenantRole: 'ADMIN' | 'MEMBER' | 'VIEWER';
   githubLogin?: string;
   iat?: number;
   exp?: number;
