@@ -2,10 +2,13 @@
 // Implements GitHub OAuth Web Application Flow per Architecture.MD
 
 import { Router, Request, Response, type IRouter } from 'express';
+import { ObjectId } from 'mongodb';
 import { config } from '../config/env.js';
 import { queryBackend } from '../services/backendClient.js';
+import { syncUserOrganizations } from '../services/orgSync.js';
 import { signJwt } from './jwt.js';
-import type { SessionUser } from '../types/session.js';
+import type { SessionUser, AvailableTenant } from '../types/session.js';
+import { setActiveTenant, setAvailableTenants } from '../types/session.js';
 
 export const authRouter: IRouter = Router();
 
@@ -56,7 +59,7 @@ authRouter.get('/github', (req: Request, res: Response) => {
   const params = new URLSearchParams({
     client_id: config.github.clientId,
     redirect_uri: redirectUri,
-    scope: 'read:user user:email',
+    scope: 'read:user user:email read:org',
     state,
   });
 
@@ -241,12 +244,17 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       });
       userTenants = tenantResult.userTenants || [];
       personalTenantId = userTenants.find((t) => t.tenantId.startsWith('user_'))?.tenantId;
+      console.log(`[github.callback] Found ${userTenants.length} existing tenants for user`);
+      if (personalTenantId) {
+        console.log(`[github.callback] Personal tenant already exists: ${personalTenantId}`);
+      }
     } catch (err) {
       console.warn('Failed to fetch user tenants:', err);
     }
 
     // If no personal tenant exists, create one
     if (!personalTenantId) {
+      console.log('[github.callback] No personal tenant found, creating new one...');
       const CREATE_TENANT_MUTATION = `
         mutation CreateTenant($input: CreateTenantInput!) {
           createTenant(input: $input) {
@@ -286,7 +294,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
               name: user.displayName || user.githubLogin,
             },
           },
-          { jwt: serviceJwt },
+          { jwt: serviceJwt }
         );
         personalTenantId = tenantCreateResult.createTenant.tenantId;
         console.log(`[github.callback] Created personal tenant for user: ${personalTenantId}`);
@@ -298,6 +306,71 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
     // Set activeTenantId in session to personal tenant
     const activeTenantId = personalTenantId || `user_${user.id}`;
+
+    // Sign JWT for org sync operations (uses personal tenant as default context)
+    const serviceJwtForOrgSync = signJwt({
+      sub: user.id,
+      username: user.displayName || user.githubLogin,
+      avatarUrl: user.avatarUrl,
+      tenantId: activeTenantId,
+      tenantRole: 'ADMIN',
+      githubLogin: user.githubLogin,
+    });
+
+    // Sync user's GitHub organizations to backend org tenants (Phase 5)
+    // This is async but we don't wait for it - run in background
+    // Errors are logged but don't block login
+    try {
+      const userId = new ObjectId(user.id);
+      syncUserOrganizations(
+        userId,
+        user.githubLogin,
+        tokenData.access_token,
+        serviceJwtForOrgSync,
+        activeTenantId // Pass the personal tenant ID to avoid DB query
+      ).catch((err: any) => {
+        console.warn(
+          `[github.callback] Failed to sync user organizations: ${err?.message || String(err)}`
+        );
+        // Non-fatal: org sync failure doesn't block login
+      });
+    } catch (err) {
+      console.warn(`[github.callback] Invalid user ID format: ${user.id}`);
+    }
+
+    // Fetch all available tenants for user (personal + organizations)
+    let availableTenants: AvailableTenant[] = [];
+    try {
+      const tenantsResult = await queryBackend<{ userTenants: AvailableTenant[] }>(
+        `
+        query GetUserTenants($userId: ID!) {
+          userTenants(userId: $userId) {
+            tenantId
+            tenantType
+            name
+            role
+          }
+        }
+        `,
+        { userId: user.id },
+        { jwt: serviceJwtForOrgSync }
+      );
+      availableTenants = tenantsResult.userTenants || [];
+      console.log(`[github.callback] User has ${availableTenants.length} available tenants`);
+    } catch (err: any) {
+      console.warn(
+        `[github.callback] Failed to fetch user tenants: ${err?.message || String(err)}`
+      );
+      // Fallback to just personal tenant
+      availableTenants = [
+        {
+          tenantId: activeTenantId,
+          tenantType: 'USER',
+          name: user.displayName || user.githubLogin,
+          role: 'ADMIN',
+        },
+      ];
+    }
 
     // Create session with user data and tenant context
     const sessionUser: SessionUser = {
@@ -315,9 +388,10 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     req.session.user = sessionUser;
 
     // Set activeTenantId in session (from session.ts helpers)
-    if (typeof req.session === 'object' && req.session) {
-      (req.session as any).activeTenantId = activeTenantId;
-    }
+    setActiveTenant(req.session, activeTenantId);
+
+    // Store available tenants in session
+    setAvailableTenants(req.session, availableTenants);
 
     // Save session and redirect to frontend
     req.session.save((err) => {

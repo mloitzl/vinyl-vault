@@ -15,10 +15,21 @@ export interface SessionUser {
   updatedAt: string;
 }
 
+/**
+ * Available tenant for a user (includes both personal and org tenants)
+ */
+export interface AvailableTenant {
+  tenantId: string;
+  tenantType: 'USER' | 'ORGANIZATION';
+  name: string;
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
+}
+
 declare module 'express-session' {
   interface SessionData {
     user?: SessionUser;
     activeTenantId?: string;
+    availableTenants?: AvailableTenant[];
   }
 }
 
@@ -28,4 +39,12 @@ export function setActiveTenant(session: Session, tenantId: string): void {
 
 export function getActiveTenant(session: Session): string | undefined {
   return (session as Session & { activeTenantId?: string }).activeTenantId;
+}
+
+export function setAvailableTenants(session: Session, tenants: AvailableTenant[]): void {
+  (session as Session & { availableTenants?: AvailableTenant[] }).availableTenants = tenants;
+}
+
+export function getAvailableTenants(session: Session): AvailableTenant[] {
+  return (session as Session & { availableTenants?: AvailableTenant[] }).availableTenants || [];
 }

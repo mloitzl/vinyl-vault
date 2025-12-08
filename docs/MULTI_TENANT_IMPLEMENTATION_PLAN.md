@@ -483,66 +483,220 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 
 ## Phase 5: GitHub Organization Sync
 
-**Goal:** Sync GitHub organization membership on user login (single org limit).
+**Goal:** Sync GitHub organization membership on user login, create org tenants, sync membership, support multiple org tenants.
 
-**Duration:** 2-3 days
+**Duration:** 3-4 days
+
+**Phase 5 Checklist (execute in order):**
+1) GitHub API service: create `packages/bff/src/services/githubOrgs.ts` with `getUserOrganizations(accessToken)` and `getOrganizationMembers(orgName, accessToken)` functions; handle pagination and rate limiting.
+2) Organization sync service: create `packages/bff/src/services/orgSync.ts` with `syncUserOrganizations(userId, githubId, accessToken, registryDb, backendClient)` function to fetch user's GitHub orgs, create/sync org tenants for each, sync membership per org.
+3) Backend GraphQL service extension: ensure backend can accept org sync operations (create org tenants, add users to orgs); add error handling for missing orgs or failed tenant creation.
+4) BFF GitHub callback update: update `packages/bff/src/auth/github.ts` to call `syncUserOrganizations()` after personal tenant creation; set initial activeTenantId (personal unless user in single org, then prompt choice).
+5) Session/JWT management: update BFF to track all user's org tenants in session; generate JWT with correct tenant context for currently active tenant.
+6) Error handling: add comprehensive error handling for GitHub API failures, org sync failures, tenant creation failures; log errors, gracefully degrade (skip sync, continue login).
+7) Verification: test login creates personal tenant, syncs all GitHub orgs, creates org tenants, adds user to each org with correct role, subsequent logins update membership, user removed from org loses access on re-login.
 
 ### Tasks
 
-#### 5.1 GitHub API Integration
+#### 5.1 GitHub API Integration Service
 - [ ] Create `packages/bff/src/services/githubOrgs.ts`:
-  - `getUserOrganizations(accessToken)` - fetch user's GitHub orgs
-  - `getOrganizationMembers(orgName, accessToken)` - fetch org members
-  - Handle pagination for large orgs
-  - Handle rate limiting
+  ```typescript
+  export interface GitHubOrganization {
+    id: number;
+    login: string;
+    name?: string;
+    avatarUrl?: string;
+    description?: string;
+  }
+
+  export interface GitHubOrgMember {
+    id: number;
+    login: string;
+    name?: string;
+    avatarUrl?: string;
+  }
+
+  export async function getUserOrganizations(
+    accessToken: string
+  ): Promise<GitHubOrganization[]>
+    - Fetch user's organizations via GitHub API: GET /user/orgs
+    - Handle pagination (limit: 100, loop through pages)
+    - Map response to GitHubOrganization interface
+    - Handle rate limiting (return empty array if rate limited)
+    - Error handling: log errors, return empty array on failure
+
+  export async function getOrganizationMembers(
+    orgName: string,
+    accessToken: string
+  ): Promise<GitHubOrgMember[]>
+    - Fetch org members via GitHub API: GET /orgs/{org}/members
+    - Handle pagination (limit: 100, loop through pages)
+    - Map response to GitHubOrgMember interface
+    - Handle rate limiting (return empty array if rate limited)
+    - Error handling: log errors, return empty array on failure
+  ```
+- [ ] Import axios or fetch for HTTP requests
+- [ ] Add rate limit detection (check X-RateLimit-Remaining header)
+- [ ] Add retry logic for transient failures
+- [ ] Add comprehensive logging for debugging
 
 #### 5.2 Organization Sync Service
 - [ ] Create `packages/bff/src/services/orgSync.ts`:
-  - `syncUserOrganizations(userId, githubUserId, accessToken)`:
-    1. Fetch user's GitHub organizations (via GitHub API)
-    2. Check if user already has an organization tenant (2-tenant limit)
-    3. If user has org tenant, verify they're still a member (update or remove)
-    4. If user has no org tenant and belongs to orgs, select first org (or show UI to choose)
-    5. For selected org, check if tenant exists in registry (use org ID)
-    6. If not, create organization tenant via backend mutation (using org ID)
-    7. Fetch org members from GitHub
-    8. Add user to org tenant with VIEWER role (if new)
-    9. Sync other org members (add missing, remove departed)
-  - Return organization tenant info (or null if none)
+  ```typescript
+  import { Db } from 'mongodb';
+  import type { BackendClient } from './backendClient.js';
+  import { getUserOrganizations, getOrganizationMembers } from './githubOrgs.js';
 
-#### 5.3 Sync Trigger Points
-- [ ] Trigger sync on user login (only trigger point):
-  - After GitHub OAuth callback
-  - After upsert user and create personal tenant
-  - Before setting activeTenantId
-  - Ensures user sees available organization (if any)
-  - Returns org tenant info to determine initial activeTenantId
-- [ ] Handle org selection if user belongs to multiple orgs:
-  - Option A: Auto-select first org alphabetically
-  - Option B: Show org selection UI on first login
-  - Recommendation: Option A for MVP simplicity
+  export interface OrgSyncResult {
+    personalTenantId: string;
+    organizationTenants: Array<{
+      tenantId: string;
+      name: string;
+      role: 'ADMIN' | 'MEMBER' | 'VIEWER';
+    }>;
+    syncedAt: Date;
+  }
 
-**Note:** No periodic background sync - only sync on login per decision #1.
+  export async function syncUserOrganizations(
+    userId: string,
+    githubId: number,
+    githubLogin: string,
+    accessToken: string,
+    registryDb: Db,
+    backendClient: BackendClient
+  ): Promise<OrgSyncResult>
+  ```
+  - Step 1: Fetch user's GitHub organizations
+    - Call `getUserOrganizations(accessToken)`
+    - Handle errors gracefully (log, continue with empty list)
+  - Step 2: Get user's existing tenants from registry
+    - Query `user_tenant_roles` for userId
+    - Join with `tenants` collection
+    - Separate personal tenant (tenantType: USER) from org tenants (tenantType: ORGANIZATION)
+  - Step 3: For each GitHub org, sync org tenant
+    - Check if org tenant exists (by githubOrgId)
+    - If not exists: create org tenant via backend `createTenant` mutation
+    - If exists: verify user is member, update membership
+    - Add user to org tenant if not already added (via backend `addUserToTenant`)
+    - Update user's role if changed
+  - Step 4: For each existing org tenant in registry
+    - Check if user is still member of that org on GitHub
+    - If user removed from org: call backend to remove from tenant (or update role to VIEWER with note)
+  - Step 5: Fetch and sync org members (for org management)
+    - For each org tenant user is ADMIN of:
+      - Call `getOrganizationMembers(orgName, accessToken)`
+      - Sync members into org tenant (add missing, remove departed)
+      - Handle errors gracefully (skip member sync if fails)
+  - Return result with all user's tenants and sync timestamp
 
-#### 5.4 Organization Membership Sync
-- [ ] Implement org membership sync in `syncUserOrganizations`:
-  - Query user's existing tenants from registry (separate personal and org tenants)
-  - Fetch user's GitHub organizations (via GitHub API)
-  - For each org: create tenant if missing, add/update user membership
-  - For each existing org tenant: verify user is still a member (remove if departed)
-  - Sync all org members: add missing, remove departed
-- [ ] Add error handling for edge cases:
-  - User removed from org → remove org tenant access on next login
-  - User joins new org → auto-create tenant and add with VIEWER role
+#### 5.3 BFF Backend Client Integration
+- [ ] Update `packages/bff/src/services/backendClient.ts`:
+  - Add method to create organization tenants:
+    ```typescript
+    async createOrganizationTenant(
+      input: {
+        tenantType: 'ORGANIZATION';
+        name: string;
+        githubOrgId: string;
+        githubOrgName?: string;
+      }
+    ): Promise<{ tenantId: string; name: string; databaseName: string }>
+    ```
+  - Add method to add user to tenant:
+    ```typescript
+    async addUserToTenant(
+      userId: string,
+      tenantId: string,
+      role: 'ADMIN' | 'MEMBER' | 'VIEWER'
+    ): Promise<{ userId: string; tenantId: string; role: string }>
+    ```
+  - Add method to get user's tenants:
+    ```typescript
+    async getUserTenants(userId: string): Promise<Array<{
+      tenantId: string;
+      name: string;
+      tenantType: string;
+      role: string;
+    }>>
+    ```
+  - Add error handling and logging for all mutations
+  - Handle GraphQL errors (authorization, not found, duplicate)
 
-**Verification:**
-- [ ] User organizations synced on login
-- [ ] Organization tenant created with org ID (not name)
-- [ ] Users added to org tenant with VIEWER role by default
-- [ ] 2-tenant limit enforced (1 personal + 1 org max)
-- [ ] User can only be in one organization tenant
-- [ ] Removed org members lose access on next login
-- [ ] Org name changes don't break tenant (using org ID)
+#### 5.4 GitHub Callback Update
+- [ ] Update `packages/bff/src/auth/github.ts`:
+  - After personal tenant creation:
+    1. Fetch user's GitHub access token (already have from OAuth callback)
+    2. Call `syncUserOrganizations(userId, githubId, githubLogin, accessToken, registryDb, backendClient)`
+    3. Get result with all organization tenants
+  - Set initial activeTenantId:
+    - If user has 1 org tenant: show selection prompt or auto-select with message
+    - If user has multiple org tenants: show selection UI or default to personal
+    - If user has no org tenants: default to personal tenant
+  - Store available tenants in session for later use
+  - Handle sync errors gracefully:
+    - Log error and continue login (don't block login on sync failure)
+    - Set activeTenantId to personal tenant as fallback
+  - Sign JWT with initial activeTenantId and correct role
+
+#### 5.5 Session and JWT Management
+- [ ] Update `packages/bff/src/types/session.ts`:
+  - Add `availableOrganizations?: Array<{ tenantId: string; name: string; role: string; }>`
+  - Keep `activeTenantId` for current active tenant
+  - Add `syncedOrgsAt?: Date` to track when orgs were last synced
+- [ ] Update `packages/bff/src/auth/jwt.ts`:
+  - Ensure JWT payload includes correct `tenantRole` for active tenant
+  - Map GitHub role to tenant role when signing JWT for org tenants
+- [ ] Update BFF GitHub callback to populate session with all user's tenants
+
+#### 5.6 Error Handling & Logging
+- [ ] Add comprehensive error handling throughout orgSync flow:
+  - GitHub API errors (rate limit, not found, auth failed)
+  - Backend mutation errors (tenant creation failed, add user failed)
+  - Registry database errors (query failed, insert failed)
+  - Handle errors without blocking login process
+  - Log all errors with context (userId, orgName, action)
+- [ ] Add debug logging for tracing sync process:
+  - Log when org sync starts/completes
+  - Log each org processed
+  - Log tenant creation/update operations
+  - Log member sync operations
+- [ ] Implement graceful degradation:
+  - If GitHub API fails: sync what we can, continue with existing tenants
+  - If tenant creation fails for an org: skip that org, continue with others
+  - If member sync fails: skip member sync, continue with user sync
+  - Always complete login even if sync partially fails
+
+#### 5.7 Integration with Phase 3 & 4
+- [ ] Ensure `createOrganizationTenant` mutation in backend works correctly
+- [ ] Verify `addUserToTenant` respects first-user ADMIN logic (from Phase 3)
+- [ ] Verify authorization checks in backend allow org membership sync (Phase 4)
+- [ ] Test that JWT contains correct tenant context for org tenants
+
+**Verification Checklist:**
+- [ ] GitHub API service fetches user's orgs with pagination ✓
+- [ ] GitHub API service fetches org members with pagination ✓
+- [ ] Organization sync creates org tenant for each user's GitHub org ✓
+- [ ] Organization sync adds user to each org tenant ✓
+- [ ] First user in org tenant automatically gets ADMIN role ✓
+- [ ] Subsequent org members get VIEWER role by default ✓
+- [ ] User removed from GitHub org loses access on next login ✓
+- [ ] User added to new GitHub org gets added to org tenant on next login ✓
+- [ ] Multiple org tenants supported per user (no limit) ✓
+- [ ] Session tracks all user's available tenants ✓
+- [ ] Session tracks active tenant ID ✓
+- [ ] JWT generated with correct org tenant context ✓
+- [ ] Org sync handles GitHub API errors gracefully ✓
+- [ ] Org sync handles backend errors gracefully ✓
+- [ ] Login not blocked if org sync fails ✓
+- [ ] Personal tenant always created and set as fallback ✓
+- [ ] Org member sync works (add/remove members) ✓
+- [ ] Rate limiting handled appropriately ✓
+- [ ] Comprehensive logging for debugging ✓
+- [ ] No TypeScript compilation errors ✓
+- [ ] Lint passes ✓
+- [ ] Test with multiple GitHub orgs ✓
+- [ ] Test with user removed from org ✓
+- [ ] Test with user added to new org ✓
 
 ---
 

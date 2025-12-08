@@ -289,12 +289,19 @@ export const resolvers = {
         // For USER tenants, only the user can create their own personal tenant
         const userObjId = new ObjectId(context.userId);
         tenant = await createPersonalTenant(userObjId, name);
+
+        // Automatically add the user to their personal tenant with ADMIN role
+        await addUserToTenant(userObjId, tenant.tenantId, 'ADMIN');
       } else if (tenantType === 'ORGANIZATION') {
         // For ORGANIZATION tenants, require GitHub org details
         if (!githubOrgId) {
           throw new Error('githubOrgId is required for ORGANIZATION tenants');
         }
         tenant = await createOrganizationTenant(githubOrgId, name, githubOrgName);
+
+        // Automatically add the creator to the org tenant with ADMIN role
+        const userObjId = new ObjectId(context.userId);
+        await addUserToTenant(userObjId, tenant.tenantId, 'ADMIN');
       } else {
         throw new Error(`Invalid tenantType: ${tenantType}`);
       }
