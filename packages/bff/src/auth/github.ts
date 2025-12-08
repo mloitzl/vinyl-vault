@@ -425,7 +425,35 @@ authRouter.post('/logout', (req: Request, res: Response) => {
 // Get current auth status - returns user or null
 authRouter.get('/me', (req: Request, res: Response) => {
   if (req.session.user) {
-    res.json({ user: req.session.user });
+    // Include tenant information from session
+    const availableTenants = (req.session as any).availableTenants || [];
+    const activeTenantId = (req.session as any).activeTenantId;
+    const activeTenant = availableTenants.find(
+      (t: AvailableTenant) => t.tenantId === activeTenantId
+    );
+
+    // Map tenant fields to match frontend interface (tenantId -> id, tenantType -> type)
+    const mappedTenants = availableTenants.map((t: AvailableTenant) => ({
+      id: t.tenantId,
+      name: t.name,
+      type: t.tenantType,
+      role: t.role,
+    }));
+
+    const mappedActiveTenant = activeTenant
+      ? {
+          id: activeTenant.tenantId,
+          name: activeTenant.name,
+          type: activeTenant.tenantType,
+          role: activeTenant.role,
+        }
+      : null;
+
+    res.json({
+      user: req.session.user,
+      availableTenants: mappedTenants,
+      activeTenant: mappedActiveTenant,
+    });
   } else {
     res.json({ user: null });
   }

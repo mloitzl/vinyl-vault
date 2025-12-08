@@ -1,6 +1,7 @@
 // Header component with user profile and auth actions
 
 import { useAuth } from '../contexts/AuthContext';
+import { TenantSwitcher } from './TenantSwitcher';
 
 export function Header() {
   const { user, isLoading, login, logout } = useAuth();
@@ -75,6 +76,9 @@ interface UserMenuProps {
 function UserMenu({ user, onLogout }: UserMenuProps) {
   return (
     <div className="flex items-center space-x-4">
+      {/* Tenant switcher */}
+      <TenantSwitcher />
+
       {/* User info */}
       <div className="flex items-center space-x-3">
         {user.avatarUrl ? (
@@ -95,13 +99,15 @@ function UserMenu({ user, onLogout }: UserMenuProps) {
           <p className="text-xs text-gray-500">@{user.githubLogin}</p>
         </div>
         {/* Role badge */}
-        <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-          user.role === 'ADMIN' 
-            ? 'bg-purple-100 text-purple-800' 
-            : user.role === 'CONTRIBUTOR'
-            ? 'bg-green-100 text-green-800'
-            : 'bg-gray-100 text-gray-800'
-        }`}>
+        <span
+          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+            user.role === 'ADMIN'
+              ? 'bg-purple-100 text-purple-800'
+              : user.role === 'CONTRIBUTOR'
+              ? 'bg-green-100 text-green-800'
+              : 'bg-gray-100 text-gray-800'
+          }`}
+        >
           {user.role}
         </span>
       </div>

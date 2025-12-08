@@ -702,57 +702,502 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 
 ## Phase 6: Tenant Switching UI & API
 
-**Goal:** Enable users to switch between personal and organization tenants.
+**Goal:** Enable users to switch between personal and organization tenants with a complete UI and API implementation.
 
 **Duration:** 3 days
 
-### Tasks
+**Phase 6 Checklist (execute in order):**
+1) BFF GraphQL schema: Add `Tenant` type, `availableTenants`, `activeTenant`, `switchTenant` mutation
+2) BFF resolvers: Implement `viewer` query with tenant data, `switchTenant` mutation logic
+3) BFF session helpers: Add `getTenantContext()` to read active tenant with role info
+4) Backend schema: Verify `userTenants` query exists (added in Phase 5, now used by BFF)
+5) Frontend auth context: Add `activeTenant` and `availableTenants` to auth state
+6) Frontend TenantSwitcher component: Create dropdown UI for switching tenants
+7) Frontend Header: Integrate TenantSwitcher and display current tenant
+8) Relay schema: Regenerate for updated GraphQL types
+9) Manual testing: Verify switching works, persists, and returns correct data
+10) Verification: No TypeScript errors, lint passes, all tests pass
 
-#### 6.1 GraphQL Schema Updates
-- [ ] Update `packages/bff/src/schema.graphql`:
-  - Add `Tenant` type with fields: `id`, `name`, `type`, `role`
-  - Add `availableTenants: [Tenant!]!` to `User` type
-  - Add `activeTenant: Tenant` to `User` type
-  - Add mutation: `switchTenant(tenantId: String!): User`
-- [ ] Update `packages/backend/src/schema.graphql`:
-  - Add query: `userTenants(userId: ID!): [UserTenantRole!]!`
+### Task Details
 
-#### 6.2 BFF Tenant Switching
-- [ ] Update `packages/bff/src/graphql/resolvers.ts`:
-  - Implement `switchTenant` mutation:
-    1. Verify user has access to target tenant (query backend)
-    2. Update session `activeTenantId`
-    3. Query backend for user's role in new tenant
-    4. Return updated user object with new tenant context
-  - Update `viewer` query:
-    1. Fetch user's available tenants from backend
-    2. Include active tenant from session
-    3. Map tenants to GraphQL Tenant type
+#### Task 1: BFF GraphQL Schema - Tenant Type & Queries
+**File:** `packages/bff/src/schema.graphql`
 
-#### 6.3 Frontend Tenant Switcher
-- [ ] Create `packages/frontend/src/components/TenantSwitcher.tsx`:
-  - Dropdown/modal showing available tenants
-  - Current tenant highlighted
-  - Switch button calls `switchTenant` mutation
-  - Show tenant type (personal vs organization)
-  - Show user's role in each tenant
-- [ ] Update `packages/frontend/src/components/Header.tsx`:
-  - Display current tenant name
-  - Include TenantSwitcher component
-- [ ] Update `packages/frontend/src/contexts/AuthContext.tsx`:
-  - Include `activeTenant` and `availableTenants` in auth state
-  - Refresh auth state after tenant switch
+Add the following:
+```graphql
+# Represents a tenant available to the user
+type Tenant {
+  id: String!
+  name: String!
+  type: TenantType!
+  role: TenantRole!
+}
 
-#### 6.4 Relay Schema Update
-- [ ] Regenerate Relay schema: `pnpm --filter frontend relay`
-- [ ] Update GraphQL queries/mutations to include tenant fields
+enum TenantType {
+  USER
+  ORGANIZATION
+}
 
-**Verification:**
-- [ ] User sees list of available tenants
-- [ ] Can switch between personal and organization tenants
+enum TenantRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+# Extend User type to include tenant information
+extend type User {
+  availableTenants: [Tenant!]!
+  activeTenant: Tenant
+}
+
+# Extend Mutation with tenant switching
+extend type Mutation {
+  """
+  Switch the active tenant for the current user.
+  Updates session and returns user with new active tenant context.
+  """
+  switchTenant(tenantId: String!): User!
+}
+```
+
+**Checklist:**
+- [ ] Add `Tenant` type with `id`, `name`, `type`, `role` fields
+- [ ] Add `TenantType` enum (USER, ORGANIZATION)
+- [ ] Add `TenantRole` enum (ADMIN, MEMBER, VIEWER)
+- [ ] Extend `User` type with `availableTenants: [Tenant!]!`
+- [ ] Extend `User` type with `activeTenant: Tenant`
+- [ ] Extend `Mutation` with `switchTenant(tenantId: String!): User!`
+- [ ] Schema compiles without errors
+- [ ] Lint passes
+
+---
+
+#### Task 2: BFF Resolvers - viewer Query & switchTenant Mutation
+**File:** `packages/bff/src/graphql/resolvers.ts`
+
+Implement the following resolvers:
+
+**viewer Query:**
+```typescript
+viewer: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+  // Verify user is authenticated
+  if (!context.user) {
+    return null;
+  }
+
+  // Get available tenants from session (populated at login)
+  const availableTenants = getAvailableTenants(context.session) || [];
+  
+  // Get active tenant from session
+  const activeTenantId = getActiveTenant(context.session);
+  const activeTenant = availableTenants.find(t => t.id === activeTenantId);
+
+  return {
+    ...context.user,
+    availableTenants,
+    activeTenant: activeTenant || null,
+  };
+}
+```
+
+**switchTenant Mutation:**
+```typescript
+switchTenant: async (
+  _parent: unknown,
+  _args: { tenantId: string },
+  context: GraphQLContext
+) => {
+  // Verify user is authenticated
+  if (!context.user || !context.session) {
+    throw new Error('Unauthorized: user not authenticated');
+  }
+
+  const { tenantId } = _args;
+
+  // Get available tenants from session
+  const availableTenants = getAvailableTenants(context.session) || [];
+  
+  // Verify user has access to target tenant
+  const targetTenant = availableTenants.find(t => t.id === tenantId);
+  if (!targetTenant) {
+    throw new Error(`Unauthorized: user does not have access to tenant ${tenantId}`);
+  }
+
+  // Update session active tenant
+  setActiveTenant(context.session, tenantId);
+  
+  // Save session changes
+  await new Promise<void>((resolve, reject) => {
+    context.session.save((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  console.log(`[resolvers] User switched to tenant: ${tenantId}`);
+
+  // Return updated user with new active tenant
+  return {
+    ...context.user,
+    availableTenants,
+    activeTenant: targetTenant,
+  };
+}
+```
+
+**Checklist:**
+- [ ] Update `viewer` query to fetch `availableTenants` from session
+- [ ] Update `viewer` query to fetch `activeTenant` from session
+- [ ] Map session tenant data to GraphQL `Tenant` type
+- [ ] Implement `switchTenant` mutation with access validation
+- [ ] Verify target tenant exists in user's available tenants
+- [ ] Update session `activeTenantId` on successful switch
+- [ ] Save session changes (use Promise wrapper for async callback)
+- [ ] Return updated user object with new tenant context
+- [ ] Add logging: `[resolvers] User switched to tenant: {tenantId}`
+- [ ] Handle errors gracefully (unauthorized, tenant not found)
+- [ ] TypeScript compiles without errors
+- [ ] Lint passes
+
+---
+
+#### Task 3: BFF Session Helpers - getTenantContext
+**File:** `packages/bff/src/types/session.ts`
+
+Add helper function to retrieve current tenant context:
+
+```typescript
+/**
+ * Get the current tenant context for a user (active tenant + role)
+ * Used by BFF resolvers to return tenant-aware data
+ */
+export function getTenantContext(
+  session: Session,
+  availableTenants?: AvailableTenant[]
+): AvailableTenant | undefined {
+  const activeTenantId = getActiveTenant(session);
+  if (!activeTenantId || !availableTenants) {
+    return undefined;
+  }
+  return availableTenants.find(t => t.id === activeTenantId);
+}
+```
+
+**Checklist:**
+- [ ] Add `getTenantContext()` helper function
+- [ ] Accept `session` and optional `availableTenants` parameters
+- [ ] Return active tenant with role info or undefined
+- [ ] Add JSDoc comments
+- [ ] TypeScript compiles without errors
+
+---
+
+#### Task 4: Backend Schema Verification
+**File:** `packages/backend/src/schema.graphql`
+
+Verify the following query exists (should be from Phase 5):
+
+```graphql
+userTenants(userId: ID!): [UserTenantRole!]!
+```
+
+This query is used by BFF to fetch available tenants when needed.
+
+**Checklist:**
+- [ ] `userTenants` query exists in schema
+- [ ] Query accepts `userId: ID!` parameter
+- [ ] Returns `[UserTenantRole!]!` array
+- [ ] Schema compiles without errors
+
+---
+
+#### Task 5: Frontend Auth Context - Add Tenant State
+**File:** `packages/frontend/src/contexts/AuthContext.tsx`
+
+Extend auth context to include tenant information:
+
+```typescript
+interface AuthContextType {
+  user: SessionUser | null;
+  activeTenant: AvailableTenant | null;
+  availableTenants: AvailableTenant[];
+  isLoading: boolean;
+  login: () => void;
+  logout: () => void;
+  switchTenant: (tenantId: string) => Promise<void>;
+}
+
+interface AvailableTenant {
+  id: string;
+  name: string;
+  type: 'USER' | 'ORGANIZATION';
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
+}
+```
+
+Update `useEffect` to populate tenant data from viewer query response.
+
+**Checklist:**
+- [ ] Add `activeTenant: AvailableTenant | null` to context
+- [ ] Add `availableTenants: AvailableTenant[]` to context
+- [ ] Add `switchTenant(tenantId: string)` function to context
+- [ ] Extract tenant data from viewer query response
+- [ ] Update context when switching tenants
+- [ ] Handle errors during tenant switch
+- [ ] Add logging for tenant changes
+- [ ] TypeScript compiles without errors
+- [ ] Lint passes
+
+---
+
+#### Task 6: Frontend TenantSwitcher Component
+**File:** `packages/frontend/src/components/TenantSwitcher.tsx` (new file)
+
+Create a dropdown/modal component for switching tenants:
+
+```typescript
+import React, { useState } from 'react';
+import { useAuthContext } from '../contexts/AuthContext';
+
+export function TenantSwitcher() {
+  const { activeTenant, availableTenants, switchTenant } = useAuthContext();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSwitch = async (tenantId: string) => {
+    setIsLoading(true);
+    try {
+      await switchTenant(tenantId);
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Failed to switch tenant:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!activeTenant || availableTenants.length <= 1) {
+    return null; // Don't show if only one tenant
+  }
+
+  return (
+    <div className="tenant-switcher">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="tenant-button"
+      >
+        {activeTenant.name}
+        <span className="tenant-type">({activeTenant.type})</span>
+      </button>
+
+      {isOpen && (
+        <div className="tenant-menu">
+          {availableTenants.map(tenant => (
+            <button
+              key={tenant.id}
+              onClick={() => handleSwitch(tenant.id)}
+              disabled={isLoading || tenant.id === activeTenant.id}
+              className={`tenant-option ${
+                tenant.id === activeTenant.id ? 'active' : ''
+              }`}
+            >
+              <div className="tenant-name">{tenant.name}</div>
+              <div className="tenant-meta">
+                <span className="type">{tenant.type}</span>
+                <span className="role">{tenant.role}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+**Checklist:**
+- [ ] Create new `TenantSwitcher.tsx` component file
+- [ ] Implement dropdown menu UI
+- [ ] Show all available tenants in list
+- [ ] Highlight current active tenant
+- [ ] Display tenant name, type, and user's role
+- [ ] Call `switchTenant` mutation on selection
+- [ ] Handle loading state during switch
+- [ ] Handle errors gracefully
+- [ ] Hide switcher if only 1 tenant
+- [ ] Add basic styling (CSS module or Tailwind)
+- [ ] TypeScript compiles without errors
+- [ ] Lint passes
+
+---
+
+#### Task 7: Frontend Header Integration
+**File:** `packages/frontend/src/components/Header.tsx`
+
+Update Header component to include TenantSwitcher:
+
+```typescript
+import { TenantSwitcher } from './TenantSwitcher';
+
+export function Header() {
+  // ... existing code ...
+
+  return (
+    <header className="header">
+      <div className="header-content">
+        <div className="header-left">
+          {/* Logo and navigation */}
+        </div>
+
+        <div className="header-right">
+          <TenantSwitcher />
+          
+          <div className="user-menu">
+            {/* User profile, logout, etc. */}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+```
+
+**Checklist:**
+- [ ] Import `TenantSwitcher` component
+- [ ] Add `<TenantSwitcher />` to header layout
+- [ ] Position tenant switcher before user menu
+- [ ] Ensure responsive layout on mobile
+- [ ] Test on small screens
+- [ ] TypeScript compiles without errors
+- [ ] Lint passes
+
+---
+
+#### Task 8: Relay Schema Regeneration
+**Command:** `pnpm --filter frontend relay`
+
+This regenerates Relay schema from updated GraphQL types.
+
+**Checklist:**
+- [ ] Run: `pnpm --filter frontend relay`
+- [ ] Verify command completes successfully
+- [ ] Check for generated schema updates
+- [ ] No errors or warnings
+- [ ] Commit generated files
+
+---
+
+#### Task 9: Manual Testing & Verification
+**Instructions:**
+
+1. **Setup:** Start dev environment - `pnpm dev`
+
+2. **Test Tenant Switching:**
+   - [ ] Login with account that has multiple tenants
+   - [ ] Verify `availableTenants` list appears in Header
+   - [ ] Verify current tenant is highlighted
+   - [ ] Click to switch to different tenant
+   - [ ] Verify UI updates immediately
+   - [ ] Verify session persists selection on page refresh
+
+3. **Test Data Isolation:**
+   - [ ] Create a record in personal tenant
+   - [ ] Switch to organization tenant
+   - [ ] Verify record not visible (different tenant)
+   - [ ] Switch back to personal tenant
+   - [ ] Verify record visible again
+
+4. **Test Role Display:**
+   - [ ] Verify personal tenant shows role: ADMIN
+   - [ ] Verify org tenants show role: VIEWER or ADMIN
+   - [ ] Different roles visible in switcher
+
+5. **Test Error Handling:**
+   - [ ] Try to switch to invalid tenant (if possible)
+   - [ ] Verify error message displayed
+   - [ ] Verify UI remains stable
+
+6. **Test Permissions:**
+   - [ ] Verify can only switch to tenants user is member of
+   - [ ] Verify cannot switch to other users' tenants
+
+**Checklist:**
+- [ ] User sees TenantSwitcher in header
+- [ ] Can switch between 2+ tenants
 - [ ] Switching updates UI immediately
-- [ ] Subsequent queries return data from new tenant
-- [ ] Current tenant persists across page refreshes (session)
+- [ ] Switching persists across page refresh
+- [ ] Data isolation works (records not shared)
+- [ ] Role information displayed correctly
+- [ ] Error messages clear
+- [ ] No console errors
+- [ ] No broken UI elements
+
+---
+
+#### Task 10: Final Verification
+**File:** Multiple files
+
+Run full verification suite:
+
+```bash
+# Type check
+pnpm build
+
+# Lint
+pnpm lint
+
+# Test (if tests exist)
+pnpm test
+
+# Manual verification - login and test switching
+pnpm dev
+```
+
+**Checklist:**
+- [ ] `pnpm build` completes without errors
+- [ ] No TypeScript compilation errors
+- [ ] No TypeScript compilation warnings
+- [ ] `pnpm lint` passes (no linting errors)
+- [ ] All tests pass
+- [ ] No console warnings during manual testing
+- [ ] Feature works end-to-end
+- [ ] Ready to commit
+
+### Implementation Notes
+
+**Important Considerations:**
+
+1. **Session Persistence:**
+   - `activeTenantId` must be saved to session on every switch
+   - Session must survive page refresh
+   - Consider using HTTP-only cookies for security
+
+2. **Data Isolation:**
+   - Ensure BFF passes correct `tenantId` to backend queries
+   - Backend enforces data isolation via context
+   - Test that records from one tenant don't leak to another
+
+3. **Role-Based Features:**
+   - ADMIN: Can manage tenant members, delete tenant
+   - MEMBER: Can create/edit records in tenant
+   - VIEWER: Read-only access
+   - Frontend may need to show/hide features based on role
+
+4. **Error Handling:**
+   - User removed from organization between login and switch
+   - Session tenant invalid (should refresh available tenants)
+   - Network error during switch
+   - Handle all gracefully without losing user data
+
+5. **Performance:**
+   - Avoid re-fetching available tenants on every action
+   - Cache available tenants in auth context
+   - Only refetch on login or explicit user action
+
+6. **Accessibility:**
+   - Dropdown keyboard navigation (arrow keys, enter)
+   - Screen reader support (ARIA labels)
+   - Clear visual focus indicators
 
 ---
 

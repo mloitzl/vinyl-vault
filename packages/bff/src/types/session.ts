@@ -48,3 +48,18 @@ export function setAvailableTenants(session: Session, tenants: AvailableTenant[]
 export function getAvailableTenants(session: Session): AvailableTenant[] {
   return (session as Session & { availableTenants?: AvailableTenant[] }).availableTenants || [];
 }
+
+/**
+ * Get the current tenant context for a user (active tenant + role)
+ * Used by BFF resolvers to return tenant-aware data
+ */
+export function getTenantContext(
+  session: Session,
+  availableTenants?: AvailableTenant[]
+): AvailableTenant | undefined {
+  const activeTenantId = getActiveTenant(session);
+  if (!activeTenantId || !availableTenants) {
+    return undefined;
+  }
+  return availableTenants.find(t => t.tenantId === activeTenantId);
+}

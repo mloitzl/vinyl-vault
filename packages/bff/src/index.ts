@@ -99,9 +99,10 @@ async function main() {
     '/graphql',
     expressMiddleware(server, {
       context: async ({ req, res }): Promise<GraphQLContext> => ({
-        req,
+        req: req as any,
         res,
         user: req.session.user || null,
+        session: req.session,
         activeTenantId: getActiveTenant(req.session) ?? null,
       }),
     })

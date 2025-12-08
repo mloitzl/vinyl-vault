@@ -43,6 +43,12 @@ type Mutation {
   Delete a record from the collection.
   """
   deleteRecord(input: DeleteRecordInput!): DeleteRecordPayload!
+
+  """
+  Switch the active tenant for the current user.
+  Updates session and returns user with new active tenant context.
+  """
+  switchTenant(tenantId: String!): User!
 }
 
 interface Node {
@@ -55,6 +61,8 @@ type User implements Node {
   displayName: String!
   avatarUrl: String
   role: UserRole!
+  availableTenants: [Tenant!]!
+  activeTenant: Tenant
   createdAt: String!
   updatedAt: String!
 }
@@ -74,6 +82,16 @@ enum TenantRole {
   ADMIN
   MEMBER
   VIEWER
+}
+
+"""
+Represents a tenant available to the user (personal or organization).
+"""
+type Tenant {
+  id: String!
+  name: String!
+  type: TenantType!
+  role: TenantRole!
 }
 
 type Record implements Node {
