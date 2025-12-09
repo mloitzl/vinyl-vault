@@ -28,3 +28,20 @@ export async function closeRegistryDb(): Promise<void> {
     console.log('[registry] Disconnected from MongoDB registry database');
   }
 }
+
+// Ensure required collections and indexes exist for registry data
+export async function ensureRegistryIndexes(): Promise<void> {
+  const db = await getRegistryDb();
+
+  const installations = db.collection('installations');
+  await installations.createIndex({ installation_id: 1 }, { unique: true });
+  await installations.createIndex({ account_login: 1 });
+  await installations.createIndex({ installed_by_user_id: 1 });
+
+  const userInstallationRoles = db.collection('user_installation_roles');
+  await userInstallationRoles.createIndex({ user_id: 1, installation_id: 1 }, { unique: true });
+  await userInstallationRoles.createIndex({ installation_id: 1 });
+  await userInstallationRoles.createIndex({ org_name: 1 });
+
+  console.log('[registry] Ensured indexes for installations and user_installation_roles');
+}

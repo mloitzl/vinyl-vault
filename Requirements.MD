@@ -188,7 +188,27 @@ FR-7 Authorization and Roles ✅ IMPLEMENTED
 - The system shall enforce role-based access control both in the BFF and backend.
 - The system shall enforce tenant isolation to prevent cross-tenant data access.
 
-FR-8 Session Management ✅ IMPLEMENTED
+FR-8 Tenant Management & Switching ✅ IMPLEMENTED
+- The system shall allow users to view all tenants they have access to.
+- The system shall allow users to switch between personal and organization tenants.
+- Tenant switching shall persist across page reloads via session storage.
+- The system shall display the current active tenant with user's role within that tenant.
+- Switching between tenants shall update JWT token context for backend authorization.
+
+FR-9 GitHub App Installation for Organization Tenants ✅ IMPLEMENTED
+- The system provides an "Add Organization" button allowing users to explicitly install Vinyl Vault on GitHub organizations they manage.
+- Users can install Vinyl Vault on any GitHub organization where they have installation authority (typically org owners or app managers).
+- GitHub validates installation permissions automatically - users cannot install on orgs they don't manage.
+- Installation creates a new organization tenant automatically.
+- The installing user is automatically assigned ADMIN role in the new organization tenant.
+- The system receives and validates GitHub `installation.created` webhook events via `POST /webhook/github`.
+- The system verifies webhook signatures using the GitHub app secret (`X-Hub-Signature-256` header).
+- The system stores installation metadata (installation_id, account_login, account_type) in the registry database `installations` collection.
+- The system links authenticated users to installations via the `user_installation_roles` collection and redirects to `GET /auth/setup?installation_id=...`.
+- Only organization tenants for explicitly installed apps are created; automatic org sync on login is disabled.
+- Database collections: `installations` (metadata), `user_installation_roles` (user-installation mappings).
+
+FR-10 Session Management ✅ IMPLEMENTED
 - The system shall maintain user sessions using HTTP-only cookies between browser and BFF.
 - Sessions stored in BFF MongoDB via `connect-mongo`.
 - BFF MongoDB is a separate instance from tenant MongoDB databases (not reachable by each other in production).
@@ -198,21 +218,20 @@ FR-8 Session Management ✅ IMPLEMENTED
 - The system shall not expose backend JWTs or GitHub tokens to the browser.
 - The system shall invalidate sessions upon user logout.
 
-FR-9 Tenant Management 🔄 IN PROGRESS
-- The system shall create a personal tenant (user-type) for each user upon first authentication.
-- The system shall synchronize GitHub organization memberships periodically to create organization tenants.
-- The system shall allow users to switch between available tenants (personal and organizations).
-- The system shall enforce strict database-level isolation between tenants.
-- Each tenant shall have its own MongoDB database instance.
-- The system shall track user roles per tenant in a central user-tenant-roles mapping.
+FR-10 Tenant Management ✅ IMPLEMENTED
+- The system creates a personal tenant (user-type) for each user upon first authentication.
+- The system allows users to switch between available tenants (personal and organizations).
+- The system enforces strict database-level isolation between tenants.
+- Each tenant has its own MongoDB database instance.
+- The system tracks user roles per tenant in the registry database `user_tenant_roles` collection.
+- Organization tenants are created only when users explicitly install the GitHub App via the "Add Organization" button (not automatic).
 
-FR-10 Organization Synchronization 🔄 IN PROGRESS
-- The system shall sync GitHub organization memberships for authenticated users **on login**.
-- The system shall create an organization tenant for each GitHub organization the user is a member of.
-- The system shall assign **ADMIN role to the first user** added to an organization tenant.
-- Subsequent organization members shall receive **VIEWER role by default** (ADMIN can promote later).
-- The system shall respect GitHub organization admin status when assigning ADMIN roles within organization tenants (if promotion logic added later).
-- Synchronization occurs only on login; no background interval-based sync.
+FR-11 Optional: Automatic Organization Member Sync 📋 FUTURE
+- Optional future feature to auto-join users to organization tenants based on GitHub organization membership.
+- Current approach requires explicit app installation; automatic member sync on login is disabled by default.
+- When implemented, the first member of an organization tenant would receive ADMIN role.
+- Subsequent members would receive a default role (e.g., VIEWER or CONTRIBUTOR).
+- Feature controlled by `GITHUB_ORG_SYNC_ENABLED` environment variable (default: false).
 
 FR-9 Auditability (basic) 
 - The system shall store creation and update timestamps for records and users. 
@@ -305,9 +324,11 @@ QR-04: Robustness to incomplete data
 - 🔄 Record creation and management (FR-3, FR-4) - GraphQL schema defined, resolvers pending
 - 🔄 Collection browsing (FR-5) - UI placeholder implemented, data fetching pending
 - 🔄 Release caching in MongoDB (partially implemented)
+- ✅ GitHub App Installation for Organization Tenants (FR-9) - Implemented; users can explicitly install app to create org tenants
 
 ## 7. Open Issues
 
 - Strategy for backup/restore (local NAS, cloud storage, etc.).
 - Mobile camera API integration refinements for barcode scanning.
 - Full release caching strategy (currently caching is partially disabled to always use live scoring orchestrator).
+- Migration strategy for existing org tenants from passive sync to active GitHub App installation (Phase 6.5 planning). - Solved. No production data yet, everything can be deleted.

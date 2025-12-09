@@ -73,6 +73,23 @@ type Mutation {
   Add a user to a tenant with a specific role.
   """
   addUserToTenant(userId: ID!, tenantId: String!, role: TenantRole!): UserTenantRole!
+
+  """
+  Handle GitHub installation webhook payloads forwarded by the BFF.
+  Validates the signature and stores installation metadata in the registry database.
+  """
+  handleGitHubInstallationWebhook(
+    input: GitHubInstallationWebhookInput!
+  ): GitHubInstallationWebhookResult!
+
+  """
+  Complete GitHub App installation setup: link user to installation and create org tenant.
+  Called after user is redirected from GitHub post-installation.
+  Requires authenticated user (BFF validates session).
+  """
+  completeInstallationSetup(
+    input: CompleteInstallationSetupInput!
+  ): CompleteInstallationSetupResult!
 }
 
 type User {
@@ -560,4 +577,45 @@ type LookupTiming {
   Total lookup time (ms).
   """
   totalMs: Int!
+}
+
+input GitHubInstallationWebhookInput {
+  """
+  Base64-encoded raw webhook payload to preserve signature integrity.
+  """
+  payloadBase64: String!
+
+  """
+  X-Hub-Signature-256 header value from GitHub.
+  """
+  signature: String!
+}
+
+type GitHubInstallationWebhookResult {
+  ok: Boolean!
+  message: String
+}
+
+input CompleteInstallationSetupInput {
+  """
+  User ID (from BFF session, already authenticated).
+  """
+  userId: String!
+
+  """
+  Installation ID from GitHub.
+  """
+  installationId: Int!
+
+  """
+  Setup action (e.g., 'install').
+  """
+  setupAction: String
+}
+
+type CompleteInstallationSetupResult {
+  ok: Boolean!
+  tenantId: String!
+  tenantName: String!
+  message: String
 }

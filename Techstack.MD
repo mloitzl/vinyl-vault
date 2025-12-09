@@ -30,7 +30,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Accept web requests from browser clients (GraphQL queries/mutations + session cookies).
 - Proxy all GraphQL queries/mutations to the backend GraphQL endpoint with JWT authorization header.
 - Manage HTTP session lifecycle and authentication via GitHub OAuth.
-- Perform GitHub organization sync on login to maintain tenant memberships.
+- Guide GitHub App installation flow via `/auth/setup` to onboard organization tenants (no automatic org sync on login).
 - Create and sign JWT tokens containing user ID, username, avatar, current tenantId, and tenantRole.
 - Track active tenant selection in session and populate JWT accordingly.
 - Expose `/auth/me` REST endpoint for client-side authentication state.
@@ -196,13 +196,38 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 **GitHub OAuth:**
 - Used for login (Web Application Flow).
 - Required scopes: `read:user`, `user:email`.
-**Configuration via environment variables:**
+- **Configuration via environment variables:**
   - `GITHUB_CLIENT_ID` - OAuth App client ID
   - `GITHUB_CLIENT_SECRET` - OAuth App client secret
   - `GITHUB_CALLBACK_URL` - Callback URL (default: `http://localhost:3001/auth/github/callback`)
   - `GITHUB_CALLBACK_URLS` - Comma-separated list of allowed callback URLs (for multiple environments)
-  - `GITHUB_ORG_SYNC_ENABLED` - Enable/disable organization sync on login
+  - `GITHUB_ORG_SYNC_ENABLED` - Legacy toggle for automatic org sync on login (default off; GitHub App install flow replaces this)
 - Setup guide: `docs/GITHUB_OAUTH_SETUP.md`
+
+**GitHub App Installation (current):**
+- Active approach for organization tenant onboarding: user-driven explicit app installation instead of automatic sync.
+- Users click "Add Organization" button to install Vinyl Vault on specific GitHub organizations they manage.
+- GitHub validates installation permissions automatically - users cannot install on orgs they don't manage.
+- Two new backend endpoints required:
+  - `POST /webhook/github` - Receives GitHub `installation.created` webhook events
+    - Contains: `installation_id`, `account.login` (org name), `account.type`
+    - Must validate webhook signature using GitHub app secret (`X-Hub-Signature-256` header)
+    - Stores installation metadata in `installations` collection
+  - `GET /auth/setup?installation_id=...` - Handles post-installation GitHub redirect
+    - Requires authenticated user (session cookie)
+    - Links user to installation in `user_installation_roles` collection
+    - Creates organization tenant for the installation
+    - Adds user as ADMIN of new org tenant
+- Database changes:
+  - New `installations` collection in registry DB storing installation metadata
+  - New `user_installation_roles` collection linking users to installations with their role
+  - See Architecture.MD section 5.3 for schema details
+- **Configuration via environment variables:**
+  - `GITHUB_APP_ID` - GitHub App ID
+  - `GITHUB_APP_PRIVATE_KEY` - GitHub App private key (PEM format)
+  - `GITHUB_APP_WEBHOOK_SECRET` - Webhook signature secret for validating incoming events
+  - `GITHUB_APP_INSTALLATION_URL` - URL for app installation (e.g., `https://github.com/apps/vinyl-vault/installations/new`)
+- This supersedes automatic GitHub organization sync on login
 
 **Music Metadata APIs:**
 - Discogs and MusicBrainz APIs queried in parallel for barcode-based release lookup.
@@ -282,8 +307,8 @@ GITHUB_CLIENT_SECRET=your_client_secret
 GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
 GITHUB_CALLBACK_URLS=http://localhost:3001/auth/github/callback,https://yourdomain.com/auth/github/callback
 
-# GitHub Organization Sync (Multi-tenant)
-GITHUB_ORG_SYNC_ENABLED=true                           # Enable org sync on login
+# GitHub Organization Sync (Multi-tenant) - legacy/optional
+GITHUB_ORG_SYNC_ENABLED=false                          # Legacy org sync on login (keep false; GitHub App install is primary)
 
 # JWT for BFF-Backend communication
 JWT_SECRET=your_jwt_secret

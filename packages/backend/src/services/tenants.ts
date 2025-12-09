@@ -59,10 +59,21 @@ export async function createOrganizationTenant(
     updatedAt: now,
   };
 
-  const result = await registryDb.collection('tenants').insertOne(tenant);
-  console.log(`[tenants] Created organization tenant: ${tenantId} (${result.insertedId})`);
-
-  return tenant;
+  try {
+    const result = await registryDb.collection('tenants').insertOne(tenant);
+    console.log(`[tenants] Created organization tenant: ${tenantId} (${result.insertedId})`);
+    return tenant;
+  } catch (err: any) {
+    if (err.code === 11000) {
+      // Tenant already exists, return the existing one
+      const existing = await registryDb.collection('tenants').findOne({ tenantId });
+      if (existing) {
+        console.log(`[tenants] Organization tenant already exists: ${tenantId}`);
+        return existing as TenantDocument;
+      }
+    }
+    throw err;
+  }
 }
 
 // Get all tenants for a user (including role information)

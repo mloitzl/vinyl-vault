@@ -12,7 +12,7 @@ import { resolvers } from './graphql/resolvers.js';
 import { extractTokenFromHeader, extractTenantContext } from './services/auth.js';
 import { config, validateConfig } from './config/index.js';
 import { getTenantDb } from './db/connection.js';
-import { getRegistryDb } from './db/registry.js';
+import { getRegistryDb, ensureRegistryIndexes } from './db/registry.js';
 import type { GraphQLContext } from './types/context.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +24,9 @@ validateConfig();
 
 async function main() {
   const typeDefs = readFileSync(join(__dirname, './schema.graphql'), 'utf-8');
+
+  // Ensure registry indexes exist before serving requests
+  await ensureRegistryIndexes();
 
   const server = new ApolloServer({
     typeDefs,

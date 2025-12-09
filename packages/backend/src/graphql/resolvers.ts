@@ -9,7 +9,15 @@ import {
   addUserToTenant,
   getUserTenants,
 } from '../services/tenants.js';
+import {
+  deleteInstallationFromEvent,
+  upsertInstallationFromEvent,
+  getInstallationById,
+  linkUserToInstallation,
+  waitForInstallation,
+} from '../services/installations.js';
 import { requireMember, requireAdmin, canRead } from '../utils/authorization.js';
+import { verifyWebhookSignature } from '../utils/githubWebhook.js';
 import type { Album, RawRelease, ScoringDetail } from '../services/scoring/types.js';
 import type { GraphQLContext } from '../types/context.js';
 import { ObjectId } from 'mongodb';
@@ -83,26 +91,7 @@ export const resolvers = {
         };
       }
 
-      // Check cache first (FR-2 / NFR-3) - use tenant database
-      if (context.db) {
-        try {
-          const cached = await findReleasesByBarcode(context.db, barcode);
-          if (Array.isArray(cached) && cached.length > 0) {
-            // For cached results, we return as legacy releases format
-            // TODO: In future, cache the Album structure directly
-            return {
-              albums: [],
-              releases: cached,
-              fromCache: true,
-              timing: null,
-              errors: [],
-            };
-          }
-        } catch (err: any) {
-          // don't fail the lookup if cache check errors — fall back to live APIs
-          console.warn('Releases cache check failed:', err?.message ?? String(err));
-        }
-      }
+      // Cache check disabled for now; we always fetch fresh so albums are populated.
 
       // Use the new blended scoring orchestrator
       const result = await lookupAndScoreBarcode(barcode);
@@ -258,6 +247,87 @@ export const resolvers = {
         throw new Error('User not found');
       }
       return user;
+    },
+    handleGitHubInstallationWebhook: async (
+      _parent: unknown,
+      _args: { input: { payloadBase64: string; signature: string } }
+    ) => {
+      const { payloadBase64, signature } = _args.input;
+      const payloadBuffer = Buffer.from(payloadBase64, 'base64');
+
+      if (!verifyWebhookSignature(payloadBuffer, signature)) {
+        throw new Error('Invalid webhook signature');
+      }
+
+      let event: any;
+      try {
+        event = JSON.parse(payloadBuffer.toString('utf8'));
+      } catch (error) {
+        throw new Error(`Invalid webhook payload: ${(error as Error)?.message ?? 'parse error'}`);
+      }
+
+      if (event?.installation) {
+        if (event.action === 'created') {
+          await upsertInstallationFromEvent(event);
+        } else if (event.action === 'deleted') {
+          await deleteInstallationFromEvent(event);
+        }
+      }
+
+      return { ok: true, message: 'Webhook processed' };
+    },
+    completeInstallationSetup: async (
+      _parent: unknown,
+      _args: { input: { userId: string; installationId: number; setupAction?: string } }
+    ) => {
+      const { userId, installationId } = _args.input;
+
+      console.log(
+        `[completeInstallationSetup] User ${userId} setting up installation ${installationId}`
+      );
+
+      // 1. Verify installation exists
+      // Webhook can arrive slightly after the user is redirected here; wait briefly.
+      const installation = await waitForInstallation(installationId, 6000, 400);
+      if (!installation) {
+        throw new Error(`Installation ${installationId} not found`);
+      }
+
+      // 2. Get user ObjectId
+      let userObjId;
+      try {
+        userObjId = new ObjectId(userId);
+      } catch {
+        throw new Error(`Invalid userId: ${userId}`);
+      }
+
+      // 3. Link user to installation
+      await linkUserToInstallation(userObjId, installationId, 'ADMIN');
+
+      // 4. Create organization tenant
+      // Tenant ID: org_{account_id}_{installation_id}
+      // For simplicity, use org_{installation_id} or org_{accountLogin}_{installationId}
+      const accountId = installation.account_id || installation.account_login;
+      const tenantName = installation.account_login;
+
+      // Check if tenant already exists
+      const existingTenant = await createOrganizationTenant(
+        accountId,
+        tenantName,
+        installation.account_login
+      );
+
+      // 5. Add user as ADMIN to the new org tenant
+      await addUserToTenant(userObjId, existingTenant.tenantId, 'ADMIN');
+
+      console.log(`[completeInstallationSetup] Created org tenant ${existingTenant.tenantId}`);
+
+      return {
+        ok: true,
+        tenantId: existingTenant.tenantId,
+        tenantName: existingTenant.name,
+        message: `Organization ${tenantName} added successfully`,
+      };
     },
     createTenant: async (
       _parent: unknown,

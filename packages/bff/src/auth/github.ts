@@ -7,6 +7,7 @@ import { config } from '../config/env.js';
 import { queryBackend } from '../services/backendClient.js';
 import { syncUserOrganizations } from '../services/orgSync.js';
 import { signJwt } from './jwt.js';
+import { handleSetup } from './setup.js';
 import type { SessionUser, AvailableTenant } from '../types/session.js';
 import { setActiveTenant, setAvailableTenants } from '../types/session.js';
 
@@ -453,9 +454,10 @@ authRouter.get('/me', (req: Request, res: Response) => {
       user: req.session.user,
       availableTenants: mappedTenants,
       activeTenant: mappedActiveTenant,
+      githubAppInstallationUrl: config.github.appInstallationUrl,
     });
   } else {
-    res.json({ user: null });
+    res.json({ user: null, githubAppInstallationUrl: config.github.appInstallationUrl });
   }
 });
 
@@ -479,3 +481,8 @@ function generateState(redirectUri?: string, returnTo?: string): string {
   }
   return parts.join('|');
 }
+
+// Setup endpoint for GitHub App installation
+// Handles post-installation redirect from GitHub
+// Creates organization tenant and links user to installation
+authRouter.get('/setup', handleSetup);

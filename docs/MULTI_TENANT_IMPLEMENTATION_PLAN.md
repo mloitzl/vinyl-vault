@@ -1,7 +1,7 @@
 # Multi-Tenant Implementation Plan
 
-**Status:** Planning Phase  
-**Last Updated:** 2025-12-07  
+**Status:** Phase 6.5 - GitHub App Installation In Progress  
+**Last Updated:** 2025-12-08  
 **Target Architecture:** Database-per-Tenant with Central Registry
 
 ## Executive Summary
@@ -11,9 +11,15 @@ This plan transforms Vinyl Vault from single-tenant to multi-tenant architecture
 **Key Decisions:**
 - ✅ Database-per-Tenant (strict data isolation)
 - ✅ Per-tenant release cache (no shared cache)
-- ✅ Periodic GitHub organization sync (every 6 hours)
+- ✅ GitHub App installation for explicit org tenant creation (replaces automatic org sync)
 - ✅ Central registry database for user-tenant-role mappings
 - ✅ JWT-based tenant context propagation
+
+**Phase Completion Status:**
+- ✅ Phases 1-4: Complete (foundation, JWT, auth flow, user creation)
+- ✅ Phase 5: Complete (GitHub organization sync implementation)
+- ✅ Phase 6: Complete (tenant switching UI and tenant management)
+- 🔄 Phase 6.5: In Progress (GitHub App installation flow for explicit org onboarding)
 
 **No Production Data:** Clean slate - can start fresh with schema changes.
 
@@ -1201,6 +1207,488 @@ pnpm dev
 
 ---
 
+## Phase 6.5: GitHub App Installation for Organization Tenants
+
+**Goal:** Shift from automatic GitHub organization sync to explicit user-driven app installation.
+
+**Status:** 🔄 IN PROGRESS (Phase 6.5)
+
+**Duration:** 4-5 days
+
+**Strategic Rationale:**
+- Current approach (automatic sync) creates org tenants for every org user is member of - inefficient and doesn't reflect intent
+- New approach (explicit installation) only creates org tenants when user explicitly installs the app
+- GitHub validates permissions automatically - more secure than manual permission checking
+- Aligns with principle of explicit user intent and minimal data collection
+- Enables future features like "remove organization" and "organization settings"
+
+### Overview
+
+The new GitHub App installation flow uses a dual authentication pattern:
+
+**Mode 1: User Authentication (Existing)**
+- "Sign in with GitHub" button
+- Provides: User identity, avatar, email
+- Result: Personal tenant creation and user login
+
+**Mode 2: GitHub App Installation (New)**
+- "Add Organization" button on login screen
+- User directed to GitHub App installation URL
+- GitHub displays only organizations where user has installation authority
+- User explicitly clicks "Install"
+- GitHub sends webhook + redirect back to app
+- Backend links user to installation and creates org tenant
+
+### Benefits
+
+| Aspect                    | Current (Automatic Sync)          | Proposed (GitHub App)               |
+| ------------------------- | --------------------------------- | ----------------------------------- |
+| **Permission Validation** | Manual API queries                | Automatic - GitHub filters orgs     |
+| **Privacy**               | Views all user's org memberships  | Only learns of installed orgs       |
+| **User Intent**           | Implicit - automatic              | Explicit - deliberate action        |
+| **Database Cleanliness**  | Unnecessary org tenants           | Only tenants user wants             |
+| **Permission Bugs**       | Risk of access to restricted orgs | GitHub guarantees permission exists |
+| **API Efficiency**        | More API calls to verify orgs     | Minimal overhead                    |
+
+### Phase 6.5 Checklist (execute in order)
+
+1) Environment config: Add GitHub App environment variables
+2) Database schema: Create `installations` and `user_installation_roles` collections in registry DB
+3) Webhook endpoint: Implement `POST /webhook/github` endpoint with signature validation
+4) Setup endpoint: Implement `GET /setup?installation_id=...` endpoint for post-installation redirect
+5) Backend tenant creation: Update `createOrganizationTenant` to support GitHub app installations
+6) Frontend: Add "Add Organization" button on login/welcome screen
+7) Frontend: Link "Add Organization" button to GitHub App installation URL
+8) Testing: Webhook signature validation, installation creation, org tenant creation
+9) Verification: No TypeScript errors, lint passes, all tests pass
+
+### Task Details
+
+#### Task 1: Environment Configuration
+
+**File:** `packages/bff/src/config/env.ts` and root `.env.sample`
+
+Add new environment variables:
+```typescript
+// GitHub App Configuration
+export const githubAppId = process.env.GITHUB_APP_ID;
+export const githubAppPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+export const githubAppWebhookSecret = process.env.GITHUB_APP_WEBHOOK_SECRET;
+export const githubAppInstallationUrl = process.env.GITHUB_APP_INSTALLATION_URL;
+```
+
+**Update `.env.sample`:**
+```
+# GitHub App Installation Configuration
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_APP_WEBHOOK_SECRET=
+GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault/installations/new
+```
+
+#### Task 2: Database Schema
+
+**File:** `packages/backend/src/db/registry.ts` (extend existing)
+
+Add new collections to registry database:
+
+**`installations` Collection:**
+```javascript
+// Index: { installation_id: 1 } - for webhook lookups
+// Index: { account_login: 1 } - for org name lookups
+{
+  _id: ObjectId,
+  installation_id: number,        // GitHub installation ID (unique)
+  account_login: string,          // Organization name (e.g., "acme-corp")
+  account_type: 'User' | 'Organization',
+  account_id: number,             // GitHub account ID
+  repositories_count?: number,    // Optional metadata
+  created_at: Date,               // When app was installed
+  updated_at: Date,
+  
+  // Who installed it
+  installed_by_user_id: string,   // Local user ID who installed
+  installed_at: Date
+}
+```
+
+**`user_installation_roles` Collection:**
+```javascript
+// Index: { user_id: 1, installation_id: 1 } - for user lookups
+// Index: { installation_id: 1 } - for installation lookups
+{
+  _id: ObjectId,
+  user_id: string,                // Local user ID
+  installation_id: number,        // Foreign key to installations
+  org_name: string,               // Organization name (denormalized)
+  role: 'OWNER' | 'MANAGER',      // User's GitHub org role
+  created_at: Date
+}
+```
+
+#### Task 3: Webhook Endpoint
+
+**File:** New `packages/bff/src/auth/webhook.ts`
+
+Create webhook handler:
+```typescript
+import crypto from 'crypto';
+
+/**
+ * Verify GitHub webhook signature
+ * @param payload Raw request body
+ * @param signature X-Hub-Signature-256 header value
+ * @param secret GitHub App webhook secret
+ * @returns true if signature is valid
+ */
+export function verifyWebhookSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  const computed = `sha256=${crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex')}`;
+  return crypto.timingSafeEqual(computed, signature);
+}
+
+/**
+ * Handle GitHub installation.created webhook event
+ * POST /webhook/github
+ * 
+ * Expected payload:
+ * {
+ *   action: 'created',
+ *   installation: {
+ *     id: number,
+ *     account: {
+ *       login: string,
+ *       type: 'User' | 'Organization',
+ *       id: number
+ *     },
+ *     repositories_count: number,
+ *     ...
+ *   }
+ * }
+ */
+export async function handleInstallationCreated(
+  payload: any,
+  registryDb: Db
+): Promise<void> {
+  const { installation } = payload;
+  
+  if (installation.action !== 'created') {
+    return; // Ignore other actions for now
+  }
+
+  const installationsCollection = registryDb.collection('installations');
+
+  // Store installation record
+  await installationsCollection.updateOne(
+    { installation_id: installation.id },
+    {
+      $set: {
+        installation_id: installation.id,
+        account_login: installation.account.login,
+        account_type: installation.account.type,
+        account_id: installation.account.id,
+        repositories_count: installation.repositories_count,
+        created_at: new Date(installation.created_at),
+        updated_at: new Date(),
+      },
+    },
+    { upsert: true }
+  );
+
+  console.log(
+    `[webhook] Stored installation ${installation.id} for ${installation.account.login}`
+  );
+}
+```
+
+**Add to BFF Express routes (`packages/bff/src/index.ts`):**
+```typescript
+import { verifyWebhookSignature, handleInstallationCreated } from './auth/webhook';
+
+app.post('/webhook/github', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const signature = req.headers['x-hub-signature-256'] as string;
+    const payload = (req as any).rawBody || req.body;
+
+    if (!verifyWebhookSignature(
+      typeof payload === 'string' ? payload : JSON.stringify(payload),
+      signature,
+      process.env.GITHUB_APP_WEBHOOK_SECRET!
+    )) {
+      console.warn('[webhook] Invalid signature');
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    const event = JSON.parse(
+      typeof payload === 'string' ? payload : JSON.stringify(payload)
+    );
+
+    if (event.action === 'created' && event.installation) {
+      const registryDb = getRegistryDb();
+      await handleInstallationCreated(event, registryDb);
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[webhook] Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+```
+
+#### Task 4: Setup Endpoint
+
+**File:** `packages/bff/src/auth/github.ts` (extend existing)
+
+Add setup endpoint:
+```typescript
+/**
+ * GET /setup?installation_id=...&setup_action=install
+ * Called after GitHub App installation
+ * User must be authenticated
+ */
+app.get('/setup', async (req, res) => {
+  try {
+    const { installation_id, setup_action } = req.query;
+
+    // Require authenticated session
+    if (!req.session.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const installationId = parseInt(installation_id as string, 10);
+    if (isNaN(installationId)) {
+      return res.status(400).json({ error: 'Invalid installation_id' });
+    }
+
+    const registryDb = getRegistryDb();
+
+    // Get installation record
+    const installation = await registryDb
+      .collection('installations')
+      .findOne({ installation_id: installationId });
+
+    if (!installation) {
+      return res.status(404).json({ error: 'Installation not found' });
+    }
+
+    // Link user to installation
+    await registryDb
+      .collection('user_installation_roles')
+      .updateOne(
+        {
+          user_id: req.session.userId,
+          installation_id: installationId,
+        },
+        {
+          $set: {
+            user_id: req.session.userId,
+            installation_id: installationId,
+            org_name: installation.account_login,
+            role: 'OWNER', // TODO: Query GitHub to get actual role
+            created_at: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+    // Create organization tenant via backend
+    const createOrgTenantQuery = `
+      mutation CreateOrganizationTenant($input: CreateTenantInput!) {
+        createTenant(input: $input) {
+          tenant {
+            id
+            name
+            type
+          }
+        }
+      }
+    `;
+
+    const response = await backendGraphQLClient.request(
+      createOrgTenantQuery,
+      {
+        input: {
+          tenantType: 'ORGANIZATION',
+          name: installation.account_login,
+          githubOrgName: installation.account_login,
+        },
+      },
+      {
+        Authorization: `Bearer ${signJwt({
+          sub: req.session.userId,
+          tenantId: req.session.tenantId,
+          tenantRole: 'ADMIN',
+        })}`,
+      }
+    );
+
+    // Add user as ADMIN of org tenant
+    const addUserQuery = `
+      mutation AddUserToTenant($input: AddUserToTenantInput!) {
+        addUserToTenant(input: $input) {
+          userTenantRole {
+            role
+          }
+        }
+      }
+    `;
+
+    await backendGraphQLClient.request(
+      addUserQuery,
+      {
+        input: {
+          tenantId: response.createTenant.tenant.id,
+          userId: req.session.userId,
+          role: 'ADMIN',
+        },
+      },
+      {
+        Authorization: `Bearer ${signJwt({
+          sub: req.session.userId,
+          tenantId: response.createTenant.tenant.id,
+          tenantRole: 'ADMIN',
+        })}`,
+      }
+    );
+
+    // Add new tenant to session
+    if (!req.session.availableTenants) {
+      req.session.availableTenants = [];
+    }
+
+    req.session.availableTenants.push({
+      tenantId: response.createTenant.tenant.id,
+      tenantName: installation.account_login,
+      tenantType: 'ORGANIZATION',
+      userRole: 'ADMIN',
+    });
+
+    await req.session.save();
+
+    // Redirect to app with success
+    return res.redirect(`/?org_installed=${installation.account_login}`);
+  } catch (error) {
+    console.error('[setup] Error:', error);
+    res.status(500).json({ error: 'Setup failed' });
+  }
+});
+```
+
+#### Task 5: Backend Tenant Creation Update
+
+**File:** `packages/backend/src/services/tenants.ts` (extend existing)
+
+Update `createOrganizationTenant` to handle GitHub app installations:
+```typescript
+export async function createOrganizationTenant(
+  registryDb: Db,
+  input: {
+    tenantType: 'ORGANIZATION';
+    name: string;
+    githubOrgName: string;
+    installationId?: number; // Optional: link to GitHub app installation
+  }
+): Promise<any> {
+  // Check if org tenant already exists
+  const existing = await registryDb
+    .collection('tenants')
+    .findOne({
+      tenantType: 'ORGANIZATION',
+      githubOrgName: input.githubOrgName,
+    });
+
+  if (existing) {
+    throw new Error(`Organization tenant already exists: ${input.githubOrgName}`);
+  }
+
+  // Create organization tenant
+  const tenantId = `org_${input.githubOrgName}`;
+  const databaseName = `vinylvault_${tenantId}`;
+
+  const tenantRecord = {
+    tenantId,
+    tenantType: 'ORGANIZATION',
+    name: input.name,
+    githubOrgName: input.githubOrgName,
+    databaseName,
+    installationId: input.installationId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  // Store in registry
+  await registryDb.collection('tenants').insertOne(tenantRecord);
+
+  // Create tenant database (will be created on first write)
+  console.log(`[tenants] Created org tenant: ${tenantId}`);
+
+  return { id: tenantId, name: input.name, type: 'ORGANIZATION' };
+}
+```
+
+#### Task 6-7: Frontend UI
+
+**File:** `packages/frontend/src/components/LoginScreen.tsx` (or equivalent)
+
+Add "Add Organization" button:
+```typescript
+export const AddOrgButton = () => {
+  const githubAppInstallationUrl = import.meta.env.VITE_GITHUB_APP_INSTALLATION_URL ||
+    'https://github.com/apps/vinyl-vault/installations/new';
+
+  return (
+    <a
+      href={githubAppInstallationUrl}
+      className="inline-block px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+    >
+      Add Organization
+    </a>
+  );
+};
+```
+
+Display alongside "Sign in with GitHub" button.
+
+#### Task 8: Testing
+
+- [ ] Test webhook signature validation (valid and invalid signatures)
+- [ ] Test webhook received and stored in database
+- [ ] Test `/setup` endpoint with valid and invalid installation IDs
+- [ ] Test org tenant creation
+- [ ] Test user added as ADMIN
+- [ ] Test tenant appears in tenant switcher
+- [ ] Test multiple users can install on same org
+- [ ] Test installation ID appears in session
+
+#### Task 9: Verification
+
+- [ ] No TypeScript compilation errors
+- [ ] Lint passes
+- [ ] All tests pass
+- [ ] Webhook endpoint responds with 200 OK
+- [ ] Setup endpoint redirects correctly
+- [ ] Organization tenants appear in tenant switcher
+
+### Migration Strategy (From Current Automatic Sync)
+
+If you have existing org tenants from the passive sync phase:
+
+1. **Disable passive sync** - Set `GITHUB_ORG_SYNC_ENABLED=false`
+2. **Create installation records** - For each existing org tenant, insert an `installations` record
+3. **Link users** - For users who "own" org tenants, create `user_installation_roles` records
+4. **Keep existing tenants** - Don't delete org tenants, allow users to "remove" them individually
+5. **Document transition** - Update requirements and architecture docs
+6. **Communicate to users** - If applicable, notify users of the new explicit installation flow
+
+---
+
 ## Phase 7: Migration & Cleanup
 
 **Goal:** Clean up old single-tenant code and data structures.
@@ -1373,19 +1861,20 @@ pnpm dev
 
 ### Estimated Timeline
 
-| Phase | Duration | Dependencies |
-|-------|----------|--------------|
-| Phase 1: Foundation | 2-3 days | None |
-| Phase 2: JWT & Context | 2-3 days | Phase 1 |
-| Phase 3: Personal Tenant | 2 days | Phase 1, 2 |
-| Phase 4: Tenant-Scoped Data | 3-4 days | Phase 1, 2, 3 |
-| Phase 5: GitHub Sync | 3 days | Phase 1, 2, 3 |
-| Phase 6: Tenant Switching | 3 days | Phase 4, 5 |
-| Phase 7: Migration & Cleanup | 2 days | Phase 1-6 |
-| Phase 8: Testing & Polish | 3-4 days | Phase 1-7 |
-| Phase 9: Production Ready | 2 days | Phase 1-8 |
+| Phase                              | Duration | Status        | Dependencies  |
+| ---------------------------------- | -------- | ------------- | ------------- |
+| Phase 1: Foundation                | 2-3 days | ✅ Complete    | None          |
+| Phase 2: JWT & Context             | 2-3 days | ✅ Complete    | Phase 1       |
+| Phase 3: Personal Tenant           | 2 days   | ✅ Complete    | Phase 1, 2    |
+| Phase 4: Tenant-Scoped Data        | 3-4 days | ✅ Complete    | Phase 1, 2, 3 |
+| Phase 5: GitHub Sync               | 3 days   | ✅ Complete    | Phase 1, 2, 3 |
+| Phase 6: Tenant Switching          | 3 days   | ✅ Complete    | Phase 4, 5    |
+| Phase 7: Migration & Cleanup       | 2 days   | ✅ Complete    | Phase 1-6     |
+| Phase 8: Testing & Polish          | 3-4 days | ✅ Complete    | Phase 1-7     |
+| Phase 9: Production Ready          | 2 days   | ✅ Complete    | Phase 1-8     |
+| Phase 6.5: GitHub App Installation | 4-5 days | 🔄 In Progress | Phase 1-9     |
 
-**Total Estimated Duration:** 22-28 days (4-6 weeks)
+**Total Estimated Duration:** 22-28 days (4-6 weeks) + Phase 6.5
 
 ---
 
@@ -1393,11 +1882,11 @@ pnpm dev
 
 ### Functional Requirements
 - ✅ Users automatically get personal tenant on signup
-- ✅ GitHub organization members share organization tenant
+- ✅ Users can explicitly install GitHub App to create organization tenants
 - ✅ Users can switch between tenants in UI
 - ✅ Data completely isolated between tenants
 - ✅ Role-based authorization enforced (admin, member, viewer)
-- ✅ Organization sync runs periodically and on login
+- ✅ Organization tenants created only when app is explicitly installed
 
 ### Technical Requirements
 - ✅ Database-per-tenant architecture implemented
@@ -1406,6 +1895,8 @@ pnpm dev
 - ✅ Connection pooling efficient (<100ms tenant switching)
 - ✅ No cross-tenant data access possible
 - ✅ All queries execute against correct tenant database
+- ✅ GitHub App webhook signature validation implemented
+- ✅ Post-installation redirect flow (`/auth/setup`) working
 
 ### Quality Requirements
 - ✅ No regressions in existing barcode scanning functionality

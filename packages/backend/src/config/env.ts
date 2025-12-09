@@ -30,6 +30,10 @@ function getConfig() {
       userAgent: process.env.MUSICBRAINZ_USER_AGENT || 'VinylVault/0.1.0 (example@example.com)',
     },
 
+    github: {
+      appWebhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || '',
+    },
+
     // Scoring
     scoring: {
       configPath: process.env.SCORING_CONFIG_PATH,
@@ -60,6 +64,10 @@ export function validateConfig(): void {
     if (config.jwt.secret === 'dev-jwt-secret-change-in-production') {
       errors.push('JWT_SECRET must be set in production');
     }
+  }
+
+  if (!config.github.appWebhookSecret) {
+    errors.push('GITHUB_APP_WEBHOOK_SECRET is required to validate GitHub webhooks');
   }
 
   if (errors.length > 0) {

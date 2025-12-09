@@ -40,11 +40,12 @@ Main components:
     - `/auth/me` - Returns current user and available tenants.
     - `/auth/tenants` - Lists user's accessible tenants (personal + orgs).
     - `/auth/switch-tenant` - Switches active tenant in session.
+    - `/auth/setup` - Handles post-installation redirect from GitHub App to link user and create org tenant.
   - Uses `express-session` with `connect-mongo` for session storage.
   - HTTP-only secure cookies for browser sessions.
   - Session includes current tenant context (tenantId, tenantType).
   - Creates short-lived JWTs with tenant context for calls to the Domain Backend.
-  - Syncs GitHub organization memberships on login to maintain tenant access.
+  - Receives GitHub App webhook events and integrates with backend for org tenant creation.
 
 - **Domain Backend** (`packages/backend`)
   - Apollo Server (standalone).
@@ -127,6 +128,49 @@ Security hardening on the Pi:
 - All tenant operations (create, update, fetch) are forwarded from BFF to Backend via GraphQL queries and mutations with tenant context.
 - BFF stores only session data in its own MongoDB instance.
 - Backend validates tenant context in JWT and routes operations to correct tenant database.
+
+### 5.1.1 Dual Authentication Pattern
+
+The system uses two complementary GitHub authentication modes:
+
+**Mode 1: User Authentication**
+- "Sign in with GitHub" button on login screen
+- Provides: User avatar, email, GitHub username
+- Result: User identification ("I am Martin")
+- Scope: `read:user user:email read:org`
+- Use: Personal tenant creation and user-scoped operations
+
+**Mode 2: GitHub App Installation**
+- "Add Organization" button allowing explicit app installation
+- User directed to: `https://github.com/apps/<app-slug>/installations/new`
+- GitHub displays only organizations where user has installation authority
+- Provides: Installation ID and organization name
+- Result: Organization-to-installation association ("Organization X can be managed by Installation ID")
+- No additional scopes needed - installation flow grants necessary permissions automatically
+- Use: Organization tenant creation with explicit user intent
+
+**Integration Flow:**
+
+1. Logged-in user clicks "Add Organization" button on frontend
+2. Frontend redirects to GitHub App installation URL
+3. GitHub validates user has installation authority for selected org(s)
+4. User completes installation → GitHub sends `installation.created` webhook
+5. Backend receives webhook with `installation_id` and `account.login` (org name) to `POST /webhook/github`
+6. Backend validates webhook signature and stores installation in `installations` collection (registry)
+7. GitHub redirects user to `/auth/setup?installation_id=...` (handled by BFF)
+8. BFF verifies user is authenticated and calls backend mutation `completeInstallationSetup`
+9. Backend links user to installation in `user_installation_roles` collection
+10. Backend creates organization tenant and adds user as ADMIN
+11. BFF updates session to include new org tenant in `availableTenants`
+12. Frontend automatically switches to new org tenant and displays success message
+
+**Advantages Over Automatic Sync:**
+- Permission validation: GitHub filters orgs automatically - only shows ones user can manage
+- Privacy: System only learns about orgs where user explicitly installs app
+- User intent: Explicit action, not surprising automatic tenant creation
+- Database efficiency: Only org tenants created when wanted
+- No permission confusion: GitHub guarantees install only if user has authority
+- Webhook-driven: Installation events create tenants in real-time, not on login
 
 ### 5.2 Authorization
 
@@ -282,6 +326,119 @@ Security hardening on the Pi:
   - `GITHUB_CALLBACK_URL`
   - `GITHUB_CALLBACK_URLS` (comma-separated list for multiple environments)
   - `GITHUB_ORG_SYNC_ENABLED` (enable/disable organization sync on login)
+
+**GitHub App Installation Flow (Phase 6.5 - Planned):**
+
+*Overview:* Shift from automatic GitHub organization sync on login to explicit user-driven app installation.
+
+*Flow Diagram:*
+```
+┌─────────────────────────────────────┐
+│ User clicks "Add Organization"      │
+├─────────────────────────────────────┤
+│ Redirects to GitHub App install URL │
+│ https://github.com/apps/vinyl-...   │
+└────────────┬────────────────────────┘
+             │
+             ↓
+┌─────────────────────────────────────┐
+│ GitHub displays orgs where user     │
+│ has installation authority          │
+│ (typically org owners/managers)     │
+└────────────┬────────────────────────┘
+             │
+             ↓
+┌─────────────────────────────────────┐
+│ User clicks "Install"               │
+│ GitHub validates permissions        │
+│ (automatic - no access to restricted orgs)
+└────────────┬────────────────────────┘
+             │
+      ┌──────┴───────┐
+      ↓              ↓
+┌────────────┐   ┌─────────────────┐
+│ Webhook    │   │ Browser Redirect│
+│ POST       │   │ to /setup       │
+│ /webhook/  │   │ with installation
+│ github     │   │ _id param       │
+└────┬───────┘   └────────┬────────┘
+     │                    │
+     └────────┬───────────┘
+              ↓
+      ┌──────────────────┐
+      │ Backend Links    │
+      │ User to Install  │
+      │ Creates Org      │
+      │ Tenant           │
+      └──────────────────┘
+             ↓
+      ┌──────────────────┐
+      │ Org Tenant Ready │
+      │ in Switcher      │
+      └──────────────────┘
+```
+
+*New Endpoints:*
+- `POST /webhook/github` - BFF/Backend webhook endpoint
+  - Receives GitHub `installation.created` events
+  - Validates webhook signature: `X-Hub-Signature-256` header verified with app webhook secret
+  - Extracts: `installation_id`, `account.login` (org name), `account.type`
+  - Stores installation record in `installations` collection
+  - Returns 200 OK
+
+- `GET /setup?installation_id=...&setup_action=install` - BFF endpoint
+  - Requires authenticated user (session cookie validation)
+  - Extracts `installation_id` from query parameter
+  - Verifies user is authenticated (CSRF protection)
+  - Links user to installation in `user_installation_roles` collection
+  - Calls Backend to create organization tenant for the installation
+  - Adds user as ADMIN role in new org tenant
+  - Redirects to app with success message or error page
+
+*New Database Collections (Registry Database):*
+
+`installations` Collection:
+```typescript
+{
+  _id: ObjectId,
+  installation_id: number,        // GitHub installation ID (unique)
+  account_login: string,          // Organization name (e.g., "acme-corp")
+  account_type: 'User' | 'Organization',
+  account_id: number,             // GitHub account ID
+  repositories_count: number,     // (optional) number of repos
+  created_at: Date,               // When app was installed
+  updated_at: Date,
+  
+  // Who installed it
+  installed_by_user_id: string,   // Local user ID who performed installation
+  installed_at: Date
+}
+```
+
+`user_installation_roles` Collection:
+```typescript
+{
+  _id: ObjectId,
+  user_id: string,                // Local user ID
+  installation_id: number,        // Foreign key to installations (GitHub installation ID)
+  org_name: string,               // Organization name (denormalized for easy lookup)
+  role: 'OWNER' | 'MANAGER',      // User's role at time of installation (from GitHub org API)
+  created_at: Date
+}
+```
+
+*Security Considerations:*
+- Webhook signature validation required: Always verify `X-Hub-Signature-256` header against app webhook secret
+- Installation ID verification: Verify installation_id from URL matches webhook-received data (optional double-check)
+- User authentication required: User must be authenticated (session cookie) to complete `/setup`
+- CSRF protection: Validate session state during installation completion
+- Rate limiting: Prevent duplicate installation attempts within short timeframe
+
+*Configuration via environment variables:*
+  - `GITHUB_APP_ID` - GitHub App application ID
+  - `GITHUB_APP_PRIVATE_KEY` - GitHub App private key (PEM format, multi-line)
+  - `GITHUB_APP_WEBHOOK_SECRET` - Webhook signature secret for HMAC-SHA256 validation
+  - `GITHUB_APP_INSTALLATION_URL` - Installation URL (e.g., `https://github.com/apps/vinyl-vault/installations/new`)
 
 **Environment Configuration:**
 - All secrets stored in `.env` file (not committed to git).

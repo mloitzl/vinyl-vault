@@ -4,3 +4,5 @@ export { ErrorAlert } from './ErrorAlert';
 export { LoadingSpinner } from './LoadingSpinner';
 export { ScanBarcode } from './ScanBarcode';
 export { TenantSwitcher } from './TenantSwitcher';
+export { AddOrgButton } from './AddOrgButton';
+export { OrgInstalledNotification } from './OrgInstalledNotification';
