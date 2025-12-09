@@ -201,11 +201,10 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
   - `GITHUB_CLIENT_SECRET` - OAuth App client secret
   - `GITHUB_CALLBACK_URL` - Callback URL (default: `http://localhost:3001/auth/github/callback`)
   - `GITHUB_CALLBACK_URLS` - Comma-separated list of allowed callback URLs (for multiple environments)
-  - `GITHUB_ORG_SYNC_ENABLED` - Legacy toggle for automatic org sync on login (default off; GitHub App install flow replaces this)
 - Setup guide: `docs/GITHUB_OAUTH_SETUP.md`
 
 **GitHub App Installation (current):**
-- Active approach for organization tenant onboarding: user-driven explicit app installation instead of automatic sync.
+- Active approach for organization tenant onboarding: user-driven explicit app installation.
 - Users click "Add Organization" button to install Vinyl Vault on specific GitHub organizations they manage.
 - GitHub validates installation permissions automatically - users cannot install on orgs they don't manage.
 - Two new backend endpoints required:
@@ -306,9 +305,6 @@ GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
 GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
 GITHUB_CALLBACK_URLS=http://localhost:3001/auth/github/callback,https://yourdomain.com/auth/github/callback
-
-# GitHub Organization Sync (Multi-tenant) - legacy/optional
-GITHUB_ORG_SYNC_ENABLED=false                          # Legacy org sync on login (keep false; GitHub App install is primary)
 
 # JWT for BFF-Backend communication
 JWT_SECRET=your_jwt_secret

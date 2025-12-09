@@ -13,7 +13,6 @@ function getConfig() {
       clientId: process.env.GITHUB_CLIENT_ID || '',
       clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
       callbackUrl: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback',
-      orgSyncEnabled: (process.env.GITHUB_ORG_SYNC_ENABLED || 'true').toLowerCase() === 'true',
       appId: process.env.GITHUB_APP_ID || '',
       appPrivateKeyPath: process.env.GITHUB_APP_PRIVATE_KEY_PATH || '',
       appWebhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || '',

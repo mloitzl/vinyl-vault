@@ -8,7 +8,7 @@ function toBuffer(payload: Buffer | string): Buffer {
 }
 
 function getWebhookSecret(): string {
-  let secret = config.github.appWebhookSecret;
+  const secret = config.github.appWebhookSecret;
   return secret;
 }
 

@@ -325,11 +325,10 @@ The system uses two complementary GitHub authentication modes:
   - `GITHUB_CLIENT_SECRET`
   - `GITHUB_CALLBACK_URL`
   - `GITHUB_CALLBACK_URLS` (comma-separated list for multiple environments)
-  - `GITHUB_ORG_SYNC_ENABLED` (enable/disable organization sync on login)
 
-**GitHub App Installation Flow (Phase 6.5 - Planned):**
+**GitHub App Installation Flow (Phase 6.5):**
 
-*Overview:* Shift from automatic GitHub organization sync on login to explicit user-driven app installation.
+*Overview:* Explicit user-driven app installation for organization tenant onboarding.
 
 *Flow Diagram:*
 ```

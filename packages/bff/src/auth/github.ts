@@ -2,10 +2,8 @@
 // Implements GitHub OAuth Web Application Flow per Architecture.MD
 
 import { Router, Request, Response, type IRouter } from 'express';
-import { ObjectId } from 'mongodb';
 import { config } from '../config/env.js';
 import { queryBackend } from '../services/backendClient.js';
-import { syncUserOrganizations } from '../services/orgSync.js';
 import { signJwt } from './jwt.js';
 import { handleSetup } from './setup.js';
 import type { SessionUser, AvailableTenant } from '../types/session.js';
@@ -308,8 +306,8 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Set activeTenantId in session to personal tenant
     const activeTenantId = personalTenantId || `user_${user.id}`;
 
-    // Sign JWT for org sync operations (uses personal tenant as default context)
-    const serviceJwtForOrgSync = signJwt({
+    // Sign JWT for backend operations
+    const jwt = signJwt({
       sub: user.id,
       username: user.displayName || user.githubLogin,
       avatarUrl: user.avatarUrl,
@@ -317,27 +315,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       tenantRole: 'ADMIN',
       githubLogin: user.githubLogin,
     });
-
-    // Sync user's GitHub organizations to backend org tenants (Phase 5)
-    // This is async but we don't wait for it - run in background
-    // Errors are logged but don't block login
-    try {
-      const userId = new ObjectId(user.id);
-      syncUserOrganizations(
-        userId,
-        user.githubLogin,
-        tokenData.access_token,
-        serviceJwtForOrgSync,
-        activeTenantId // Pass the personal tenant ID to avoid DB query
-      ).catch((err: any) => {
-        console.warn(
-          `[github.callback] Failed to sync user organizations: ${err?.message || String(err)}`
-        );
-        // Non-fatal: org sync failure doesn't block login
-      });
-    } catch (err) {
-      console.warn(`[github.callback] Invalid user ID format: ${user.id}`);
-    }
 
     // Fetch all available tenants for user (personal + organizations)
     let availableTenants: AvailableTenant[] = [];
@@ -354,7 +331,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
         }
         `,
         { userId: user.id },
-        { jwt: serviceJwtForOrgSync }
+        { jwt }
       );
       availableTenants = tenantsResult.userTenants || [];
       console.log(`[github.callback] User has ${availableTenants.length} available tenants`);

@@ -1,6 +1,6 @@
 // Domain Backend GraphQL resolvers
 
-import { upsertReleases, findReleasesByBarcode } from '../services/releasesCache.js';
+import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserRole } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
@@ -12,7 +12,6 @@ import {
 import {
   deleteInstallationFromEvent,
   upsertInstallationFromEvent,
-  getInstallationById,
   linkUserToInstallation,
   waitForInstallation,
 } from '../services/installations.js';

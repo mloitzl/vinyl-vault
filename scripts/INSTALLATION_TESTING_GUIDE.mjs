@@ -12,7 +12,6 @@
  * 2. call-setup-endpoint.mjs - Call the /auth/setup endpoint after installation
  * 3. test-installation-flow.mjs - Full end-to-end test combining both steps
  *
- * Note: GITHUB_ORG_SYNC_ENABLED and all related legacy code have been removed from the codebase and environment.
  */
 
 console.log(`

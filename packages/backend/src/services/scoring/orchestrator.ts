@@ -60,7 +60,7 @@ async function fetchMusicBrainzReleases(barcode: string): Promise<{
 
       // Attempt to fetch release details for genres/styles/trackList
       let genre: string[] = [];
-      let trackList: Track[] = [];
+      const trackList: Track[] = [];
 
       try {
         const details = await musicbrainz.getReleaseDetails(externalId);

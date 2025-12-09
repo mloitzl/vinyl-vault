@@ -226,12 +226,6 @@ FR-10 Tenant Management ✅ IMPLEMENTED
 - The system tracks user roles per tenant in the registry database `user_tenant_roles` collection.
 - Organization tenants are created only when users explicitly install the GitHub App via the "Add Organization" button (not automatic).
 
-FR-11 Optional: Automatic Organization Member Sync 📋 FUTURE
-- Optional future feature to auto-join users to organization tenants based on GitHub organization membership.
-- Current approach requires explicit app installation; automatic member sync on login is disabled by default.
-- When implemented, the first member of an organization tenant would receive ADMIN role.
-- Subsequent members would receive a default role (e.g., VIEWER or CONTRIBUTOR).
-- Feature controlled by `GITHUB_ORG_SYNC_ENABLED` environment variable (default: false).
 
 FR-9 Auditability (basic) 
 - The system shall store creation and update timestamps for records and users. 
