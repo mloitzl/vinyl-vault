@@ -60,14 +60,6 @@ type Mutation {
   upsertUser(input: UpsertUserInput!): User!
 
   """
-  Update a user's role to ADMIN, MEMBER, or VIEWER (admin only).
-  - ADMIN: Full application control
-  - MEMBER: Can create and manage own records
-  - VIEWER: Read-only access
-  """
-  updateUserRole(userId: ID!, role: UserRole!): User!
-
-  """
   Create a new tenant (personal or organization).
   """
   createTenant(input: CreateTenantInput!): Tenant!
