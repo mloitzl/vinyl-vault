@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BrowserMultiFormatReader } from '@zxing/browser';
 import { BrowserMultiFormatReader as ZXingBrowserMultiFormatReader } from '@zxing/browser';
+import { Toast } from './Toast';
 
 type Track = {
   position?: string;
@@ -78,7 +79,7 @@ type LookupTiming = {
   totalMs: number;
 };
 
-export function ScanBarcode() {
+export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const [barcode, setBarcode] = useState('5099902988313');
   const [isLoading, setIsLoading] = useState(false);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -86,6 +87,7 @@ export function ScanBarcode() {
   const [timing, setTiming] = useState<LookupTiming | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [expandedAlbumId, setExpandedAlbumId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -143,12 +145,12 @@ export function ScanBarcode() {
         body: JSON.stringify({ query, variables: { barcode: bc } }),
       });
       const body = await res.json();
-      
+
       // Handle GraphQL errors
       if (body.errors) {
         setErrors(body.errors.map((e: any) => e.message));
       }
-      
+
       // Process data even if there were some errors
       const payload = body.data?.scanBarcode;
       if (payload) {
@@ -369,7 +371,9 @@ export function ScanBarcode() {
               >
                 {/* Main album card - clickable to select */}
                 <div
-                  className={`p-4 cursor-pointer ${isSelected ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'}`}
+                  className={`p-4 cursor-pointer ${
+                    isSelected ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
+                  }`}
                   onClick={() => setSelectedAlbumId(isSelected ? null : album.id)}
                 >
                   <div className="flex gap-4">
@@ -383,8 +387,12 @@ export function ScanBarcode() {
                         />
                       ) : (
                         <div className="w-20 h-20 bg-gray-100 rounded shadow-sm flex items-center justify-center">
-                          <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/>
+                          <svg
+                            className="w-8 h-8 text-gray-300"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
                           </svg>
                         </div>
                       )}
@@ -396,10 +404,15 @@ export function ScanBarcode() {
                       <p className="text-sm text-gray-600 truncate">{album.artist}</p>
                       <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
                         {primary.release.year && <span>{primary.release.year}</span>}
-                        {primary.release.year && primary.release.country && <span className="text-gray-300">|</span>}
+                        {primary.release.year && primary.release.country && (
+                          <span className="text-gray-300">|</span>
+                        )}
                         {primary.release.country && <span>{primary.release.country}</span>}
-                        {(primary.release.year || primary.release.country) && primary.release.label && <span className="text-gray-300">|</span>}
-                        {primary.release.label && <span className="truncate max-w-[120px]">{primary.release.label}</span>}
+                        {(primary.release.year || primary.release.country) &&
+                          primary.release.label && <span className="text-gray-300">|</span>}
+                        {primary.release.label && (
+                          <span className="truncate max-w-[120px]">{primary.release.label}</span>
+                        )}
                       </div>
                     </div>
 
@@ -430,7 +443,12 @@ export function ScanBarcode() {
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                   <span>{isExpanded ? 'Less' : 'More'}</span>
                 </button>
@@ -447,13 +465,20 @@ export function ScanBarcode() {
                       )}
                       <span className="text-gray-600">
                         <span className="text-gray-400">Source:</span>{' '}
-                        <span className={primary.release.source === 'DISCOGS' ? 'text-orange-600' : 'text-blue-600'}>
+                        <span
+                          className={
+                            primary.release.source === 'DISCOGS'
+                              ? 'text-orange-600'
+                              : 'text-blue-600'
+                          }
+                        >
                           {primary.release.source}
                         </span>
                       </span>
                       {album.genres.length > 0 && (
                         <span className="text-gray-600">
-                          <span className="text-gray-400">Genre:</span> {album.genres.slice(0, 2).join(', ')}
+                          <span className="text-gray-400">Genre:</span>{' '}
+                          {album.genres.slice(0, 2).join(', ')}
                         </span>
                       )}
                     </div>
@@ -462,7 +487,9 @@ export function ScanBarcode() {
                       {/* Score breakdown - compact horizontal */}
                       {breakdown && (
                         <div>
-                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Score Breakdown</h4>
+                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Score Breakdown
+                          </h4>
                           <div className="flex flex-wrap gap-2">
                             {[
                               { label: 'Media', value: breakdown.mediaType },
@@ -471,19 +498,24 @@ export function ScanBarcode() {
                               { label: 'Cover', value: breakdown.coverArt },
                               { label: 'Label', value: breakdown.labelInfo },
                               { label: 'Year', value: breakdown.yearInfo },
-                            ].filter(item => item.value !== 0).map((item, i) => (
-                              <span
-                                key={i}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
-                                  item.value > 0
-                                    ? 'bg-emerald-50 text-emerald-700'
-                                    : 'bg-red-50 text-red-700'
-                                }`}
-                              >
-                                <span className="text-gray-500">{item.label}</span>
-                                <span className="font-medium">{item.value > 0 ? '+' : ''}{item.value}</span>
-                              </span>
-                            ))}
+                            ]
+                              .filter((item) => item.value !== 0)
+                              .map((item, i) => (
+                                <span
+                                  key={i}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+                                    item.value > 0
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : 'bg-red-50 text-red-700'
+                                  }`}
+                                >
+                                  <span className="text-gray-500">{item.label}</span>
+                                  <span className="font-medium">
+                                    {item.value > 0 ? '+' : ''}
+                                    {item.value}
+                                  </span>
+                                </span>
+                              ))}
                           </div>
                         </div>
                       )}
@@ -497,9 +529,13 @@ export function ScanBarcode() {
                           <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
                             {album.trackList.map((t, ti) => (
                               <div key={ti} className="px-3 py-1.5 flex items-center text-sm">
-                                <span className="w-8 text-gray-400 text-xs">{t.position ?? ti + 1}</span>
+                                <span className="w-8 text-gray-400 text-xs">
+                                  {t.position ?? ti + 1}
+                                </span>
                                 <span className="flex-1 truncate text-gray-700">{t.title}</span>
-                                {t.duration && <span className="text-gray-400 text-xs ml-2">{t.duration}</span>}
+                                {t.duration && (
+                                  <span className="text-gray-400 text-xs ml-2">{t.duration}</span>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -515,13 +551,21 @@ export function ScanBarcode() {
                           <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100 max-h-32 overflow-y-auto">
                             {album.alternativeReleases.map((alt, ai) => (
                               <div key={ai} className="px-3 py-1.5 flex items-center text-xs gap-3">
-                                <span className={`w-16 ${alt.source === 'DISCOGS' ? 'text-orange-600' : 'text-blue-600'}`}>
+                                <span
+                                  className={`w-16 ${
+                                    alt.source === 'DISCOGS' ? 'text-orange-600' : 'text-blue-600'
+                                  }`}
+                                >
                                   {alt.source}
                                 </span>
                                 <span className="w-10 text-gray-600">{alt.country ?? '—'}</span>
                                 <span className="w-10 text-gray-600">{alt.year ?? '—'}</span>
-                                <span className="flex-1 text-gray-500 truncate">{alt.label ?? '—'}</span>
-                                <span className="text-gray-700 font-medium tabular-nums">{alt.score}</span>
+                                <span className="flex-1 text-gray-500 truncate">
+                                  {alt.label ?? '—'}
+                                </span>
+                                <span className="text-gray-700 font-medium tabular-nums">
+                                  {alt.score}
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -532,7 +576,10 @@ export function ScanBarcode() {
                       {album.styles.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {album.styles.map((s, si) => (
-                            <span key={si} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                            <span
+                              key={si}
+                              className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded"
+                            >
                               {s}
                             </span>
                           ))}
@@ -546,7 +593,12 @@ export function ScanBarcode() {
                 {isSelected && (
                   <div className="bg-emerald-600 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                     Selected
                   </div>
@@ -567,7 +619,11 @@ export function ScanBarcode() {
                 return selected ? (
                   <div className="flex items-center gap-3">
                     {selected.coverImageUrl && (
-                      <img src={selected.coverImageUrl} alt="" className="w-10 h-10 rounded object-cover" />
+                      <img
+                        src={selected.coverImageUrl}
+                        alt=""
+                        className="w-10 h-10 rounded object-cover"
+                      />
                     )}
                     <div className="min-w-0">
                       <div className="font-medium text-gray-900 truncate">{selected.title}</div>
@@ -579,16 +635,90 @@ export function ScanBarcode() {
             </div>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 const selected = albums.find((a) => a.id === selectedAlbumId);
-                if (selected) {
-                  // TODO: Implement createRecord mutation
-                  alert(`Adding "${selected.title}" by ${selected.artist} to your collection!`);
+                if (!selected) return;
+
+                setIsLoading(true);
+
+                try {
+                  // Create record mutation
+                  const mutation = `mutation CreateRecord($input: CreateRecordInput!) {
+                    createRecord(input: $input) {
+                      record {
+                        id
+                        purchaseDate
+                        price
+                        condition
+                        location
+                        notes
+                        createdAt
+                        release {
+                          id
+                          artist
+                          title
+                          coverImageUrl
+                        }
+                      }
+                      errors
+                    }
+                  }`;
+
+                  const res = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                      query: mutation,
+                      variables: {
+                        input: {
+                          releaseId: selected.primaryRelease.release.id,
+                        },
+                      },
+                    }),
+                  });
+
+                  const body = await res.json();
+
+                  if (body.errors) {
+                    setToast({
+                      message: body.errors[0]?.message || 'Failed to add record',
+                      type: 'error',
+                    });
+                    return;
+                  }
+
+                  const payload = body.data?.createRecord;
+                  if (payload?.errors && payload.errors.length > 0) {
+                    setToast({ message: payload.errors[0], type: 'error' });
+                    return;
+                  }
+
+                  if (payload?.record) {
+                    // Success! Show success message and reset
+                    setToast({
+                      message: `Added "${selected.title}" by ${selected.artist} to your collection`,
+                      type: 'success',
+                    });
+                    setSelectedAlbumId(null);
+                    setAlbums([]);
+                    setBarcode('');
+                    // Notify parent to refresh stats
+                    onRecordAdded?.();
+                  }
+                } catch (err: any) {
+                  setToast({
+                    message: err?.message ?? 'Failed to add record to collection',
+                    type: 'error',
+                  });
+                } finally {
+                  setIsLoading(false);
                 }
               }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-medium flex-shrink-0 transition-colors"
+              disabled={isLoading}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg font-medium flex-shrink-0 transition-colors"
             >
-              Add to Collection
+              {isLoading ? 'Adding...' : 'Add to Collection'}
             </button>
           </div>
         </div>
@@ -596,6 +726,11 @@ export function ScanBarcode() {
 
       {/* Spacer to prevent content from being hidden behind the fixed button */}
       {selectedAlbumId && <div className="h-20 md:h-16" />}
+
+      {/* Toast notification */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />
+      )}
     </div>
   );
 }

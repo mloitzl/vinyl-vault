@@ -4,6 +4,15 @@ import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
+  createRecord,
+  findRecordById,
+  findRecords,
+  updateRecord,
+  deleteRecord,
+  findRecordsByUserId,
+} from '../services/records.js';
+import { ReleaseRepository } from '../models/release.js';
+import {
   createPersonalTenant,
   createOrganizationTenant,
   addUserToTenant,
@@ -26,21 +35,153 @@ export const resolvers = {
     user: async (_parent: unknown, _args: { id: string }) => {
       return findUserById(_args.id);
     },
-    record: async (_parent: unknown, _args: { id: string }) => {
-      // TODO: Fetch record from MongoDB
-      return null;
+    record: async (_parent: unknown, _args: { id: string }, context: GraphQLContext) => {
+      // Verify user has read access
+      if (!canRead(context)) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      const record = await findRecordById(context.db, _args.id);
+      if (!record) {
+        return null;
+      }
+
+      return {
+        id: record._id.toString(),
+        releaseId: record.releaseId.toString(),
+        userId: record.userId.toString(),
+        purchaseDate: record.purchaseDate?.toISOString(),
+        price: record.price,
+        condition: record.condition,
+        location: record.location,
+        notes: record.notes,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+      };
     },
-    release: async (_parent: unknown, _args: { id: string }) => {
-      // TODO: Fetch release from MongoDB
-      return null;
+    release: async (_parent: unknown, _args: { id: string }, context: GraphQLContext) => {
+      // Verify user has read access
+      if (!canRead(context)) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      const releaseRepo = new ReleaseRepository(context.db);
+      const release = await releaseRepo.findById(_args.id);
+
+      if (!release) {
+        return null;
+      }
+
+      return {
+        id: release._id.toString(),
+        barcode: release.barcode,
+        artist: release.artist,
+        title: release.title,
+        year: release.year,
+        format: release.format,
+        genre: release.genre || [],
+        style: release.style || [],
+        label: release.label,
+        country: release.country,
+        coverImageUrl: release.coverImageUrl,
+        trackList: release.trackList || [],
+        externalId: release.externalId,
+        source: release.source,
+        createdAt:
+          release.createdAt instanceof Date ? release.createdAt.toISOString() : release.createdAt,
+        updatedAt:
+          release.updatedAt instanceof Date ? release.updatedAt.toISOString() : release.updatedAt,
+      };
     },
-    releasesByBarcode: async (_parent: unknown, _args: { barcode: string }) => {
-      // TODO: Search releases by barcode
-      return [];
+    releasesByBarcode: async (
+      _parent: unknown,
+      _args: { barcode: string },
+      context: GraphQLContext
+    ) => {
+      // Verify user has read access
+      if (!canRead(context)) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      const releaseRepo = new ReleaseRepository(context.db);
+      const releases = await releaseRepo.findByBarcode(_args.barcode);
+
+      return releases.map((release) => ({
+        id: release._id.toString(),
+        barcode: release.barcode,
+        artist: release.artist,
+        title: release.title,
+        year: release.year,
+        format: release.format,
+        genre: release.genre || [],
+        style: release.style || [],
+        label: release.label,
+        country: release.country,
+        coverImageUrl: release.coverImageUrl,
+        trackList: release.trackList || [],
+        externalId: release.externalId,
+        source: release.source,
+        createdAt:
+          release.createdAt instanceof Date ? release.createdAt.toISOString() : release.createdAt,
+        updatedAt:
+          release.updatedAt instanceof Date ? release.updatedAt.toISOString() : release.updatedAt,
+      }));
     },
-    records: async (_parent: unknown, _args: unknown) => {
-      // TODO: Paginated record query
-      return { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false }, totalCount: 0 };
+    records: async (
+      _parent: unknown,
+      _args: { userId?: string; first?: number; after?: string; filter?: any },
+      context: GraphQLContext
+    ) => {
+      // Verify user has read access
+      if (!canRead(context)) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      if (!context.db) {
+        throw new Error('Tenant database connection not available');
+      }
+
+      const filter = _args.filter || {};
+      const pagination = { first: _args.first, after: _args.after };
+
+      // If userId is provided, add it to filter
+      if (_args.userId) {
+        filter.userId = _args.userId;
+      }
+
+      const result = await findRecords(context.db, filter, pagination);
+
+      return {
+        edges: result.edges.map((edge) => ({
+          cursor: edge.cursor,
+          node: {
+            id: edge.node._id.toString(),
+            releaseId: edge.node.releaseId.toString(),
+            userId: edge.node.userId.toString(),
+            purchaseDate: edge.node.purchaseDate?.toISOString(),
+            price: edge.node.price,
+            condition: edge.node.condition,
+            location: edge.node.location,
+            notes: edge.node.notes,
+            createdAt: edge.node.createdAt.toISOString(),
+            updatedAt: edge.node.updatedAt.toISOString(),
+          },
+        })),
+        pageInfo: result.pageInfo,
+        totalCount: result.totalCount,
+      };
     },
     userTenants: async (_parent: unknown, _args: { userId: string }) => {
       const { userId } = _args;
@@ -190,7 +331,20 @@ export const resolvers = {
         errors: result.errors,
       };
     },
-    createRecord: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+    createRecord: async (
+      _parent: unknown,
+      _args: {
+        input: {
+          releaseId: string;
+          purchaseDate?: string;
+          price?: number;
+          condition?: string;
+          location?: string;
+          notes?: string;
+        };
+      },
+      context: GraphQLContext
+    ) => {
       // Require MEMBER or ADMIN role to create records
       requireMember(context);
 
@@ -198,10 +352,42 @@ export const resolvers = {
         throw new Error('Tenant database connection not available');
       }
 
-      // TODO: Create record in tenant database (context.db)
-      throw new Error('Not implemented');
+      if (!context.userId) {
+        throw new Error('User ID not found in context');
+      }
+
+      const record = await createRecord(context.db, {
+        ...(_args.input as any),
+        userId: context.userId,
+      });
+
+      return {
+        id: record._id.toString(),
+        releaseId: record.releaseId.toString(),
+        userId: record.userId.toString(),
+        purchaseDate: record.purchaseDate?.toISOString(),
+        price: record.price,
+        condition: record.condition,
+        location: record.location,
+        notes: record.notes,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+      };
     },
-    updateRecord: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+    updateRecord: async (
+      _parent: unknown,
+      _args: {
+        input: {
+          id: string;
+          purchaseDate?: string;
+          price?: number;
+          condition?: string;
+          location?: string;
+          notes?: string;
+        };
+      },
+      context: GraphQLContext
+    ) => {
       // Require MEMBER or ADMIN role to update records
       requireMember(context);
 
@@ -209,8 +395,24 @@ export const resolvers = {
         throw new Error('Tenant database connection not available');
       }
 
-      // TODO: Update record in tenant database (context.db)
-      throw new Error('Not implemented');
+      const record = await updateRecord(context.db, _args.input as any);
+
+      if (!record) {
+        throw new Error(`Record with ID ${_args.input.id} not found`);
+      }
+
+      return {
+        id: record._id.toString(),
+        releaseId: record.releaseId.toString(),
+        userId: record.userId.toString(),
+        purchaseDate: record.purchaseDate?.toISOString(),
+        price: record.price,
+        condition: record.condition,
+        location: record.location,
+        notes: record.notes,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+      };
     },
     deleteRecord: async (_parent: unknown, _args: { id: string }, context: GraphQLContext) => {
       // Require MEMBER or ADMIN role to delete records
@@ -220,8 +422,12 @@ export const resolvers = {
         throw new Error('Tenant database connection not available');
       }
 
-      // TODO: Delete record from tenant database (context.db)
-      throw new Error('Not implemented');
+      if (!context.userId) {
+        throw new Error('User ID not found in context');
+      }
+
+      const success = await deleteRecord(context.db, _args.id, context.userId);
+      return success;
     },
     upsertUser: async (
       _parent: unknown,
@@ -408,19 +614,63 @@ export const resolvers = {
     },
   },
   User: {
-    records: async (_parent: { id: string }) => {
-      // TODO: Fetch user's records
-      return [];
+    records: async (_parent: { id: string }, _args: unknown, context: GraphQLContext) => {
+      if (!context.db) {
+        return [];
+      }
+
+      const records = await findRecordsByUserId(context.db, _parent.id);
+
+      return records.map((record) => ({
+        id: record._id.toString(),
+        releaseId: record.releaseId.toString(),
+        userId: record.userId.toString(),
+        purchaseDate: record.purchaseDate?.toISOString(),
+        price: record.price,
+        condition: record.condition,
+        location: record.location,
+        notes: record.notes,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+      }));
     },
   },
   Record: {
-    release: async (_parent: { releaseId: string }) => {
-      // TODO: Fetch associated release
-      return null;
+    release: async (_parent: { releaseId: string }, _args: unknown, context: GraphQLContext) => {
+      if (!context.db) {
+        return null;
+      }
+
+      const releaseRepo = new ReleaseRepository(context.db);
+      const release = await releaseRepo.findById(_parent.releaseId);
+
+      if (!release) {
+        return null;
+      }
+
+      return {
+        id: release._id.toString(),
+        barcode: release.barcode,
+        artist: release.artist,
+        title: release.title,
+        year: release.year,
+        format: release.format,
+        genre: release.genre || [],
+        style: release.style || [],
+        label: release.label,
+        country: release.country,
+        coverImageUrl: release.coverImageUrl,
+        trackList: release.trackList || [],
+        externalId: release.externalId,
+        source: release.source,
+        createdAt:
+          release.createdAt instanceof Date ? release.createdAt.toISOString() : release.createdAt,
+        updatedAt:
+          release.updatedAt instanceof Date ? release.updatedAt.toISOString() : release.updatedAt,
+      };
     },
     owner: async (_parent: { userId: string }) => {
-      // TODO: Fetch owner user
-      return null;
+      return findUserById(_parent.userId);
     },
   },
 };

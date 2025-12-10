@@ -28,6 +28,11 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 **Responsibilities:**
 
 - Accept web requests from browser clients (GraphQL queries/mutations + session cookies).
+- Display and manage vinyl record collections with pagination, filtering, and search.
+- Provide barcode scanning via camera or manual input for album lookup.
+- Enable record creation, viewing, and deletion with real-time UI updates.
+- Show collection statistics (record count, unique artist count) updated per tenant.
+- Display toast notifications for user action feedback (success/error states).
 - Proxy all GraphQL queries/mutations to the backend GraphQL endpoint with JWT authorization header.
 - Manage HTTP session lifecycle and authentication via GitHub OAuth.
 - Guide GitHub App installation flow via `/auth/setup` to onboard organization tenants (no automatic org sync on login).
@@ -88,9 +93,14 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 - Expose domain-centric GraphQL schema (User, Record, Release, Album, Tenant).
 - Implement tenant-scoped business logic and data access.
+- Manage record lifecycle (create, read, update, delete) with ownership validation.
+- Implement repository pattern for clean data access (RecordRepository, ReleaseRepository).
+- Provide cursor-based pagination for Relay compatibility.
+- Support text search and filtering on records (location, notes, condition).
 - Validate and decode JWTs from the BFF, extracting tenantId and tenantRole.
 - Dynamically connect to tenant-specific MongoDB databases (vinylvault_user_{userId} or vinylvault_org_{orgName}).
 - Enforce tenant isolation at database level - all queries execute against tenant database.
+- Initialize MongoDB indexes automatically on first tenant database access.
 - Implement role-based authorization (admin, member, viewer) for tenant operations.
 - Integrate with external music APIs (Discogs/MusicBrainz) queried in parallel.
 - Normalize, score, and aggregate releases into Album objects using per-tenant scoring configuration.

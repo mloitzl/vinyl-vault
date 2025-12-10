@@ -50,9 +50,118 @@ export const resolvers = {
       // TODO: Implement node query for Relay
       return null;
     },
-    records: async (_parent: unknown, _args: unknown, _context: GraphQLContext) => {
-      // TODO: Proxy to backend and return paginated records
-      return { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false }, totalCount: 0 };
+    records: async (
+      _parent: unknown,
+      _args: {
+        first?: number;
+        after?: string;
+        last?: number;
+        before?: string;
+        filter?: {
+          artist?: string;
+          title?: string;
+          year?: number;
+          format?: string;
+          location?: string;
+          search?: string;
+        };
+      },
+      context: GraphQLContext
+    ) => {
+      // Verify user is authenticated
+      if (!context.user) {
+        return {
+          edges: [],
+          pageInfo: { hasNextPage: false, hasPreviousPage: false },
+          totalCount: 0,
+        };
+      }
+
+      // Get active tenant
+      const availableTenants = getAvailableTenants(context.session) || [];
+      const activeTenant = availableTenants.find((t) => t.tenantId === context.activeTenantId);
+
+      if (!activeTenant) {
+        return {
+          edges: [],
+          pageInfo: { hasNextPage: false, hasPreviousPage: false },
+          totalCount: 0,
+        };
+      }
+
+      // Create JWT with tenant context
+      const jwt = signJwt({
+        sub: context.user.id,
+        username: context.user.displayName || context.user.githubLogin,
+        avatarUrl: context.user.avatarUrl,
+        tenantId: activeTenant.tenantId,
+        tenantRole: activeTenant.role,
+        githubLogin: context.user.githubLogin,
+      });
+
+      // Proxy to backend
+      const query = `query Records($first: Int, $after: String, $filter: RecordFilter) {
+        records(first: $first, after: $after, filter: $filter) {
+          edges {
+            cursor
+            node {
+              id
+              purchaseDate
+              price
+              condition
+              location
+              notes
+              createdAt
+              updatedAt
+              release {
+                id
+                barcode
+                artist
+                title
+                year
+                format
+                genre
+                style
+                label
+                country
+                coverImageUrl
+                externalId
+                source
+                trackList { position title duration }
+              }
+              owner {
+                id
+                githubLogin
+                displayName
+                avatarUrl
+              }
+            }
+          }
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            startCursor
+            endCursor
+          }
+          totalCount
+        }
+      }`;
+
+      try {
+        const data = await queryBackend<{ records: any }>(
+          query,
+          { first: _args.first, after: _args.after, filter: _args.filter },
+          { jwt }
+        );
+        return data.records;
+      } catch (err: any) {
+        console.error('[BFF] records query error:', err);
+        return {
+          edges: [],
+          pageInfo: { hasNextPage: false, hasPreviousPage: false },
+          totalCount: 0,
+        };
+      }
     },
   },
   Mutation: {
@@ -201,17 +310,244 @@ export const resolvers = {
         };
       }
     },
-    createRecord: async (_parent: unknown, _args: unknown, _context: GraphQLContext) => {
-      // TODO: Check role and proxy to backend
-      return { record: null, errors: ['Not implemented'] };
+    createRecord: async (
+      _parent: unknown,
+      _args: {
+        input: {
+          releaseId: string;
+          purchaseDate?: string;
+          price?: number;
+          condition?: string;
+          location?: string;
+          notes?: string;
+        };
+      },
+      context: GraphQLContext
+    ) => {
+      // Verify user is authenticated
+      if (!context.user) {
+        return { record: null, errors: ['Unauthorized: user not authenticated'] };
+      }
+
+      // Get active tenant and role
+      const availableTenants = getAvailableTenants(context.session) || [];
+      const activeTenant = availableTenants.find((t) => t.tenantId === context.activeTenantId);
+
+      if (!activeTenant) {
+        return { record: null, errors: ['No active tenant selected'] };
+      }
+
+      // Verify user has MEMBER or ADMIN role
+      if (activeTenant.role !== 'ADMIN' && activeTenant.role !== 'MEMBER') {
+        return {
+          record: null,
+          errors: ['Unauthorized: MEMBER or ADMIN role required to create records'],
+        };
+      }
+
+      // Create JWT with tenant context
+      const jwt = signJwt({
+        sub: context.user.id,
+        username: context.user.displayName || context.user.githubLogin,
+        avatarUrl: context.user.avatarUrl,
+        tenantId: activeTenant.tenantId,
+        tenantRole: activeTenant.role,
+        githubLogin: context.user.githubLogin,
+      });
+
+      // Proxy to backend
+      const mutation = `mutation CreateRecord($input: CreateRecordInput!) {
+        createRecord(input: $input) {
+          id
+          purchaseDate
+          price
+          condition
+          location
+          notes
+          createdAt
+          updatedAt
+          release {
+            id
+            barcode
+            artist
+            title
+            year
+            format
+            genre
+            style
+            label
+            country
+            coverImageUrl
+            externalId
+            source
+            trackList { position title duration }
+          }
+          owner {
+            id
+            githubLogin
+            displayName
+            avatarUrl
+          }
+        }
+      }`;
+
+      try {
+        const data = await queryBackend<{ createRecord: any }>(
+          mutation,
+          { input: _args.input },
+          { jwt }
+        );
+        return { record: data.createRecord, errors: [] };
+      } catch (err: any) {
+        console.error('[BFF] createRecord error:', err);
+        return { record: null, errors: [err?.message ?? 'Failed to create record'] };
+      }
     },
-    updateRecord: async (_parent: unknown, _args: unknown, _context: GraphQLContext) => {
-      // TODO: Check role and proxy to backend
-      return { record: null, errors: ['Not implemented'] };
+    updateRecord: async (
+      _parent: unknown,
+      _args: {
+        input: {
+          id: string;
+          purchaseDate?: string;
+          price?: number;
+          condition?: string;
+          location?: string;
+          notes?: string;
+        };
+      },
+      context: GraphQLContext
+    ) => {
+      // Verify user is authenticated
+      if (!context.user) {
+        return { record: null, errors: ['Unauthorized: user not authenticated'] };
+      }
+
+      // Get active tenant and role
+      const availableTenants = getAvailableTenants(context.session) || [];
+      const activeTenant = availableTenants.find((t) => t.tenantId === context.activeTenantId);
+
+      if (!activeTenant) {
+        return { record: null, errors: ['No active tenant selected'] };
+      }
+
+      // Verify user has MEMBER or ADMIN role
+      if (activeTenant.role !== 'ADMIN' && activeTenant.role !== 'MEMBER') {
+        return {
+          record: null,
+          errors: ['Unauthorized: MEMBER or ADMIN role required to update records'],
+        };
+      }
+
+      // Create JWT with tenant context
+      const jwt = signJwt({
+        sub: context.user.id,
+        username: context.user.displayName || context.user.githubLogin,
+        avatarUrl: context.user.avatarUrl,
+        tenantId: activeTenant.tenantId,
+        tenantRole: activeTenant.role,
+        githubLogin: context.user.githubLogin,
+      });
+
+      // Proxy to backend
+      const mutation = `mutation UpdateRecord($input: UpdateRecordInput!) {
+        updateRecord(input: $input) {
+          id
+          purchaseDate
+          price
+          condition
+          location
+          notes
+          createdAt
+          updatedAt
+          release {
+            id
+            barcode
+            artist
+            title
+            year
+            format
+            genre
+            style
+            label
+            country
+            coverImageUrl
+            externalId
+            source
+            trackList { position title duration }
+          }
+          owner {
+            id
+            githubLogin
+            displayName
+            avatarUrl
+          }
+        }
+      }`;
+
+      try {
+        const data = await queryBackend<{ updateRecord: any }>(
+          mutation,
+          { input: _args.input },
+          { jwt }
+        );
+        return { record: data.updateRecord, errors: [] };
+      } catch (err: any) {
+        console.error('[BFF] updateRecord error:', err);
+        return { record: null, errors: [err?.message ?? 'Failed to update record'] };
+      }
     },
-    deleteRecord: async (_parent: unknown, _args: unknown, _context: GraphQLContext) => {
-      // TODO: Check role and proxy to backend
-      return { deletedRecordId: null, errors: ['Not implemented'] };
+    deleteRecord: async (_parent: unknown, _args: { input: { id: string } }, context: GraphQLContext) => {
+      // Verify user is authenticated
+      if (!context.user) {
+        return { deletedRecordId: null, errors: ['Unauthorized: user not authenticated'] };
+      }
+
+      // Get active tenant and role
+      const availableTenants = getAvailableTenants(context.session) || [];
+      const activeTenant = availableTenants.find((t) => t.tenantId === context.activeTenantId);
+
+      if (!activeTenant) {
+        return { deletedRecordId: null, errors: ['No active tenant selected'] };
+      }
+
+      // Verify user has MEMBER or ADMIN role (backend will verify ownership)
+      if (activeTenant.role !== 'ADMIN' && activeTenant.role !== 'MEMBER') {
+        return {
+          deletedRecordId: null,
+          errors: ['Unauthorized: MEMBER or ADMIN role required to delete records'],
+        };
+      }
+
+      // Create JWT with tenant context
+      const jwt = signJwt({
+        sub: context.user.id,
+        username: context.user.displayName || context.user.githubLogin,
+        avatarUrl: context.user.avatarUrl,
+        tenantId: activeTenant.tenantId,
+        tenantRole: activeTenant.role,
+        githubLogin: context.user.githubLogin,
+      });
+
+      // Proxy to backend
+      const mutation = `mutation DeleteRecord($id: ID!) {
+        deleteRecord(id: $id)
+      }`;
+
+      try {
+        const data = await queryBackend<{ deleteRecord: boolean }>(
+          mutation,
+          { id: _args.input.id },
+          { jwt }
+        );
+        if (data.deleteRecord) {
+          return { deletedRecordId: _args.input.id, errors: [] };
+        } else {
+          return { deletedRecordId: null, errors: ['Failed to delete record'] };
+        }
+      } catch (err: any) {
+        console.error('[BFF] deleteRecord error:', err);
+        return { deletedRecordId: null, errors: [err?.message ?? 'Failed to delete record'] };
+      }
     },
     switchTenant: async (
       _parent: unknown,

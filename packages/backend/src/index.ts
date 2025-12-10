@@ -11,7 +11,7 @@ import { dirname, resolve, join } from 'path';
 import { resolvers } from './graphql/resolvers.js';
 import { extractTokenFromHeader, extractTenantContext } from './services/auth.js';
 import { config, validateConfig } from './config/index.js';
-import { getTenantDb } from './db/connection.js';
+import { getTenantDb, initializeTenantIndexes } from './db/connection.js';
 import { getRegistryDb, ensureRegistryIndexes } from './db/registry.js';
 import type { GraphQLContext } from './types/context.js';
 
@@ -48,6 +48,13 @@ async function main() {
       if (tenantCtx?.tenantId) {
         try {
           [db, registryDb] = await Promise.all([getTenantDb(tenantCtx.tenantId), getRegistryDb()]);
+
+          // Initialize indexes for this tenant database (best-effort, async)
+          if (db) {
+            initializeTenantIndexes(db, tenantCtx.tenantId).catch((err) =>
+              console.warn(`[tenant-${tenantCtx.tenantId}] Index initialization warning:`, err)
+            );
+          }
         } catch (error) {
           console.error('Failed to get database connections:', error);
           // Continue without db/registryDb - resolvers should handle gracefully

@@ -243,8 +243,23 @@ The system uses two complementary GitHub authentication modes:
 - Contains session ID, expiry, current tenantId, and user data snapshot.
 
 **Record** (Tenant MongoDB `records` collection)
+```
+{
+  _id: ObjectId,
+  releaseId: ObjectId,      // Reference to releases collection
+  userId: ObjectId,          // Reference to users collection (owner)
+  purchaseDate?: Date,
+  price?: number,
+  condition?: string,        // e.g., "Mint", "Very Good", "Good"
+  location?: string,         // Storage location
+  notes?: string,            // Personal notes
+  createdAt: Date,
+  updatedAt: Date
+}
+```
 - Represents a physical vinyl owned by a user within this tenant.
 - Links to User and Release within the same tenant database.
+- Indexes: userId+createdAt, location, text search on notes/condition/location.
 
 **Release** (Tenant MongoDB `releases` collection)
 - Cached metadata about a particular music release from an external source.
@@ -295,8 +310,9 @@ The system uses two complementary GitHub authentication modes:
 
 **BFF GraphQL Schema (`packages/bff/src/schema.graphql`):**
 - Relay-friendly schema with `Node` interface for refetchable objects.
-- Queries: `viewer` (current user with tenant context), `node` (by ID), `records` (paginated tenant collection).
-- Mutations: `scanBarcode` (tenant-scoped), `createRecord`, `updateRecord`, `deleteRecord`, `switchToPersonalTenant`, `switchToOrganizationTenant`.
+- Queries: `viewer` (current user with tenant context), `node` (by ID), `records` (paginated tenant collection with filtering).
+- Mutations: `scanBarcode` (tenant-scoped), `createRecord` ✅, `updateRecord` ✅, `deleteRecord` ✅, `switchToPersonalTenant`, `switchToOrganizationTenant`.
+- All record mutations proxy to backend with role-based authorization (ADMIN/MEMBER required).
 - Key types: `User`, `Tenant`, `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
 - Connection types for pagination: `RecordConnection`, `RecordEdge`, `PageInfo`.
 - Viewer includes `activeTenant`, `availableTenants[]`, and `role` within current tenant.
