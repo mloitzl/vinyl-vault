@@ -163,12 +163,12 @@ FR-3 Record Creation ✅ IMPLEMENTED
 - The system shall allow the user to add personal attributes such as purchase date, price, condition, location, and notes.
 - Implementation: RecordRepository, records service, createRecord mutation (backend), createRecord mutation proxy (BFF), ScanBarcode "Add to Collection" button (frontend).
 
-FR-4 Record Management 🔄 PARTIALLY IMPLEMENTED
+FR-4 Record Management ✅ IMPLEMENTED
 - The system shall allow an ADMIN/CONTRIBUTOR to:
-  - Update any personal attributes of their records. (Backend implemented, frontend UI pending)
-  - Delete records they own. ✅ IMPLEMENTED
-- The system shall prevent READER users from creating, updating, or deleting records. ✅ IMPLEMENTED
-- Implementation: updateRecord/deleteRecord mutations (backend), mutation proxies with role checks (BFF), deleteRecord with confirmation (frontend CollectionPage), updateRecord frontend UI pending.
+  - Update any personal attributes of their records. ✅ Edit modal with form validation
+  - Delete records they own. ✅ Confirmation dialog with local state update
+- The system shall prevent READER users from creating, updating, or deleting records. ✅ Role-based authorization in BFF
+- Implementation: updateRecord/deleteRecord mutations (backend), mutation proxies with role checks (BFF), RecordEditModal with form validation (frontend), deleteRecord with confirmation (frontend CollectionPage).
 
 FR-5 Collection Browsing ✅ IMPLEMENTED
 - The system shall allow users to:
@@ -317,17 +317,16 @@ QR-04: Robustness to incomplete data
 - ✅ Frontend ScanBarcode component with album display
 - ✅ Score breakdown visualization in UI
 
-### In Progress
-- 🔄 Record update UI (FR-4) - Backend complete, frontend edit modal/form pending
-- ✅ GitHub App Installation for Organization Tenants (FR-9) - Implemented; users can explicitly install app to create org tenants
-
 ### Recently Completed
 - ✅ Record creation (FR-3) - Full implementation from barcode scan to database storage
+- ✅ Record update (FR-4) - RecordEditModal with form validation, ESC/backdrop close, optimistic UI updates
 - ✅ Record deletion (FR-4) - Backend mutations, BFF proxies with authorization, frontend with confirmation
 - ✅ Collection browsing (FR-5) - Paginated list with search/filter, cursor-based pagination, RecordCard components
 - ✅ Release caching in MongoDB - Per-tenant release caching with composite ID lookup
-- ✅ Multi-tenant statistics - Real-time record and artist counts per tenant
-- ✅ Toast notifications - Success/error feedback for user actions
+- ✅ Multi-tenant statistics - Real-time record and artist counts per tenant with auto-refresh
+- ✅ Toast notifications - Success/error feedback for user actions with auto-dismiss
+- ✅ GitHub App Installation for Organization Tenants (FR-9) - Explicit app installation for org tenant creation
+- ✅ Complete CRUD operations - Create (scan), Read (list/detail), Update (modal), Delete (confirmation)
 
 ## 7. Open Issues
 

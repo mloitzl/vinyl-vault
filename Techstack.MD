@@ -30,9 +30,10 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Accept web requests from browser clients (GraphQL queries/mutations + session cookies).
 - Display and manage vinyl record collections with pagination, filtering, and search.
 - Provide barcode scanning via camera or manual input for album lookup.
-- Enable record creation, viewing, and deletion with real-time UI updates.
-- Show collection statistics (record count, unique artist count) updated per tenant.
-- Display toast notifications for user action feedback (success/error states).
+- Enable complete CRUD operations: Create (scan), Read (list/detail), Update (edit modal), Delete (confirmation).
+- Show collection statistics (record count, unique artist count) with real-time updates per tenant.
+- Display toast notifications for user action feedback (success/error states) with auto-dismiss.
+- Implement RecordEditModal with form validation, ESC/backdrop close, and optimistic UI updates.
 - Proxy all GraphQL queries/mutations to the backend GraphQL endpoint with JWT authorization header.
 - Manage HTTP session lifecycle and authentication via GitHub OAuth.
 - Guide GitHub App installation flow via `/auth/setup` to onboard organization tenants (no automatic org sync on login).
@@ -93,10 +94,11 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 - Expose domain-centric GraphQL schema (User, Record, Release, Album, Tenant).
 - Implement tenant-scoped business logic and data access.
-- Manage record lifecycle (create, read, update, delete) with ownership validation.
-- Implement repository pattern for clean data access (RecordRepository, ReleaseRepository).
-- Provide cursor-based pagination for Relay compatibility.
-- Support text search and filtering on records (location, notes, condition).
+- Manage complete record lifecycle (create, read, update, delete) with ownership validation and role-based authorization.
+- Implement repository pattern for clean data access (RecordRepository with CRUD methods, ReleaseRepository with caching).
+- Provide cursor-based pagination for Relay compatibility with text search and filtering.
+- Support text search on records (notes, condition, location) and exact match filtering (location).
+- Handle composite release IDs (SOURCE:externalId) and MongoDB ObjectId formats.
 - Validate and decode JWTs from the BFF, extracting tenantId and tenantRole.
 - Dynamically connect to tenant-specific MongoDB databases (vinylvault_user_{userId} or vinylvault_org_{orgName}).
 - Enforce tenant isolation at database level - all queries execute against tenant database.

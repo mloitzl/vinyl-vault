@@ -310,12 +310,13 @@ The system uses two complementary GitHub authentication modes:
 
 **BFF GraphQL Schema (`packages/bff/src/schema.graphql`):**
 - Relay-friendly schema with `Node` interface for refetchable objects.
-- Queries: `viewer` (current user with tenant context), `node` (by ID), `records` (paginated tenant collection with filtering).
-- Mutations: `scanBarcode` (tenant-scoped), `createRecord` ✅, `updateRecord` ✅, `deleteRecord` ✅, `switchToPersonalTenant`, `switchToOrganizationTenant`.
+- Queries: `viewer` (current user with tenant context), `node` (by ID), `records` (paginated tenant collection with filtering and text search).
+- Mutations: `scanBarcode` (tenant-scoped barcode lookup), `createRecord` ✅, `updateRecord` ✅, `deleteRecord` ✅, `switchToPersonalTenant`, `switchToOrganizationTenant`.
 - All record mutations proxy to backend with role-based authorization (ADMIN/MEMBER required).
 - Key types: `User`, `Tenant`, `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
 - Connection types for pagination: `RecordConnection`, `RecordEdge`, `PageInfo`.
 - Viewer includes `activeTenant`, `availableTenants[]`, and `role` within current tenant.
+- Complete CRUD implementation with optimistic UI updates and error handling.
 
 **Backend GraphQL Schema (`packages/backend/src/schema.graphql`):**
 - Domain-centric schema for internal use by BFF.
