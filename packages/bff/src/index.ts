@@ -30,6 +30,8 @@ import { typeDefs } from './graphql/typeDefs.js';
 import { resolvers } from './graphql/resolvers.js';
 import type { GraphQLContext } from './types/context.js';
 import './types/session.js'; // Import session types
+import { getActiveTenant } from './types/session.js';
+import { verifyWebhookSignature, forwardWebhookToBackend } from './auth/webhook.js';
 
 async function main() {
   // Validate configuration
@@ -54,6 +56,26 @@ async function main() {
   );
 
   app.use(cookieParser());
+
+  // GitHub webhook endpoint (raw body needed for signature validation)
+  app.post('/webhook/github', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+      const signature = req.header('x-hub-signature-256') as string | undefined;
+      const payloadBuffer = req.body as Buffer;
+
+      if (!verifyWebhookSignature(payloadBuffer, signature)) {
+        console.warn('[webhook] Invalid signature');
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+
+      const result = await forwardWebhookToBackend(payloadBuffer, signature ?? '');
+
+      return res.json({ ok: true, backend: result });
+    } catch (error) {
+      console.error('[webhook] Error handling GitHub webhook:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
   app.use(express.json());
 
   // Session middleware with MongoDB store
@@ -98,9 +120,11 @@ async function main() {
     '/graphql',
     expressMiddleware(server, {
       context: async ({ req, res }): Promise<GraphQLContext> => ({
-        req,
+        req: req as any,
         res,
         user: req.session.user || null,
+        session: req.session,
+        activeTenantId: getActiveTenant(req.session) ?? null,
       }),
     })
   );

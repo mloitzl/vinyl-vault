@@ -39,3 +39,8 @@ __generated__/
 
 # MongoDB data (local dev)
 data/db/
+
+# SSL certificates
+*.pem
+*.crt
+*.key

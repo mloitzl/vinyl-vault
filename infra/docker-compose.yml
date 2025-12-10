@@ -45,6 +45,7 @@ services:
     environment:
       - MONGODB_URI=${MONGODB_URI}
       - BACKEND_URL=${BACKEND_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
       - BFF_PORT=${BFF_PORT}
       - JWT_SECRET=${JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}

@@ -16,6 +16,9 @@ function getConfig() {
     // MongoDB
     mongodb: {
       uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vinylvault',
+      uriBase: process.env.MONGODB_URI_BASE || 'mongodb://localhost:27017',
+      registryUri:
+        process.env.MONGODB_REGISTRY_URI || 'mongodb://localhost:27017/vinylvault_registry',
     },
 
     // External APIs
@@ -25,6 +28,10 @@ function getConfig() {
 
     musicbrainz: {
       userAgent: process.env.MUSICBRAINZ_USER_AGENT || 'VinylVault/0.1.0 (example@example.com)',
+    },
+
+    github: {
+      appWebhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || '',
     },
 
     // Scoring
@@ -57,6 +64,10 @@ export function validateConfig(): void {
     if (config.jwt.secret === 'dev-jwt-secret-change-in-production') {
       errors.push('JWT_SECRET must be set in production');
     }
+  }
+
+  if (!config.github.appWebhookSecret) {
+    errors.push('GITHUB_APP_WEBHOOK_SECRET is required to validate GitHub webhooks');
   }
 
   if (errors.length > 0) {

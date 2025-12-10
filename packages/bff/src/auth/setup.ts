@@ -1,0 +1,133 @@
+// Setup endpoint handler for GitHub App installation flow
+// Handles the redirect from GitHub after app installation
+// Links authenticated user to installation and creates organization tenant
+
+import { Request, Response } from 'express';
+import { config } from '../config/env.js';
+import { queryBackend } from '../services/backendClient.js';
+import { setActiveTenant } from '../types/session.js';
+
+interface SetupQuery {
+  installation_id?: string;
+  setup_action?: string;
+}
+
+export async function handleSetup(req: Request, res: Response<any>): Promise<void> {
+  const query = req.query as SetupQuery & { test_user_id?: string };
+  const installationId = query.installation_id ? parseInt(query.installation_id, 10) : null;
+  const setupAction = query.setup_action || 'install';
+
+  // 1. Verify user is authenticated
+  // In test mode (NODE_ENV=development), allow test_user_id to bypass auth
+  const testUserId = process.env.NODE_ENV === 'development' ? query.test_user_id : undefined;
+  const isTestMode = !!testUserId;
+
+  if (!req.session.user && !isTestMode) {
+    console.log('[setup] User not authenticated, redirecting to login');
+    res.redirect(`/auth/github?redirect_to=${encodeURIComponent(req.originalUrl)}`);
+    return;
+  }
+
+  if (!installationId) {
+    console.warn('[setup] Missing installation_id parameter');
+    res.status(400).json({
+      error: 'Missing installation_id parameter',
+      code: 'MISSING_INSTALLATION_ID',
+    });
+    return;
+  }
+
+  // For test mode, use test_user_id as userId
+  const userId = isTestMode ? testUserId : req.session.user!.id;
+
+  console.log(`[setup] User ${userId} setting up installation ${installationId}`);
+
+  try {
+    // 2. Call backend mutation to complete installation setup
+    // Backend will:
+    // - Verify installation exists
+    // - Link user to installation
+    // - Create organization tenant
+    // - Add user as ADMIN
+    const mutation = `
+      mutation CompleteInstallationSetup($input: CompleteInstallationSetupInput!) {
+        completeInstallationSetup(input: $input) {
+          ok
+          tenantId
+          tenantName
+          message
+        }
+      }
+    `;
+
+    const result = await queryBackend<any>(mutation, {
+      input: {
+        userId,
+        installationId,
+        setupAction,
+      },
+    });
+
+    if (result.errors) {
+      console.error('[setup] Backend error:', result.errors);
+      const error = result.errors[0];
+      res.status(400).json({
+        error: error.message || 'Setup failed',
+        code: 'SETUP_FAILED',
+      });
+      return;
+    }
+
+    const { tenantId, tenantName } = result.completeInstallationSetup || {};
+
+    if (!tenantId) {
+      console.error('[setup] No tenant returned from backend');
+      res.status(500).json({
+        error: 'Failed to create organization tenant',
+        code: 'TENANT_CREATION_FAILED',
+      });
+      return;
+    }
+
+    // 3. Update session with new tenant
+    const currentTenants = ((req.session as any).availableTenants as any[]) || [];
+    const newTenant = {
+      tenantId,
+      tenantType: 'ORGANIZATION',
+      name: tenantName || tenantId,
+      role: 'ADMIN',
+    };
+
+    // Avoid duplicates if already present
+    const updatedTenants = [...currentTenants.filter((t) => t.tenantId !== tenantId), newTenant];
+
+    (req.session as any).availableTenants = updatedTenants;
+    setActiveTenant(req.session, tenantId);
+    req.session.save((err) => {
+      if (err) {
+        console.error('[setup] Session save error:', err);
+        res.status(500).json({
+          error: 'Session update failed',
+          code: 'SESSION_ERROR',
+        });
+        return;
+      }
+
+      console.log(`[setup] Successfully linked user ${userId} to installation ${installationId}`);
+      console.log(`[setup] Created organization tenant ${tenantId}`);
+
+      // 4. Redirect to frontend with success message
+      const redirectUrl = new URL(config.frontend.url);
+      redirectUrl.searchParams.append('org_installed', tenantName || tenantId);
+      redirectUrl.searchParams.append('installation_id', installationId.toString());
+
+      res.redirect(redirectUrl.toString());
+    });
+  } catch (error: any) {
+    console.error('[setup] Error completing installation setup:', error);
+    res.status(500).json({
+      error: error.message || 'Internal server error',
+      code: 'INTERNAL_ERROR',
+    });
+  }
+}

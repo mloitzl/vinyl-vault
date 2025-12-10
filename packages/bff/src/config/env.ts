@@ -13,6 +13,12 @@ function getConfig() {
       clientId: process.env.GITHUB_CLIENT_ID || '',
       clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
       callbackUrl: process.env.GITHUB_CALLBACK_URL || 'http://localhost:3001/auth/github/callback',
+      appId: process.env.GITHUB_APP_ID || '',
+      appPrivateKeyPath: process.env.GITHUB_APP_PRIVATE_KEY_PATH || '',
+      appWebhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || '',
+      appInstallationUrl:
+        process.env.GITHUB_APP_INSTALLATION_URL ||
+        'https://github.com/apps/vinyl-vault/installations/new',
     },
 
     // Session
@@ -63,14 +69,22 @@ export const config = new Proxy({} as ReturnType<typeof getConfig>, {
 // Validate required configuration
 export function validateConfig(): void {
   const errors: string[] = [];
-  
+
   if (!config.github.clientId) {
     errors.push('GITHUB_CLIENT_ID is required');
   }
   if (!config.github.clientSecret) {
     errors.push('GITHUB_CLIENT_SECRET is required');
   }
-  
+  if (!config.github.appId) {
+    errors.push('GITHUB_APP_ID is required for GitHub App installation flow');
+  }
+  if (!config.github.appWebhookSecret) {
+    errors.push('GITHUB_APP_WEBHOOK_SECRET is required for webhook validation');
+  }
+  if (!config.github.appPrivateKeyPath) {
+    errors.push('GITHUB_APP_PRIVATE_KEY_PATH is required to sign GitHub App requests');
+  }
   if (config.isProduction) {
     if (config.session.secret === 'dev-session-secret-change-in-production') {
       errors.push('SESSION_SECRET must be set in production');
@@ -79,7 +93,7 @@ export function validateConfig(): void {
       errors.push('JWT_SECRET must be set in production');
     }
   }
-  
+
   if (errors.length > 0) {
     console.error('Configuration errors:');
     errors.forEach((err) => console.error(`  - ${err}`));

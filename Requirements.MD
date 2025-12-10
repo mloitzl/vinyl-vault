@@ -13,6 +13,8 @@ Vinyl Vault lets authenticated users:
 - Retrieve and store music metadata from external services.
 - Manage personal information about each physical record.
 - Access the application from the public internet via a Raspberry Pi 5 host.
+- Manage collections as individual users or as part of GitHub organizations.
+- Switch between personal and organization collections.
 
 External marketplaces, full Discogs collection sync, or mobile native apps are out of scope for this version.
 
@@ -20,11 +22,12 @@ External marketplaces, full Discogs collection sync, or mobile native apps are o
 
 - **BFF**: Backend-for-Frontend proxy (Express + Apollo Server).
 - **JWT**: JSON Web Token used between BFF and backend.
-- **ADMIN**: User role with full permissions including user management.
-- **CONTRIBUTOR**: User role with write permissions for own records.
-- **READER**: User role with read-only permissions.
+- **ADMIN**: User role with full permissions including user management within a tenant.
+- **CONTRIBUTOR**: User role with write permissions for own records within a tenant.
+- **READER**: User role with read-only permissions within a tenant.
+- **Tenant**: An isolated collection scope, either a personal user collection or a GitHub organization collection.
 - **Release**: A specific music release (artist, album, etc.).
-- **Record**: A physical vinyl owned by a user.
+- **Record**: A physical vinyl owned by a user within a tenant.
 - **Session**: HTTP-only cookie-based authentication state.
 
 ### 1.4 Stakeholders
@@ -48,17 +51,17 @@ The system consists of:
 ### 2.2 User Roles
 
 - **ADMIN**:
-  - Full system access.
-  - Manage all records and users.
-  - Assign roles to other users.
+  - Full access within a tenant.
+  - Manage all records within the tenant.
+  - Assign roles to other users within the tenant.
 - **CONTRIBUTOR**:
-  - Manage own records (create, update, delete).
+  - Manage own records within the tenant (create, update, delete).
   - Cannot manage other users.
 - **READER**:
-  - View records and details.
+  - View records and details within the tenant.
   - No modification capabilities.
 
-*Note: First user to authenticate is automatically assigned ADMIN role.*
+*Note: First user to authenticate is automatically assigned ADMIN role for their personal tenant. Organization tenants derive roles from GitHub organization membership.*
 
 ## 3. Functional Requirements
 
@@ -72,7 +75,8 @@ FR-2 External Metadata Retrieval ✅ IMPLEMENTED
 - The system searches for releases by barcode using external music data services (Discogs and MusicBrainz are queried in parallel).
 - Results are normalized, scored, and aggregated into Album objects using the blended scoring approach.
 - If multiple albums match, the system displays them sorted by score for the user to choose from.
-- The system caches release metadata in MongoDB for future reuse.
+- The system caches release metadata in the tenant's MongoDB database for future reuse.
+- Cached releases are isolated per tenant to ensure data security and independence.
 
 ### FR-2.1 Release Normalization and Grouping
 
@@ -177,38 +181,75 @@ FR-6 Authentication via GitHub ✅ IMPLEMENTED
 - Implementation: `/auth/github`, `/auth/github/callback`, `/auth/me`, `/auth/logout` endpoints.
 
 FR-7 Authorization and Roles ✅ IMPLEMENTED
-- The system shall assign each user one role: ADMIN, CONTRIBUTOR, or READER.
-- First authenticated user is automatically assigned ADMIN role.
-- Subsequent users are assigned CONTRIBUTOR role by default.
-- The system shall restrict access to mutation operations to ADMIN/CONTRIBUTOR users.
+- The system shall assign each user one role per tenant: ADMIN, CONTRIBUTOR, or READER.
+- First authenticated user is automatically assigned ADMIN role for their personal tenant.
+- Organization tenants derive user roles from GitHub organization membership.
+- The system shall restrict access to mutation operations to ADMIN/CONTRIBUTOR users within the active tenant.
 - The system shall enforce role-based access control both in the BFF and backend.
+- The system shall enforce tenant isolation to prevent cross-tenant data access.
 
-FR-8 Session Management ✅ IMPLEMENTED
+FR-8 Tenant Management & Switching ✅ IMPLEMENTED
+- The system shall allow users to view all tenants they have access to.
+- The system shall allow users to switch between personal and organization tenants.
+- Tenant switching shall persist across page reloads via session storage.
+- The system shall display the current active tenant with user's role within that tenant.
+- Switching between tenants shall update JWT token context for backend authorization.
+
+FR-9 GitHub App Installation for Organization Tenants ✅ IMPLEMENTED
+- The system provides an "Add Organization" button allowing users to explicitly install Vinyl Vault on GitHub organizations they manage.
+- Users can install Vinyl Vault on any GitHub organization where they have installation authority (typically org owners or app managers).
+- GitHub validates installation permissions automatically - users cannot install on orgs they don't manage.
+- Installation creates a new organization tenant automatically.
+- The installing user is automatically assigned ADMIN role in the new organization tenant.
+- The system receives and validates GitHub `installation.created` webhook events via `POST /webhook/github`.
+- The system verifies webhook signatures using the GitHub app secret (`X-Hub-Signature-256` header).
+- The system stores installation metadata (installation_id, account_login, account_type) in the registry database `installations` collection.
+- The system links authenticated users to installations via the `user_installation_roles` collection and redirects to `GET /auth/setup?installation_id=...`.
+- Only organization tenants for explicitly installed apps are created; automatic org sync on login is disabled.
+- Database collections: `installations` (metadata), `user_installation_roles` (user-installation mappings).
+
+FR-10 Session Management ✅ IMPLEMENTED
 - The system shall maintain user sessions using HTTP-only cookies between browser and BFF.
 - Sessions stored in BFF MongoDB via `connect-mongo`.
-- BFF MongoDB is a separate instance from Backend MongoDB (not reachable by each other in production).
-- BFF MongoDB stores ONLY session information; all other data is stored in Backend MongoDB.
+- BFF MongoDB is a separate instance from tenant MongoDB databases (not reachable by each other in production).
+- BFF MongoDB stores ONLY session information; all tenant data is stored in separate tenant-specific MongoDB databases.
+- Session includes current tenant context (tenantId and tenantType).
 - Cookie name: `vinylvault.sid`, secure in production, SameSite=lax.
 - The system shall not expose backend JWTs or GitHub tokens to the browser.
 - The system shall invalidate sessions upon user logout.
 
+FR-10 Tenant Management ✅ IMPLEMENTED
+- The system creates a personal tenant (user-type) for each user upon first authentication.
+- The system allows users to switch between available tenants (personal and organizations).
+- The system enforces strict database-level isolation between tenants.
+- Each tenant has its own MongoDB database instance.
+- The system tracks user roles per tenant in the registry database `user_tenant_roles` collection.
+- Organization tenants are created only when users explicitly install the GitHub App via the "Add Organization" button (not automatic).
+
+
 FR-9 Auditability (basic) 
 - The system shall store creation and update timestamps for records and users. 
-- The system shall allow viewing the current role of each user.
+- The system shall allow viewing the current role of each user within each tenant.
+- The system shall log tenant switches for security auditing.
 
 ## 4. Non-Functional Requirements
 
 NFR-1 Security 
 - All external access to the system shall use HTTPS. 
-- JWTs shall be used only between BFF and backend, with short expiration times. 
+- JWTs shall be used only between BFF and backend, with short expiration times.
+- JWTs shall include tenant context (tenantId and tenantType) to enforce tenant isolation.
 - MongoDB shall not be directly exposed to the public network.
-- BFF MongoDB and Backend MongoDB are separate instances, not reachable by each other.
-- BFF MongoDB stores only session data; all domain data resides in Backend MongoDB.
+- BFF MongoDB and tenant MongoDB databases are separate instances, not reachable by each other.
+- BFF MongoDB stores only session data; all domain data resides in tenant-specific MongoDB databases.
+- Each tenant shall have complete database-level isolation with separate MongoDB databases.
+- The system shall prevent cross-tenant data access through mandatory tenant validation on all operations.
 - OS and dependencies shall be kept up to date with security patches.
 
 NFR-2 Performance 
 - The system shall respond to typical user operations (e.g., viewing a record, listing collection) in under 1 second under normal load on the RPi 5. 
-- The system shall cache external release data to reduce repeated external API calls.
+- The system shall cache external release data per tenant to reduce repeated external API calls.
+- The system shall manage database connections efficiently across multiple tenant databases.
+- Tenant database connections shall be pooled and reused where possible to minimize resource consumption.
 
 NFR-3 Usability 
 - The UI shall be responsive and usable on mobile and desktop screens. 
@@ -245,11 +286,12 @@ QR-04: Robustness to incomplete data
 - The system must run on a single Raspberry Pi 5 in a home network with port forwarding or secure tunneling.
 - Only open-source or free-to-use components should be used, excluding paid proprietary dependencies for core functionality.
 - External APIs must be used according to their terms of service and rate limits.
-- The BFF MongoDB and Backend MongoDB shall be completely separate instances in production:
+- Each tenant shall have a completely separate MongoDB database for strict isolation:
   - BFF MongoDB stores only session information.
-  - Backend MongoDB stores all domain data (users, records, releases).
-  - These instances are not reachable by each other.
-  - All user-related operations from the BFF must be forwarded to the Backend via GraphQL.
+  - Each tenant has its own MongoDB database storing users, records, and releases for that tenant.
+  - Tenant databases are not reachable by other tenants or the BFF.
+  - All tenant-related operations from the BFF must be forwarded to the Backend via GraphQL with tenant context.
+- The system must efficiently manage multiple MongoDB database connections on resource-constrained hardware (RPi 5).
 
 ## 6. Implementation Status
 
@@ -276,9 +318,11 @@ QR-04: Robustness to incomplete data
 - 🔄 Record creation and management (FR-3, FR-4) - GraphQL schema defined, resolvers pending
 - 🔄 Collection browsing (FR-5) - UI placeholder implemented, data fetching pending
 - 🔄 Release caching in MongoDB (partially implemented)
+- ✅ GitHub App Installation for Organization Tenants (FR-9) - Implemented; users can explicitly install app to create org tenants
 
 ## 7. Open Issues
 
 - Strategy for backup/restore (local NAS, cloud storage, etc.).
 - Mobile camera API integration refinements for barcode scanning.
 - Full release caching strategy (currently caching is partially disabled to always use live scoring orchestrator).
+- Migration strategy for existing org tenants from passive sync to active GitHub App installation (Phase 6.5 planning). - Solved. No production data yet, everything can be deleted.
