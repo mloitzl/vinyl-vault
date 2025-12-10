@@ -6,7 +6,6 @@ export interface User {
   githubLogin: string;
   displayName: string;
   avatarUrl?: string;
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
 }
 
 export interface Record {

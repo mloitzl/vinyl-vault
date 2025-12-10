@@ -60,17 +60,10 @@ type User implements Node {
   githubLogin: String!
   displayName: String!
   avatarUrl: String
-  role: UserRole!
   availableTenants: [Tenant!]!
   activeTenant: Tenant
   createdAt: String!
   updatedAt: String!
-}
-
-enum UserRole {
-  ADMIN
-  CONTRIBUTOR
-  READER
 }
 
 enum TenantType {

@@ -16,7 +16,6 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
 }
 
 interface AuthContextType {
@@ -124,7 +123,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           githubLogin
           displayName
           avatarUrl
-          role
           availableTenants {
             id
             name

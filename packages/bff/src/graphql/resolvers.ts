@@ -26,7 +26,6 @@ export const resolvers = {
         githubLogin: context.user.githubLogin,
         displayName: context.user.displayName,
         avatarUrl: context.user.avatarUrl || null,
-        role: context.user.role,
         availableTenants: availableTenants.map((t) => ({
           __typename: 'Tenant',
           id: t.tenantId,
@@ -74,14 +73,12 @@ export const resolvers = {
       // Otherwise call backend without JWT (backend may allow unauthenticated lookups depending on policy).
       let jwt = '';
       if (ctx.user) {
-        const tenantId = ctx.activeTenantId || `user_${ctx.user.id}`;
+        const availableTenants = getAvailableTenants(ctx.session) || [];
+        const activeTenant =
+          availableTenants.find((t) => t.tenantId === ctx.activeTenantId) || availableTenants[0];
+        const tenantId = activeTenant?.tenantId || `user_${ctx.user.id}`;
         const username = ctx.user.displayName || ctx.user.githubLogin;
-        const tenantRole =
-          ctx.user.role === 'ADMIN'
-            ? 'ADMIN'
-            : ctx.user.role === 'CONTRIBUTOR'
-            ? 'MEMBER'
-            : 'VIEWER';
+        const tenantRole = activeTenant?.role || 'VIEWER';
         jwt = signJwt({
           sub: ctx.user.id,
           username,
@@ -257,7 +254,6 @@ export const resolvers = {
         githubLogin: context.user.githubLogin,
         displayName: context.user.displayName,
         avatarUrl: context.user.avatarUrl || null,
-        role: context.user.role,
         availableTenants: availableTenants.map((t) => ({
           __typename: 'Tenant',
           id: t.tenantId,

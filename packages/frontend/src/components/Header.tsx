@@ -1,11 +1,12 @@
 // Header component with user profile and auth actions
 
 import { useAuth } from '../contexts/AuthContext';
+import { getRoleLabel, getRoleColors } from '../constants/roles';
 import { TenantSwitcher } from './TenantSwitcher';
 import { AddOrgButton } from './AddOrgButton';
 
 export function Header() {
-  const { user, isLoading, login, logout } = useAuth();
+  const { user, activeTenant, isLoading, login, logout } = useAuth();
 
   return (
     <header className="bg-white shadow-sm">
@@ -24,7 +25,7 @@ export function Header() {
                 <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
               </div>
             ) : user ? (
-              <UserMenu user={user} onLogout={logout} />
+              <UserMenu user={user} tenant={activeTenant} onLogout={logout} />
             ) : (
               <LoginButton onClick={login} />
             )}
@@ -64,12 +65,14 @@ interface UserMenuProps {
     displayName: string;
     avatarUrl?: string;
     githubLogin: string;
-    role: string;
   };
+  tenant: { role: string } | null;
   onLogout: () => Promise<void>;
 }
 
-function UserMenu({ user, onLogout }: UserMenuProps) {
+function UserMenu({ user, tenant, onLogout }: UserMenuProps) {
+  const tenantRole = tenant?.role || 'VIEWER';
+
   return (
     <div className="flex items-center space-x-4">
       {/* Add Organization button */}
@@ -99,15 +102,11 @@ function UserMenu({ user, onLogout }: UserMenuProps) {
         </div>
         {/* Role badge */}
         <span
-          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-            user.role === 'ADMIN'
-              ? 'bg-purple-100 text-purple-800'
-              : user.role === 'CONTRIBUTOR'
-              ? 'bg-green-100 text-green-800'
-              : 'bg-gray-100 text-gray-800'
-          }`}
+          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getRoleColors(
+            tenantRole
+          )}`}
         >
-          {user.role}
+          {getRoleLabel(tenantRole)}
         </span>
       </div>
 

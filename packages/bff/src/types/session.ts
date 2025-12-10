@@ -10,7 +10,6 @@ export interface SessionUser {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
   createdAt: string;
   updatedAt: string;
 }

@@ -179,7 +179,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
           displayName
           avatarUrl
           email
-          role
           createdAt
           updatedAt
         }
@@ -193,7 +192,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       displayName: string;
       avatarUrl?: string;
       email?: string;
-      role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
       createdAt: string;
       updatedAt: string;
     }
@@ -306,13 +304,16 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Set activeTenantId in session to personal tenant
     const activeTenantId = personalTenantId || `user_${user.id}`;
 
+    const activeTenantRole =
+      userTenants.find((t) => t.tenantId === activeTenantId)?.role || 'ADMIN';
+
     // Sign JWT for backend operations
     const jwt = signJwt({
       sub: user.id,
       username: user.displayName || user.githubLogin,
       avatarUrl: user.avatarUrl,
       tenantId: activeTenantId,
-      tenantRole: 'ADMIN',
+      tenantRole: activeTenantRole,
       githubLogin: user.githubLogin,
     });
 
@@ -358,7 +359,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       email: user.email,
-      role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
