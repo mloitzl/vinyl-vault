@@ -13,6 +13,7 @@ import { extractTokenFromHeader, extractTenantContext } from './services/auth.js
 import { config, validateConfig } from './config/index.js';
 import { getTenantDb } from './db/connection.js';
 import { getRegistryDb, ensureRegistryIndexes } from './db/registry.js';
+import { runMigrations } from './db/migrations.js';
 import type { GraphQLContext } from './types/context.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,10 @@ async function main() {
 
   // Ensure registry indexes exist before serving requests
   await ensureRegistryIndexes();
+
+  // Run database migrations
+  const registryDb = await getRegistryDb();
+  await runMigrations(registryDb);
 
   const server = new ApolloServer({
     typeDefs,

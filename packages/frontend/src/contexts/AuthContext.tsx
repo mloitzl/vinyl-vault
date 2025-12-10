@@ -16,7 +16,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
 }
 
 interface AuthContextType {

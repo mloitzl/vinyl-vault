@@ -1,6 +1,7 @@
 // Header component with user profile and auth actions
 
 import { useAuth } from '../contexts/AuthContext';
+import { getRoleLabel, getRoleColors } from '../constants/roles';
 import { TenantSwitcher } from './TenantSwitcher';
 import { AddOrgButton } from './AddOrgButton';
 
@@ -99,15 +100,11 @@ function UserMenu({ user, onLogout }: UserMenuProps) {
         </div>
         {/* Role badge */}
         <span
-          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-            user.role === 'ADMIN'
-              ? 'bg-purple-100 text-purple-800'
-              : user.role === 'CONTRIBUTOR'
-              ? 'bg-green-100 text-green-800'
-              : 'bg-gray-100 text-gray-800'
-          }`}
+          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getRoleColors(
+            user.role
+          )}`}
         >
-          {user.role}
+          {getRoleLabel(user.role)}
         </span>
       </div>
 

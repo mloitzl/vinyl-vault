@@ -67,10 +67,16 @@ type User implements Node {
   updatedAt: String!
 }
 
+"""
+User role in the application.
+- ADMIN: Full control over the application and all tenants
+- MEMBER: Can create and manage their own content
+- VIEWER: Read-only access
+"""
 enum UserRole {
   ADMIN
-  CONTRIBUTOR
-  READER
+  MEMBER
+  VIEWER
 }
 
 enum TenantType {

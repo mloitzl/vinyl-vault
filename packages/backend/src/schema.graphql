@@ -60,7 +60,10 @@ type Mutation {
   upsertUser(input: UpsertUserInput!): User!
 
   """
-  Update a user's role (admin only).
+  Update a user's role to ADMIN, MEMBER, or VIEWER (admin only).
+  - ADMIN: Full application control
+  - MEMBER: Can create and manage own records
+  - VIEWER: Read-only access
   """
   updateUserRole(userId: ID!, role: UserRole!): User!
 
@@ -105,10 +108,16 @@ type User {
   records: [Record!]!
 }
 
+"""
+User role in the application.
+- ADMIN: Full control over the application and all tenants
+- MEMBER: Can create and manage their own content
+- VIEWER: Read-only access
+"""
 enum UserRole {
   ADMIN
-  CONTRIBUTOR
-  READER
+  MEMBER
+  VIEWER
 }
 
 type Record {

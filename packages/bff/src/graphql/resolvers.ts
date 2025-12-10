@@ -79,7 +79,7 @@ export const resolvers = {
         const tenantRole =
           ctx.user.role === 'ADMIN'
             ? 'ADMIN'
-            : ctx.user.role === 'CONTRIBUTOR'
+            : ctx.user.role === 'MEMBER'
             ? 'MEMBER'
             : 'VIEWER';
         jwt = signJwt({

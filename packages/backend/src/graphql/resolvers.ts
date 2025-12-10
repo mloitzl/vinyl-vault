@@ -239,7 +239,7 @@ export const resolvers = {
     },
     updateUserRole: async (
       _parent: unknown,
-      _args: { userId: string; role: 'ADMIN' | 'CONTRIBUTOR' | 'READER' }
+      _args: { userId: string; role: 'ADMIN' | 'MEMBER' | 'VIEWER' }
     ) => {
       const user = await updateUserRole(_args.userId, _args.role);
       if (!user) {

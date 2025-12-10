@@ -11,7 +11,7 @@ export interface UserDocument {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,7 +31,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER';
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
   createdAt: string;
   updatedAt: string;
 }
@@ -97,9 +97,9 @@ export async function upsertUser(input: UpsertUserInput): Promise<User> {
     const updated = await collection.findOne({ githubId: input.githubId });
     return documentToUser(updated!);
   } else {
-    // Create new user - first user becomes ADMIN, others become CONTRIBUTOR
+    // Create new user - first user becomes ADMIN, others become MEMBER
     const userCount = await collection.countDocuments();
-    const role = userCount === 0 ? 'ADMIN' : 'CONTRIBUTOR';
+    const role = userCount === 0 ? 'ADMIN' : 'MEMBER';
     
     const result = await collection.insertOne({
       _id: new ObjectId(),
@@ -120,7 +120,7 @@ export async function upsertUser(input: UpsertUserInput): Promise<User> {
 
 export async function updateUserRole(
   userId: string,
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER'
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER'
 ): Promise<User | null> {
   const db = await connectToDatabase();
   const collection = db.collection<UserDocument>(COLLECTIONS.USERS);
