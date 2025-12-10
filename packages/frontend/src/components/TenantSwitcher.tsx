@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getRoleColors } from '../constants/roles';
+import { getRoleColors, getRoleLabel } from '../constants/roles';
 
 export function TenantSwitcher() {
   const { activeTenant, availableTenants, switchTenant } = useAuth();
@@ -94,7 +94,7 @@ export function TenantSwitcher() {
                         {tenant.type}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded ${getRoleColors(tenant.role)}`}>
-                        {tenant.role}
+                        {getRoleLabel(tenant.role)}
                       </span>
                     </div>
                   </div>
