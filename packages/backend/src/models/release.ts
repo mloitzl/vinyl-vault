@@ -67,7 +67,6 @@ export class ReleaseRepository {
       trackList: input.trackList || [],
       externalId: input.externalId,
       source: input.source,
-      createdAt: now,
       updatedAt: now,
     };
 
@@ -81,7 +80,10 @@ export class ReleaseRepository {
       .collection<ReleaseDocument>('releases')
       .findOneAndUpdate(
         filter,
-        { $set: { ...release, updatedAt: now }, $setOnInsert: { createdAt: now } },
+        {
+          $set: { ...release, updatedAt: now },
+          $setOnInsert: { createdAt: now },
+        },
         { upsert: true, returnDocument: 'after' }
       );
 

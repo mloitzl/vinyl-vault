@@ -49,11 +49,9 @@ async function main() {
         try {
           [db, registryDb] = await Promise.all([getTenantDb(tenantCtx.tenantId), getRegistryDb()]);
 
-          // Initialize indexes for this tenant database (best-effort, async)
+          // Initialize indexes for this tenant database (blocking to ensure indexes exist before queries)
           if (db) {
-            initializeTenantIndexes(db, tenantCtx.tenantId).catch((err) =>
-              console.warn(`[tenant-${tenantCtx.tenantId}] Index initialization warning:`, err)
-            );
+            await initializeTenantIndexes(db, tenantCtx.tenantId);
           }
         } catch (error) {
           console.error('Failed to get database connections:', error);
