@@ -73,6 +73,57 @@ describe('Records Service', () => {
         })
       ).rejects.toThrow('Release with ID');
     });
+
+    it('should create a record using composite ID format with double dagger delimiter', async () => {
+      // Create a release with an externalId
+      const releaseInput: CreateReleaseInput = {
+        barcode: '987654321',
+        artist: 'Test Artist 2',
+        title: 'Test Album 2',
+        source: 'DISCOGS',
+        externalId: '12479585',
+      };
+      const release = await releaseRepo.upsert(releaseInput);
+
+      const userId = new ObjectId().toString();
+      // Use composite ID format: SOURCE‡externalId
+      const record = await createRecord(db, {
+        releaseId: `DISCOGS‡12479585`,
+        userId,
+        condition: 'Near Mint',
+      });
+
+      expect(record._id).toBeInstanceOf(ObjectId);
+      expect(record.releaseId.toString()).toBe(release._id.toString());
+      expect(record.userId.toString()).toBe(userId);
+      expect(record.condition).toBe('Near Mint');
+    });
+
+    it('should handle externalIds with colons in composite format', async () => {
+      // Create a release with an externalId that contains a colon
+      const externalIdWithColon = 'mbid:12345:67890';
+      const releaseInput: CreateReleaseInput = {
+        barcode: '111222333',
+        artist: 'Test Artist 3',
+        title: 'Test Album 3',
+        source: 'MUSICBRAINZ',
+        externalId: externalIdWithColon,
+      };
+      const release = await releaseRepo.upsert(releaseInput);
+
+      const userId = new ObjectId().toString();
+      // Use composite ID format with double dagger - should handle colons in externalId
+      const record = await createRecord(db, {
+        releaseId: `MUSICBRAINZ‡${externalIdWithColon}`,
+        userId,
+        condition: 'Very Good',
+      });
+
+      expect(record._id).toBeInstanceOf(ObjectId);
+      expect(record.releaseId.toString()).toBe(release._id.toString());
+      expect(record.userId.toString()).toBe(userId);
+      expect(record.condition).toBe('Very Good');
+    });
   });
 
   describe('findRecordById', () => {

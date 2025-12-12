@@ -20,12 +20,12 @@ export async function createRecord(db: Db, input: CreateRecordInput): Promise<Re
   const recordRepo = new RecordRepository(db);
   const releaseRepo = new ReleaseRepository(db);
 
-  // Parse releaseId - it could be either a MongoDB ObjectId or composite format (SOURCE:externalId)
+  // Parse releaseId - it could be either a MongoDB ObjectId or composite format (SOURCE‡externalId)
   let release: any = null;
 
-  if (input.releaseId.includes(':')) {
-    // Composite ID format: SOURCE:externalId (e.g., "DISCOGS:12479585")
-    const [source, externalId] = input.releaseId.split(':');
+  if (input.releaseId.includes('‡')) {
+    // Composite ID format: SOURCE‡externalId (e.g., "DISCOGS‡12479585")
+    const [source, externalId] = input.releaseId.split('‡');
     if (source === 'DISCOGS' || source === 'MUSICBRAINZ') {
       release = await releaseRepo.findByExternalId(externalId, source as 'DISCOGS' | 'MUSICBRAINZ');
     }

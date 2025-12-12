@@ -98,7 +98,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Implement repository pattern for clean data access (RecordRepository with CRUD methods, ReleaseRepository with caching).
 - Provide cursor-based pagination for Relay compatibility with text search and filtering.
 - Support text search on records (notes, condition, location) and exact match filtering (location).
-- Handle composite release IDs (SOURCE:externalId) and MongoDB ObjectId formats.
+- Handle composite release IDs (SOURCE‡externalId) and MongoDB ObjectId formats.
 - Validate and decode JWTs from the BFF, extracting tenantId and tenantRole.
 - Dynamically connect to tenant-specific MongoDB databases (vinylvault_user_{userId} or vinylvault_org_{orgName}).
 - Enforce tenant isolation at database level - all queries execute against tenant database.

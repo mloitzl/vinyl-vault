@@ -28,7 +28,7 @@ export interface Track {
  * before any normalization or scoring
  */
 export interface RawRelease {
-  /** Composite ID: `${source}:${externalId}` */
+  /** Composite ID: `${source}‡${externalId}` */
   id: string;
   /** The barcode used to find this release */
   barcode: string;
