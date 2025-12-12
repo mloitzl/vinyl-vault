@@ -175,6 +175,7 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
         // Remove from local state
         setRecords((prev) => prev.filter((r) => r.id !== record.id));
         setTotalCount((prev) => prev - 1);
+        setToast({ message: 'Record deleted successfully', type: 'success' });
       }
     } catch (err: any) {
       setErrors([err?.message ?? 'Failed to delete record']);
