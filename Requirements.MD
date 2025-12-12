@@ -156,23 +156,26 @@ FR-CF-2: Configurable normalization rules
 FR-CF-3: Source-specific rules
 - The system shall support defining source-specific rules (e.g. rules applied only to Discogs or only to MusicBrainz releases) for normalization and scoring.
 
-FR-3 Record Creation 
+FR-3 Record Creation ✅ IMPLEMENTED
 - The system shall allow an ADMIN/CONTRIBUTOR to create a new record by:
   - Selecting a release retrieved from external services or
   - Manually entering basic information if no release is found. 
 - The system shall allow the user to add personal attributes such as purchase date, price, condition, location, and notes.
+- Implementation: RecordRepository, records service, createRecord mutation (backend), createRecord mutation proxy (BFF), ScanBarcode "Add to Collection" button (frontend).
 
-FR-4 Record Management 
+FR-4 Record Management ✅ IMPLEMENTED
 - The system shall allow an ADMIN/CONTRIBUTOR to:
-  - Update any personal attributes of their records.
-  - Delete records they own. 
-- The system shall prevent READER users from creating, updating, or deleting records.
+  - Update any personal attributes of their records. ✅ Edit modal with form validation
+  - Delete records they own. ✅ Confirmation dialog with local state update
+- The system shall prevent READER users from creating, updating, or deleting records. ✅ Role-based authorization in BFF
+- Implementation: updateRecord/deleteRecord mutations (backend), mutation proxies with role checks (BFF), RecordEditModal with form validation (frontend), deleteRecord with confirmation (frontend CollectionPage).
 
-FR-5 Collection Browsing 
+FR-5 Collection Browsing ✅ IMPLEMENTED
 - The system shall allow users to:
-  - List records with pagination.
-  - Filter records by artist, title, year, format, or location.
-  - Search records using a free-text search field (e.g., artist/title).
+  - List records with pagination. ✅ Cursor-based pagination with "Load More" button
+  - Filter records by artist, title, year, format, or location. ✅ Search and location filters implemented
+  - Search records using a free-text search field (e.g., artist/title). ✅ MongoDB text search on notes/condition/location
+- Implementation: RecordRepository with pagination/filtering, records query (backend), records query proxy (BFF), CollectionPage with RecordCard components (frontend).
 
 FR-6 Authentication via GitHub ✅ IMPLEMENTED
 - The system shall authenticate users using GitHub OAuth Web Application Flow.
@@ -314,11 +317,16 @@ QR-04: Robustness to incomplete data
 - ✅ Frontend ScanBarcode component with album display
 - ✅ Score breakdown visualization in UI
 
-### In Progress
-- 🔄 Record creation and management (FR-3, FR-4) - GraphQL schema defined, resolvers pending
-- 🔄 Collection browsing (FR-5) - UI placeholder implemented, data fetching pending
-- 🔄 Release caching in MongoDB (partially implemented)
-- ✅ GitHub App Installation for Organization Tenants (FR-9) - Implemented; users can explicitly install app to create org tenants
+### Recently Completed
+- ✅ Record creation (FR-3) - Full implementation from barcode scan to database storage
+- ✅ Record update (FR-4) - RecordEditModal with form validation, ESC/backdrop close, optimistic UI updates
+- ✅ Record deletion (FR-4) - Backend mutations, BFF proxies with authorization, frontend with confirmation
+- ✅ Collection browsing (FR-5) - Paginated list with search/filter, cursor-based pagination, RecordCard components
+- ✅ Release caching in MongoDB - Per-tenant release caching with composite ID lookup
+- ✅ Multi-tenant statistics - Real-time record and artist counts per tenant with auto-refresh
+- ✅ Toast notifications - Success/error feedback for user actions with auto-dismiss
+- ✅ GitHub App Installation for Organization Tenants (FR-9) - Explicit app installation for org tenant creation
+- ✅ Complete CRUD operations - Create (scan), Read (list/detail), Update (modal), Delete (confirmation)
 
 ## 7. Open Issues
 

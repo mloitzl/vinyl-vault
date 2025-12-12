@@ -94,3 +94,49 @@ export async function closeTenantDbs(): Promise<void> {
   tenantDbs.clear();
 }
 
+// Track which tenant databases have been initialized
+const initializedTenants = new Set<string>();
+
+/**
+ * Initialize indexes for a tenant database.
+ * This should be called once per tenant when the database is first accessed.
+ */
+export async function initializeTenantIndexes(tenantDb: Db, tenantId: string): Promise<void> {
+  // Skip if already initialized
+  if (initializedTenants.has(tenantId)) {
+    return;
+  }
+
+  try {
+    console.log(`[tenant-${tenantId}] Initializing database indexes...`);
+    
+    // Import repositories lazily to avoid circular dependencies
+    const { RecordRepository } = await import('../models/record.js');
+    const { ReleaseRepository } = await import('../models/release.js');
+    const { CounterRepository } = await import('../models/counter.js');
+    
+    // Create indexes for records and releases collections
+    const recordRepo = new RecordRepository(tenantDb);
+    const releaseRepo = new ReleaseRepository(tenantDb);
+    const counterRepo = new CounterRepository(tenantDb);
+    
+    await Promise.all([
+      recordRepo.createIndexes(),
+      releaseRepo.createIndexes(),
+    ]);
+    
+    // Mark as initialized
+    initializedTenants.add(tenantId);
+    console.log(`[tenant-${tenantId}] Database indexes created successfully`);
+    
+    // Reconcile counters asynchronously (fire-and-forget)
+    // This ensures counters are accurate from the first login
+    counterRepo.reconcile().catch((error) => {
+      console.error(`[tenant-${tenantId}] Error reconciling counters:`, error);
+    });
+  } catch (error) {
+    console.error(`[tenant-${tenantId}] Error initializing database indexes:`, error);
+    // Don't throw - indexes are best-effort
+  }
+}
+
