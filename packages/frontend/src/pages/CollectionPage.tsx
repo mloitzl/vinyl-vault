@@ -22,6 +22,21 @@ type RecordsResponse = {
   totalCount: number;
 };
 
+type RecordFilter = {
+  artist?: string;
+  title?: string;
+  year?: number;
+  format?: string;
+  location?: string;
+  search?: string;
+};
+
+type FetchRecordsVariables = {
+  first: number;
+  after?: string;
+  filter?: RecordFilter;
+};
+
 interface CollectionPageProps {
   onNavigateToScan?: () => void;
 }
@@ -93,11 +108,11 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
       }
     }`;
 
-      const variables: any = { first: 20 };
+      const variables: FetchRecordsVariables = { first: 20 };
       if (after) variables.after = after;
 
       // Apply filters
-      const filter: any = {};
+      const filter: RecordFilter = {};
       if (searchTerm.trim()) filter.search = searchTerm.trim();
       if (locationFilter.trim()) filter.location = locationFilter.trim();
       if (Object.keys(filter).length > 0) variables.filter = filter;
