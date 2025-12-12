@@ -65,7 +65,7 @@ function AppContent() {
     if (user) {
       fetchStats();
     }
-  }, [user, activeView, activeTenant]);
+  }, [user, activeTenant]);
 
   // Detect org_installed query parameter from GitHub App installation redirect
   useEffect(() => {
