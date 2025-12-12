@@ -92,7 +92,7 @@ async function fetchMusicBrainzReleases(barcode: string): Promise<{
       }
 
       releases.push({
-        id: `${source}:${externalId}`,
+        id: `${source}‡${externalId}`,
         barcode,
         artist,
         title: r.title,
@@ -179,7 +179,7 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
       const title = titleParts.slice(1).join(' - ') || r.title || 'Unknown';
 
       releases.push({
-        id: `${source}:${externalId}`,
+        id: `${source}‡${externalId}`,
         barcode,
         artist,
         title,

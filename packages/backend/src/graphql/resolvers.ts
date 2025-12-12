@@ -240,7 +240,7 @@ export const resolvers = {
         `[lookupBarcode] Got ${result.albums.length} albums, ${result.rawReleases.length} raw releases`
       );
 
-      // Build a lookup map from rawReleases by id (format: SOURCE:externalId)
+      // Build a lookup map from rawReleases by id (format: SOURCE‡externalId)
       const releaseMap = new Map<string, RawRelease>();
       for (const raw of result.rawReleases) {
         releaseMap.set(raw.id, raw);
@@ -682,7 +682,7 @@ function toGraphQLRelease(release: RawRelease, barcode: string) {
   const now = new Date().toISOString();
   const source = release.source.toUpperCase();
   return {
-    id: `${source}:${release.externalId}`,
+    id: `${source}‡${release.externalId}`,
     barcode,
     artist: release.artist,
     title: release.title,
