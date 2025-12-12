@@ -138,7 +138,6 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
 
   const handleDelete = async (record: Record) => {
     setIsLoading(true);
-    setErrors([]);
 
     const mutation = `mutation DeleteRecord($input: DeleteRecordInput!) {
       deleteRecord(input: $input) {
@@ -161,13 +160,16 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
       const body = await res.json();
 
       if (body.errors) {
-        setErrors(body.errors.map((e: any) => e.message));
+        setToast({
+          message: body.errors[0]?.message || 'Failed to delete record',
+          type: 'error',
+        });
         return;
       }
 
       const payload = body.data?.deleteRecord;
       if (payload?.errors && payload.errors.length > 0) {
-        setErrors(payload.errors);
+        setToast({ message: payload.errors[0], type: 'error' });
         return;
       }
 
@@ -175,9 +177,13 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
         // Remove from local state
         setRecords((prev) => prev.filter((r) => r.id !== record.id));
         setTotalCount((prev) => prev - 1);
+        setToast({ message: 'Record deleted successfully', type: 'success' });
       }
     } catch (err: any) {
-      setErrors([err?.message ?? 'Failed to delete record']);
+      setToast({
+        message: err?.message ?? 'Failed to delete record',
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
