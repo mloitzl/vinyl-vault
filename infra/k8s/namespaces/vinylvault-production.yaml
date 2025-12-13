@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vinylvault-production
+  labels:
+    app.kubernetes.io/name: vinylvault
+    app.kubernetes.io/environment: production

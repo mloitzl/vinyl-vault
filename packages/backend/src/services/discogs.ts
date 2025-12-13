@@ -2,6 +2,7 @@
 // Implements barcode lookup via the Discogs database search API.
 
 import { config } from '../config/index.js';
+import { logger } from '../utils/logger.js';
 
 const DISCOGS_API_BASE = 'https://api.discogs.com';
 
@@ -21,13 +22,13 @@ function getAuthHeader(): Record<string, string> {
   if (token) {
     return { Authorization: `Discogs token=${token}` };
   } else {
-    console.log('No Discogs API token found in environment variables');
+    logger.debug('No Discogs API token found in environment variables');
   }
   return {};
 }
 
 export async function searchByBarcode(barcode: string): Promise<DiscogsSearchResult[]> {
-  console.log('Searching Discogs for barcode:', barcode);
+  logger.debug({ barcode }, 'Searching Discogs for barcode');
   if (!barcode) return [];
   const url = `${DISCOGS_API_BASE}/database/search?barcode=${encodeURIComponent(
     barcode
@@ -43,8 +44,10 @@ export async function searchByBarcode(barcode: string): Promise<DiscogsSearchRes
   }
   const body = await res.json();
   const rawResults: any[] = Array.isArray(body.results) ? body.results : [];
-  console.log(`Discogs search found ${rawResults.length} results for barcode ${barcode}`);
-  console.log('Results:', rawResults);
+  logger.debug(
+    { barcode, count: rawResults.length, results: rawResults },
+    'Discogs search found results'
+  );
 
   // Helper: extract id from known fields (id, resource_url, uri)
   function extractId(r: any): string | null {

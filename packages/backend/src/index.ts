@@ -2,6 +2,7 @@
 // TODO: Implement Apollo Server with MongoDB
 
 import { ApolloServer } from '@apollo/server';
+import { ApolloServerPluginLandingPageDisabled } from '@apollo/server/plugin/disabled';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import { readFileSync } from 'fs';
 import { config as dotenvConfig } from 'dotenv';
@@ -11,7 +12,13 @@ import { dirname, resolve, join } from 'path';
 import { resolvers } from './graphql/resolvers.js';
 import { extractTokenFromHeader, extractTenantContext } from './services/auth.js';
 import { config, validateConfig } from './config/index.js';
-import { getTenantDb, initializeTenantIndexes } from './db/connection.js';
+import { logger } from './utils/logger.js';
+import {
+  closeTenantDbs,
+  disconnectFromDatabase,
+  getTenantDb,
+  initializeTenantIndexes,
+} from './db/connection.js';
 import { getRegistryDb, ensureRegistryIndexes } from './db/registry.js';
 import type { GraphQLContext } from './types/context.js';
 
@@ -31,6 +38,8 @@ async function main() {
   const server = new ApolloServer({
     typeDefs,
     resolvers,
+    introspection: !config.isProduction,
+    plugins: config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : [],
   });
 
   const { url } = await startStandaloneServer(server, {
@@ -54,7 +63,7 @@ async function main() {
             await initializeTenantIndexes(db, tenantCtx.tenantId);
           }
         } catch (error) {
-          console.error('Failed to get database connections:', error);
+          logger.error({ err: error }, 'Failed to get database connections');
           // Continue without db/registryDb - resolvers should handle gracefully
         }
       }
@@ -72,8 +81,27 @@ async function main() {
     },
   });
 
-  console.log(`Domain Backend running at ${url}`);
+  logger.info({ url }, 'Domain Backend running');
+
+  // Graceful shutdown
+  const shutdown = async (signal: NodeJS.Signals) => {
+    logger.info({ signal }, 'Shutting down backend...');
+    try {
+      await server.stop();
+      await disconnectFromDatabase();
+      await closeTenantDbs();
+      logger.info('Backend shutdown complete');
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, 'Error during backend shutdown');
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
-
-main().catch(console.error);
+main().catch((err) => {
+  logger.error({ err }, 'Backend failed to start');
+});

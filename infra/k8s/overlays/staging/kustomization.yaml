@@ -1,0 +1,75 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vinylvault-staging
+
+resources:
+  - ../../base
+
+# Replica count for staging (2 replicas per service)
+replicas:
+  - name: backend
+    count: 2
+  - name: bff
+    count: 2
+  - name: frontend
+    count: 2
+
+# Update image tags for staging
+images:
+  - name: ghcr.io/mloitzl/vinyl-vault-backend
+    newTag: latest-staging
+  - name: ghcr.io/mloitzl/vinyl-vault-bff
+    newTag: latest-staging
+  - name: ghcr.io/mloitzl/vinyl-vault-frontend
+    newTag: latest-staging
+
+# ConfigMap for staging-specific configuration
+configMapGenerator:
+  - name: app-config
+    behavior: replace
+    literals:
+      - FRONTEND_URL=https://vinylvault.antisocializer.org
+      - BFF_URL=http://bff.vinylvault-staging.svc.cluster.local:3000
+      - BACKEND_URL=http://backend.vinylvault-staging.svc.cluster.local:4000
+      - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault-staging/installations/new
+      - ENABLE_DISCOGS_INTEGRATION=true
+
+# Patches for staging environment
+patches:
+  # Update ingress domain
+  - target:
+      kind: Ingress
+      name: vinylvault-ingress
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: vinylvault.antisocializer.org
+      - op: replace
+        path: /spec/rules/0/host
+        value: vinylvault.antisocializer.org
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: vinylvault-staging-tls
+
+  # Add staging label to all resources
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /metadata/labels/environment
+        value: staging
+      - op: add
+        path: /spec/template/metadata/labels/environment
+        value: staging
+
+  # Adjust HPA min replicas for staging
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

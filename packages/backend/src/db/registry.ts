@@ -3,6 +3,7 @@
 
 import { MongoClient, Db } from 'mongodb';
 import { config } from '../config/index.js';
+import { logger } from '../utils/logger.js';
 
 let registryClient: MongoClient | null = null;
 let registryDb: Db | null = null;
@@ -16,7 +17,7 @@ export async function getRegistryDb(): Promise<Db> {
   await registryClient.connect();
   registryDb = registryClient.db();
 
-  console.log('[registry] Connected to MongoDB registry database');
+  logger.info('Connected to MongoDB registry database');
   return registryDb;
 }
 
@@ -25,7 +26,7 @@ export async function closeRegistryDb(): Promise<void> {
     await registryClient.close();
     registryClient = null;
     registryDb = null;
-    console.log('[registry] Disconnected from MongoDB registry database');
+    logger.info('Disconnected from MongoDB registry database');
   }
 }
 
@@ -43,5 +44,5 @@ export async function ensureRegistryIndexes(): Promise<void> {
   await userInstallationRoles.createIndex({ installation_id: 1 });
   await userInstallationRoles.createIndex({ org_name: 1 });
 
-  console.log('[registry] Ensured indexes for installations and user_installation_roles');
+  logger.info('Ensured indexes for installations and user_installation_roles');
 }

@@ -1,0 +1,93 @@
+---
+# MongoDB for BFF (Sessions and user lookups) - PRODUCTION
+# Single replica for simplicity - sessions are ephemeral
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-bff
+  namespace: vinylvault-production
+  labels:
+    app: mongodb-bff
+    component: database
+    environment: production
+spec:
+  clusterIP: None  # Headless service
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+  selector:
+    app: mongodb-bff
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb-bff
+  namespace: vinylvault-production
+  labels:
+    app: mongodb-bff
+    component: database
+    environment: production
+spec:
+  serviceName: mongodb-bff
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-bff
+  template:
+    metadata:
+      labels:
+        app: mongodb-bff
+        component: database
+        environment: production
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:4.4.6
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "root"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-bff-secret
+                  key: mongodb-root-password
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+        labels:
+          app: mongodb-bff
+          environment: production
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: nfs-client
+        resources:
+          requests:
+            storage: 20Gi

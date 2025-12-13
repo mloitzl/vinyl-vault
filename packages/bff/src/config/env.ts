@@ -1,6 +1,8 @@
 // Environment configuration
 // Centralized environment variable access with validation
 
+import { logger } from '../utils/logger.js';
+
 // Use a getter function to ensure env vars are read after dotenv loads
 function getConfig() {
   return {
@@ -95,12 +97,11 @@ export function validateConfig(): void {
   }
 
   if (errors.length > 0) {
-    console.error('Configuration errors:');
-    errors.forEach((err) => console.error(`  - ${err}`));
+    logger.error({ errors }, 'Configuration errors');
     if (config.isProduction) {
       process.exit(1);
     } else {
-      console.warn('Continuing in development mode with missing configuration...');
+      logger.warn('Continuing in development mode with missing configuration...');
     }
   }
 }

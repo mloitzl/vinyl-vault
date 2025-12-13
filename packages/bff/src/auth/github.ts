@@ -3,6 +3,7 @@
 
 import { Router, Request, Response, type IRouter } from 'express';
 import { config } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 import { queryBackend } from '../services/backendClient.js';
 import { signJwt } from './jwt.js';
 import { handleSetup } from './setup.js';
@@ -73,8 +74,8 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
   // Handle OAuth errors from GitHub
   if (error) {
-    console.error('GitHub OAuth error:', error, error_description);
-    return res.redirect(`${config.frontend.url}?error=oauth_error`);
+    logger.error({ error, error_description }, 'GitHub OAuth error');
+    return res.redirect(`${config.frontend.url}?error=oauth_failed`);
   }
 
   if (!code || typeof code !== 'string') {
@@ -119,8 +120,11 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     const tokenData = (await tokenResponse.json()) as GitHubTokenResponse;
 
     if (tokenData.error) {
-      console.error('GitHub token error:', tokenData.error, tokenData.error_description);
-      return res.redirect(`${config.frontend.url}?error=token_error`);
+      logger.error(
+        { error: tokenData.error, error_description: tokenData.error_description },
+        'GitHub token error'
+      );
+      return res.redirect(`${config.frontend.url}?error=token_failed`);
     }
 
     // Fetch user profile from GitHub
@@ -133,8 +137,8 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     });
 
     if (!userResponse.ok) {
-      console.error('GitHub user fetch failed:', userResponse.status);
-      return res.redirect(`${config.frontend.url}?error=user_fetch_error`);
+      logger.error({ status: userResponse.status }, 'GitHub user fetch failed');
+      return res.redirect(`${config.frontend.url}?error=user_fetch_failed`);
     }
 
     const githubUser = (await userResponse.json()) as GitHubUser;
@@ -162,10 +166,10 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
             if (primary && primary.email) primaryEmail = String(primary.email);
           }
         } else {
-          console.warn('GitHub emails fetch failed:', emailsResponse.status);
+          logger.warn({ status: emailsResponse.status }, 'GitHub emails fetch failed');
         }
       } catch (e) {
-        console.warn('Failed to fetch GitHub emails:', e);
+        logger.warn({ err: e }, 'Failed to fetch GitHub emails');
       }
     }
 
@@ -241,17 +245,20 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       });
       userTenants = tenantResult.userTenants || [];
       personalTenantId = userTenants.find((t) => t.tenantId.startsWith('user_'))?.tenantId;
-      console.log(`[github.callback] Found ${userTenants.length} existing tenants for user`);
+      logger.debug(
+        { userId: user.id, tenantsCount: userTenants.length },
+        'Found existing tenants for user'
+      );
       if (personalTenantId) {
-        console.log(`[github.callback] Personal tenant already exists: ${personalTenantId}`);
+        logger.debug({ personalTenantId }, 'Personal tenant already exists');
       }
     } catch (err) {
-      console.warn('Failed to fetch user tenants:', err);
+      logger.warn({ err, userId: user.id }, 'Failed to fetch user tenants');
     }
 
     // If no personal tenant exists, create one
     if (!personalTenantId) {
-      console.log('[github.callback] No personal tenant found, creating new one...');
+      logger.info({ userId: user.id }, 'No personal tenant found, creating new one...');
       const CREATE_TENANT_MUTATION = `
         mutation CreateTenant($input: CreateTenantInput!) {
           createTenant(input: $input) {
@@ -294,9 +301,9 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
           { jwt: serviceJwt }
         );
         personalTenantId = tenantCreateResult.createTenant.tenantId;
-        console.log(`[github.callback] Created personal tenant for user: ${personalTenantId}`);
+        logger.info({ userId: user.id, personalTenantId }, 'Created personal tenant for user');
       } catch (err) {
-        console.error('Failed to create personal tenant:', err);
+        logger.error({ err, userId: user.id }, 'Failed to create personal tenant');
         // Non-fatal: continue without tenant (will be created on next login)
       }
     }
@@ -335,11 +342,12 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
         { jwt }
       );
       availableTenants = tenantsResult.userTenants || [];
-      console.log(`[github.callback] User has ${availableTenants.length} available tenants`);
-    } catch (err: any) {
-      console.warn(
-        `[github.callback] Failed to fetch user tenants: ${err?.message || String(err)}`
+      logger.debug(
+        { userId: user.id, tenantsCount: availableTenants.length },
+        'User has available tenants'
       );
+    } catch (err: any) {
+      logger.warn({ err, userId: user.id }, 'Failed to fetch user tenants');
       // Fallback to just personal tenant
       availableTenants = [
         {
@@ -374,7 +382,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Save session and redirect to frontend
     req.session.save((err) => {
       if (err) {
-        console.error('Session save error:', err);
+        logger.error({ err }, 'Session save error');
         return res.redirect(`${config.frontend.url}?error=session_error`);
       }
       // If a returnToUrl was provided in the initial request and is present in state, redirect there.
@@ -383,7 +391,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       res.redirect(dest);
     });
   } catch (err) {
-    console.error('OAuth callback error:', err);
+    logger.error({ err }, 'OAuth callback error');
     res.redirect(`${config.frontend.url}?error=server_error`);
   }
 });
@@ -392,7 +400,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 authRouter.post('/logout', (req: Request, res: Response) => {
   req.session.destroy((err) => {
     if (err) {
-      console.error('Session destroy error:', err);
+      logger.error({ err }, 'Session destroy error');
       return res.status(500).json({ error: 'Failed to logout' });
     }
     res.clearCookie(config.session.cookieName);

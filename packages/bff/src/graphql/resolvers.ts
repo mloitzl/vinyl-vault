@@ -1,5 +1,6 @@
 // BFF GraphQL resolvers
 
+import { logger } from '../utils/logger.js';
 import type { GraphQLContext } from '../types/context.js';
 import { signJwt } from '../auth/jwt.js';
 import { queryBackend } from '../services/backendClient.js';
@@ -155,7 +156,7 @@ export const resolvers = {
         );
         return data.records;
       } catch (err: any) {
-        console.error('[BFF] records query error:', err);
+        logger.error({ err }, 'BFF records query error');
         return {
           edges: [],
           pageInfo: { hasNextPage: false, hasPreviousPage: false },
@@ -399,7 +400,7 @@ export const resolvers = {
         );
         return { record: data.createRecord, errors: [] };
       } catch (err: any) {
-        console.error('[BFF] createRecord error:', err);
+        logger.error({ err }, 'BFF createRecord error');
         return { record: null, errors: [err?.message ?? 'Failed to create record'] };
       }
     },
@@ -492,11 +493,15 @@ export const resolvers = {
         );
         return { record: data.updateRecord, errors: [] };
       } catch (err: any) {
-        console.error('[BFF] updateRecord error:', err);
+        logger.error({ err }, 'BFF updateRecord error');
         return { record: null, errors: [err?.message ?? 'Failed to update record'] };
       }
     },
-    deleteRecord: async (_parent: unknown, _args: { input: { id: string } }, context: GraphQLContext) => {
+    deleteRecord: async (
+      _parent: unknown,
+      _args: { input: { id: string } },
+      context: GraphQLContext
+    ) => {
       // Verify user is authenticated
       if (!context.user) {
         return { deletedRecordId: null, errors: ['Unauthorized: user not authenticated'] };
@@ -545,7 +550,7 @@ export const resolvers = {
           return { deletedRecordId: null, errors: ['Failed to delete record'] };
         }
       } catch (err: any) {
-        console.error('[BFF] deleteRecord error:', err);
+        logger.error({ err }, 'BFF deleteRecord error');
         return { deletedRecordId: null, errors: [err?.message ?? 'Failed to delete record'] };
       }
     },
@@ -581,7 +586,7 @@ export const resolvers = {
         });
       });
 
-      console.log(`[resolvers] User switched to tenant: ${tenantId}`);
+      logger.info({ userId: context.user.id, tenantId }, 'User switched to tenant');
 
       // Return updated user with new active tenant
       return {

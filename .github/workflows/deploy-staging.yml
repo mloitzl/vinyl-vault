@@ -1,0 +1,182 @@
+name: Deploy to Staging
+
+on:
+    push:
+        branches:
+            - develop
+        paths:
+            - "packages/**"
+            - "infra/k8s/**"
+            - ".github/workflows/deploy-staging.yml"
+            - ".github/workflows/build.yml"
+    workflow_dispatch:
+
+env:
+    REGISTRY: ghcr.io
+    NAMESPACE: vinylvault-staging
+    KUSTOMIZE_PATH: infra/k8s/overlays/staging
+
+jobs:
+    deploy:
+        runs-on: self-hosted
+        permissions:
+            contents: read
+            packages: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up kubectl context
+              run: |
+                  # Verify kubectl access
+                  kubectl cluster-info
+                  kubectl get nodes
+
+            - name: Verify secrets exist
+              run: |
+                  # Check if secrets are already created
+                  if kubectl get secret app-secrets -n ${{ env.NAMESPACE }} 2>/dev/null; then
+                    echo "✓ app-secrets exists"
+                  else
+                    echo "✗ app-secrets missing - please create with: infra/k8s/overlays/staging/SECRETS.md"
+                    exit 1
+                  fi
+
+                  if kubectl get secret mongodb-secrets -n ${{ env.NAMESPACE }} 2>/dev/null; then
+                    echo "✓ mongodb-secrets exists"
+                  else
+                    echo "✗ mongodb-secrets missing - please create with: infra/k8s/overlays/staging/SECRETS.md"
+                    exit 1
+                  fi
+
+                  if kubectl get secret github-secrets -n ${{ env.NAMESPACE }} 2>/dev/null; then
+                    echo "✓ github-secrets exists"
+                  else
+                    echo "✗ github-secrets missing - please create with: infra/k8s/overlays/staging/SECRETS.md"
+                    exit 1
+                  fi
+
+                  if kubectl get secret github-app-key -n ${{ env.NAMESPACE }} 2>/dev/null; then
+                    echo "✓ github-app-key exists"
+                  else
+                    echo "✗ github-app-key missing - please create with: infra/k8s/overlays/staging/SECRETS.md"
+                    exit 1
+                  fi
+
+            - name: Preview Kustomize manifests
+              run: |
+                  echo "=== Staging Manifests Preview ==="
+                  kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
+                  echo "... (see full output above)"
+
+            - name: Deploy application with Kustomize
+              run: |
+                  echo "Deploying to staging namespace: ${{ env.NAMESPACE }}"
+                  kubectl apply -k ${{ env.KUSTOMIZE_PATH }}
+                  echo "✓ Kustomize apply completed"
+
+            - name: Wait for deployments to be ready
+              run: |
+                  echo "Waiting for backend deployment..."
+                  kubectl rollout status deployment/backend -n ${{ env.NAMESPACE }} --timeout=5m
+
+                  echo "Waiting for BFF deployment..."
+                  kubectl rollout status deployment/bff -n ${{ env.NAMESPACE }} --timeout=5m
+
+                  echo "Waiting for frontend deployment..."
+                  kubectl rollout status deployment/frontend -n ${{ env.NAMESPACE }} --timeout=5m
+
+                  echo "✓ All deployments are ready"
+
+            - name: Verify pods are running
+              run: |
+                  echo "=== Pod Status ==="
+                  kubectl get pods -n ${{ env.NAMESPACE }}
+
+                  echo ""
+                  echo "=== Checking pod readiness ==="
+                  READY=$(kubectl get pods -n ${{ env.NAMESPACE }} -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -c "True")
+                  TOTAL=$(kubectl get pods -n ${{ env.NAMESPACE }} -o jsonpath='{.items[*].metadata.name}' | wc -w)
+
+                  echo "Ready pods: $READY / $TOTAL"
+
+                  if [ "$READY" -ne "$TOTAL" ]; then
+                    echo "⚠ Not all pods are ready, checking logs..."
+                    kubectl logs -n ${{ env.NAMESPACE }} --all-containers=true --tail=20 || true
+                    exit 1
+                  fi
+
+            - name: Check service endpoints
+              run: |
+                  echo "=== Services ==="
+                  kubectl get svc -n ${{ env.NAMESPACE }}
+
+                  echo ""
+                  echo "=== Ingress ==="
+                  kubectl get ingress -n ${{ env.NAMESPACE }}
+
+                  echo ""
+                  echo "=== Certificate Status ==="
+                  kubectl get certificate -n ${{ env.NAMESPACE }}
+
+            - name: Run smoke tests
+              run: |
+                  echo "=== Running Smoke Tests ==="
+
+                  # Get service endpoints
+                  BFF_SERVICE="http://bff.${{ env.NAMESPACE }}.svc.cluster.local:4000"
+                  FRONTEND_SERVICE="http://frontend.${{ env.NAMESPACE }}.svc.cluster.local"
+
+                  # Test BFF GraphQL endpoint (should fail without auth, but show 200/401)
+                  echo "Testing BFF GraphQL endpoint..."
+                  HEALTH_STATUS=$(kubectl run -it --rm test-curl --image=curlimages/curl --restart=Never -- \
+                    curl -s -o /dev/null -w "%{http_code}" "${BFF_SERVICE}/graphql" || true)
+
+                  if [ "$HEALTH_STATUS" = "200" ] || [ "$HEALTH_STATUS" = "405" ]; then
+                    echo "✓ BFF GraphQL endpoint is responding"
+                  else
+                    echo "⚠ BFF GraphQL endpoint returned status: $HEALTH_STATUS"
+                  fi
+
+                  # Test health endpoints if available
+                  echo "Testing health endpoints..."
+                  for service in backend bff; do
+                    HEALTH=$(kubectl run -it --rm test-health --image=curlimages/curl --restart=Never -- \
+                      curl -s -o /dev/null -w "%{http_code}" "http://${service}.${{ env.NAMESPACE }}.svc.cluster.local:3000/health" 2>/dev/null || echo "000")
+                    
+                    if [ "$HEALTH" = "200" ]; then
+                      echo "✓ $service /health endpoint is responding"
+                    else
+                      echo "⚠ $service /health endpoint returned status: $HEALTH"
+                    fi
+                  done
+
+            - name: Post-deployment summary
+              if: always()
+              run: |
+                  echo "=== Deployment Summary ==="
+                  echo "Environment: Staging"
+                  echo "Namespace: ${{ env.NAMESPACE }}"
+                  echo "Domain: vinylvault.antisocializer.org"
+                  echo "Timestamp: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                  echo ""
+                  echo "=== Resource Status ==="
+                  kubectl get all -n ${{ env.NAMESPACE }}
+                  echo ""
+                  echo "=== Next Steps ==="
+                  echo "1. Monitor pod logs: kubectl logs -f <pod-name> -n ${{ env.NAMESPACE }}"
+                  echo "2. Access staging: https://vinylvault.antisocializer.org"
+                  echo "3. Check ingress: kubectl describe ingress -n ${{ env.NAMESPACE }}"
+
+            - name: Report failure
+              if: failure()
+              run: |
+                  echo "❌ Staging deployment failed!"
+                  echo ""
+                  echo "=== Recent Pod Events ==="
+                  kubectl describe pods -n ${{ env.NAMESPACE }} | tail -30 || true
+                  echo ""
+                  echo "=== Pod Logs ==="
+                  kubectl logs -n ${{ env.NAMESPACE }} --tail=50 || true
+                  exit 1

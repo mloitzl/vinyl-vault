@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { config } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 const SIGNATURE_PREFIX = 'sha256=';
 
@@ -17,13 +18,13 @@ export function verifyWebhookSignature(
   signature: string | undefined
 ): boolean {
   if (!signature || !signature.startsWith(SIGNATURE_PREFIX)) {
-    console.warn('[webhook] Invalid signature format or missing');
+    logger.warn('Webhook invalid signature format or missing');
     return false;
   }
 
   const secret = getWebhookSecret();
   if (!secret) {
-    console.warn('[webhook] No webhook secret configured');
+    logger.warn('No webhook secret configured');
     return false;
   }
 
@@ -36,29 +37,29 @@ export function verifyWebhookSignature(
   const signatureBuf = Buffer.from(signature);
   const computedBuf = Buffer.from(computed);
 
-  console.log('[webhook] Signature verification:');
-  console.log('  Secret length:', secret.length);
-  console.log('  Secret (first 20 chars):', secret.substring(0, 20));
-  console.log('  Received:', signature.substring(0, 50) + '...');
-  console.log('  Computed:', computed.substring(0, 50) + '...');
-  console.log('  Payload size:', payloadBuf.length, 'bytes');
-  console.log('  Payload (first 100 chars):', payloadBuf.toString('utf8').substring(0, 100));
+  logger.debug(
+    {
+      secretLength: secret.length,
+      payloadSize: payloadBuf.length,
+      signatureReceived: signature.substring(0, 50),
+      signatureComputed: computed.substring(0, 50),
+    },
+    'Webhook signature verification'
+  );
 
   if (signatureBuf.length !== computedBuf.length) {
-    console.warn(
-      '[webhook] Signature length mismatch:',
-      signatureBuf.length,
-      'vs',
-      computedBuf.length
+    logger.warn(
+      { receivedLength: signatureBuf.length, computedLength: computedBuf.length },
+      'Webhook signature length mismatch'
     );
     return false;
   }
 
   const isValid = crypto.timingSafeEqual(signatureBuf, computedBuf);
   if (!isValid) {
-    console.warn('[webhook] Signature verification failed');
+    logger.warn('Webhook signature verification failed');
   } else {
-    console.log('[webhook] ✓ Signature verified successfully');
+    logger.debug('Webhook signature verified successfully');
   }
   return isValid;
 }

@@ -3,6 +3,7 @@
 
 import { MongoClient, Db } from 'mongodb';
 import { config } from '../config/index.js';
+import { logger } from '../utils/logger.js';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
@@ -20,7 +21,7 @@ export async function connectToDatabase(): Promise<Db> {
   await client.connect();
   db = client.db();
 
-  console.log('Connected to MongoDB');
+  logger.info('Connected to MongoDB');
   return db;
 }
 
@@ -29,7 +30,7 @@ export async function disconnectFromDatabase(): Promise<void> {
     await client.close();
     client = null;
     db = null;
-    console.log('Disconnected from MongoDB');
+    logger.info('Disconnected from MongoDB');
   }
 }
 
@@ -61,33 +62,39 @@ export async function getTenantDb(tenantId: string): Promise<Db> {
   // Create new connection for this tenant
   const dbName = getTenantDbName(tenantId);
   const tenantClient = new MongoClient(config.mongodb.uriBase);
-  
+
   try {
     await tenantClient.connect();
     const tenantDb = tenantClient.db(dbName);
-    
+
     // Cache the connection and client for reuse
     tenantClients.set(tenantId, tenantClient);
     tenantDbs.set(tenantId, tenantDb);
-    
-    console.log(`[tenant-${tenantId}] Connected to tenant database: ${dbName}`);
+
+    logger.info({ tenantId, dbName }, 'Connected to tenant database');
     return tenantDb;
   } catch (error) {
     tenantClient.close().catch(() => {});
-    throw new Error(`Failed to connect to tenant database ${dbName}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to connect to tenant database ${dbName}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }
 
 // Close all tenant database connections
 export async function closeTenantDbs(): Promise<void> {
-  const closePromises = Array.from(tenantClients.entries()).map(async ([tenantId, tenantClient]) => {
-    try {
-      await tenantClient.close();
-      console.log(`[tenant-${tenantId}] Disconnected from tenant database`);
-    } catch (error) {
-      console.error(`[tenant-${tenantId}] Error closing tenant database:`, error);
+  const closePromises = Array.from(tenantClients.entries()).map(
+    async ([tenantId, tenantClient]) => {
+      try {
+        await tenantClient.close();
+        logger.info({ tenantId }, 'Disconnected from tenant database');
+      } catch (error) {
+        logger.error({ tenantId, err: error }, 'Error closing tenant database');
+      }
     }
-  });
+  );
 
   await Promise.all(closePromises);
   tenantClients.clear();
@@ -108,34 +115,31 @@ export async function initializeTenantIndexes(tenantDb: Db, tenantId: string): P
   }
 
   try {
-    console.log(`[tenant-${tenantId}] Initializing database indexes...`);
-    
+    logger.info({ tenantId }, 'Initializing database indexes...');
+
     // Import repositories lazily to avoid circular dependencies
     const { RecordRepository } = await import('../models/record.js');
     const { ReleaseRepository } = await import('../models/release.js');
     const { CounterRepository } = await import('../models/counter.js');
-    
+
     // Create indexes for records and releases collections
     const recordRepo = new RecordRepository(tenantDb);
     const releaseRepo = new ReleaseRepository(tenantDb);
     const counterRepo = new CounterRepository(tenantDb);
-    
-    await Promise.all([
-      recordRepo.createIndexes(),
-      releaseRepo.createIndexes(),
-    ]);
-    
+
+    await Promise.all([recordRepo.createIndexes(), releaseRepo.createIndexes()]);
+
     // Mark as initialized
     initializedTenants.add(tenantId);
-    console.log(`[tenant-${tenantId}] Database indexes created successfully`);
+    logger.info({ tenantId }, 'Database indexes created successfully');
     
     // Reconcile counters asynchronously (fire-and-forget)
     // This ensures counters are accurate from the first login
     counterRepo.reconcile().catch((error) => {
-      console.error(`[tenant-${tenantId}] Error reconciling counters:`, error);
+      logger.error({ tenantId, err: error }, 'Error reconciling counters');
     });
   } catch (error) {
-    console.error(`[tenant-${tenantId}] Error initializing database indexes:`, error);
+    logger.error({ tenantId, err: error }, 'Error initializing database indexes');
     // Don't throw - indexes are best-effort
   }
 }
