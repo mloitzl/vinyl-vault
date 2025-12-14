@@ -53,6 +53,8 @@ jobs:
                     TAG="latest-production"
                   elif [ "$BRANCH" = "develop" ]; then
                     TAG="latest-staging"
+                  elif [ "${{ github.event_name }}" = "pull_request" ]; then
+                    TAG="pr-${{ github.event.pull_request.number }}"
                   else
                     TAG="$COMMIT_SHA"
                   fi
@@ -67,7 +69,7 @@ jobs:
               with:
                   context: .
                   file: ./infra/Dockerfile.${{ matrix.service }}
-                  push: ${{ github.event_name == 'push' }}
+                  push: true
                   tags: |
                       ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
                       ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}

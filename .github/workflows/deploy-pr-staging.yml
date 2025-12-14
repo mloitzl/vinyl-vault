@@ -1,0 +1,88 @@
+name: Deploy PR to Staging
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened, labeled]
+        branches:
+            - main
+            - develop
+
+env:
+    REGISTRY: ghcr.io
+    KUBE_NAMESPACE: vinylvault-staging
+
+jobs:
+    deploy:
+        name: Deploy to Staging
+        runs-on: self-hosted
+        permissions:
+            contents: read
+            packages: read
+
+        # Only deploy if PR has 'deploy-staging' label or is draft PR
+        if: contains(github.event.pull_request.labels.*.name, 'deploy-staging')
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up kubectl
+              uses: azure/setup-kubectl@v3
+
+            - name: Configure kubectl
+              run: |
+                  mkdir -p $HOME/.kube
+                  echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+                  chmod 600 $HOME/.kube/config
+
+            - name: Update image tags in manifests
+              run: |
+                  PR_NUMBER=${{ github.event.pull_request.number }}
+                  IMAGE_TAG="pr-${PR_NUMBER}"
+
+                  # Update backend image
+                  kubectl set image deployment/backend \
+                    backend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-backend:${IMAGE_TAG}" \
+                    -n ${{ env.KUBE_NAMESPACE }} \
+                    --dry-run=client -o yaml | kubectl apply -f -
+
+                  # Update bff image
+                  kubectl set image deployment/bff \
+                    bff="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-bff:${IMAGE_TAG}" \
+                    -n ${{ env.KUBE_NAMESPACE }} \
+                    --dry-run=client -o yaml | kubectl apply -f -
+
+                  # Update frontend image
+                  kubectl set image deployment/frontend \
+                    frontend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-frontend:${IMAGE_TAG}" \
+                    -n ${{ env.KUBE_NAMESPACE }} \
+                    --dry-run=client -o yaml | kubectl apply -f -
+
+            - name: Wait for rollout
+              run: |
+                  kubectl rollout status deployment/backend -n ${{ env.KUBE_NAMESPACE }} --timeout=5m
+                  kubectl rollout status deployment/bff -n ${{ env.KUBE_NAMESPACE }} --timeout=5m
+                  kubectl rollout status deployment/frontend -n ${{ env.KUBE_NAMESPACE }} --timeout=5m
+
+            - name: Post deployment comment
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: `✅ **PR deployed to Staging** using image tag \`pr-${{ github.event.pull_request.number }}\`\n\nView staging at: https://staging.vinylvault.app`
+                      })
+
+            - name: Deployment failed notification
+              if: failure()
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: `❌ **PR deployment to Staging failed**\n\nCheck the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+                      })
