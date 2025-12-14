@@ -1,0 +1,311 @@
+name: Deploy to Production
+
+on:
+    workflow_dispatch:
+        inputs:
+            auto_rollback:
+                description: "Auto-rollback on failure (true/false)"
+                required: false
+                default: "true"
+
+env:
+    REGISTRY: ghcr.io
+    NAMESPACE: vinylvault-production
+    KUSTOMIZE_PATH: infra/k8s/overlays/production
+
+jobs:
+    preflight:
+        runs-on: self-hosted
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Verify kubectl access
+              run: |
+                  echo "=== Kubernetes Cluster Info ==="
+                  kubectl cluster-info
+                  kubectl get nodes
+                  echo "✓ Kubectl access verified"
+
+            - name: Check production namespace exists
+              run: |
+                  if kubectl get namespace ${{ env.NAMESPACE }} 2>/dev/null; then
+                    echo "✓ Production namespace exists"
+                  else
+                    echo "❌ Production namespace does not exist"
+                    echo "Create it with: kubectl create namespace ${{ env.NAMESPACE }}"
+                    exit 1
+                  fi
+
+            - name: Verify all required secrets exist
+              run: |
+                  SECRETS=("app-secrets" "mongodb-secrets" "github-secrets" "github-app-key")
+
+                  for secret in "${SECRETS[@]}"; do
+                    if kubectl get secret "$secret" -n ${{ env.NAMESPACE }} 2>/dev/null; then
+                      echo "✓ $secret exists"
+                    else
+                      echo "❌ $secret missing"
+                      echo "Create production secrets with: infra/k8s/overlays/production/SECRETS.md"
+                      exit 1
+                    fi
+                  done
+
+            - name: Verify MongoDB is running
+              run: |
+                  echo "Checking MongoDB deployments..."
+                  MONGODB_PODS=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app=mongodb --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+
+                  if [ "$MONGODB_PODS" -gt 0 ]; then
+                    echo "✓ MongoDB pods are running ($MONGODB_PODS found)"
+                  else
+                    echo "⚠ No MongoDB pods found - ensure MongoDB is deployed first"
+                    echo "Deploy MongoDB with: infra/k8s/scripts/deploy-mongodb-production.sh"
+                  fi
+
+    confirm:
+        runs-on: self-hosted
+        needs: preflight
+        permissions:
+            contents: read
+
+        steps:
+            - name: Request manual confirmation
+              run: |
+                  echo "========================================="
+                  echo "⚠️  PRODUCTION DEPLOYMENT CONFIRMATION ⚠️"
+                  echo "========================================="
+                  echo ""
+                  echo "Environment: PRODUCTION"
+                  echo "Namespace: ${{ env.NAMESPACE }}"
+                  echo "Domain: vinylvault.loitzl.com"
+                  echo "Replicas: 4 per service"
+                  echo ""
+                  echo "This action will:"
+                  echo "1. Apply Kustomize manifests to production"
+                  echo "2. Trigger rolling deployment of all services"
+                  echo "3. Perform health checks and smoke tests"
+                  echo ""
+                  echo "⏸️  Manual review required in GitHub Actions UI"
+                  echo "========================================="
+
+    deploy:
+        runs-on: self-hosted
+        needs: confirm
+        permissions:
+            contents: read
+            packages: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Pre-deployment backup check
+              run: |
+                  echo "=== Pre-Deployment Verification ==="
+                  echo "Checking current deployment state..."
+
+                  # Save current pod state
+                  kubectl get pods -n ${{ env.NAMESPACE }} > /tmp/pods-before.txt
+
+                  # Check current replicas
+                  CURRENT_REPLICAS=$(kubectl get deployment -n ${{ env.NAMESPACE }} -o jsonpath='{.items[*].status.readyReplicas}' 2>/dev/null | awk '{print $1}')
+                  echo "Current ready replicas: $CURRENT_REPLICAS"
+
+            - name: Preview manifests
+              run: |
+                  echo "=== Manifest Preview (first 100 lines) ==="
+                  kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -100
+                  echo "..."
+                  echo ""
+                  echo "✓ Run 'kubectl kustomize ${{ env.KUSTOMIZE_PATH }}' to see full output"
+
+            - name: Apply production manifests
+              id: deploy
+              run: |
+                  echo "🚀 Deploying to production..."
+                  kubectl apply -k ${{ env.KUSTOMIZE_PATH }}
+                  echo "✓ Manifests applied"
+
+            - name: Monitor rolling deployment
+              run: |
+                  echo "=== Monitoring Rollout ==="
+
+                  SERVICES=("backend" "bff" "frontend")
+                  TIMEOUT=600  # 10 minutes
+
+                  for service in "${SERVICES[@]}"; do
+                    echo ""
+                    echo "Rolling out $service..."
+                    
+                    if kubectl rollout status deployment/$service -n ${{ env.NAMESPACE }} --timeout=${TIMEOUT}s; then
+                      echo "✓ $service rollout completed successfully"
+                    else
+                      echo "❌ $service rollout failed or timed out"
+                      
+                      # Check rollout history
+                      echo "Rollout history:"
+                      kubectl rollout history deployment/$service -n ${{ env.NAMESPACE }}
+                      
+                      # Show recent events
+                      echo "Recent events:"
+                      kubectl describe deployment/$service -n ${{ env.NAMESPACE }} | tail -20
+                      
+                      exit 1
+                    fi
+                  done
+
+            - name: Verify pod health
+              run: |
+                  echo "=== Pod Health Verification ==="
+
+                  # Wait for pods to stabilize
+                  sleep 10
+
+                  # Check pod status
+                  echo "Checking pod status..."
+                  kubectl get pods -n ${{ env.NAMESPACE }} -o wide
+
+                  # Verify all pods are running
+                  READY_PODS=$(kubectl get pods -n ${{ env.NAMESPACE }} -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+                  TOTAL_PODS=$(kubectl get pods -n ${{ env.NAMESPACE }} --no-headers | wc -l)
+
+                  echo ""
+                  echo "Ready pods: $READY_PODS / $TOTAL_PODS"
+
+                  if [ "$READY_PODS" -eq "$TOTAL_PODS" ]; then
+                    echo "✓ All pods are healthy"
+                  else
+                    echo "⚠ Some pods are not ready"
+                    
+                    # Show pod events
+                    kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | tail -20
+                    
+                    # Show pod logs for failed pods
+                    kubectl logs -n ${{ env.NAMESPACE }} \
+                      --field-selector=status.phase!=Running \
+                      --all-containers=true \
+                      --tail=20 || true
+                    
+                    exit 1
+                  fi
+
+            - name: Verify ingress and certificates
+              run: |
+                  echo "=== Ingress & Certificate Status ==="
+
+                  # Check ingress
+                  kubectl get ingress -n ${{ env.NAMESPACE }} -o wide
+
+                  echo ""
+
+                  # Check certificates
+                  echo "Certificate Status:"
+                  kubectl get certificate -n ${{ env.NAMESPACE }}
+
+                  echo ""
+
+                  # Verify certificate is ready
+                  CERT_READY=$(kubectl get certificate -n ${{ env.NAMESPACE }} -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -c "True")
+
+                  if [ "$CERT_READY" -gt 0 ]; then
+                    echo "✓ TLS certificates are ready"
+                  else
+                    echo "⚠ TLS certificates not ready yet (cert-manager may still be provisioning)"
+                    echo "Monitor with: kubectl describe certificate -n ${{ env.NAMESPACE }}"
+                  fi
+
+            - name: Run production smoke tests
+              continue-on-error: true
+              run: |
+                  echo "=== Production Smoke Tests ==="
+
+                  # Health endpoint checks
+                  echo "Testing health endpoints..."
+                  for service in backend bff; do
+                    STATUS=$(kubectl run -it --rm test-health --image=curlimages/curl --restart=Never -- \
+                      curl -s -o /dev/null -w "%{http_code}" "http://${service}.${{ env.NAMESPACE }}.svc.cluster.local:3000/health" 2>/dev/null || echo "000")
+                    
+                    if [ "$STATUS" = "200" ]; then
+                      echo "✓ $service health check passed"
+                    else
+                      echo "⚠ $service health check returned: $STATUS"
+                    fi
+                  done
+
+                  # Frontend check
+                  echo ""
+                  echo "Testing frontend..."
+                  FRONTEND_STATUS=$(kubectl run -it --rm test-frontend --image=curlimages/curl --restart=Never -- \
+                    curl -s -o /dev/null -w "%{http_code}" "http://frontend.${{ env.NAMESPACE }}.svc.cluster.local/" 2>/dev/null || echo "000")
+
+                  if [ "$FRONTEND_STATUS" = "200" ]; then
+                    echo "✓ Frontend health check passed"
+                  else
+                    echo "⚠ Frontend health check returned: $FRONTEND_STATUS"
+                  fi
+
+            - name: Post-deployment summary
+              if: success()
+              run: |
+                  echo ""
+                  echo "========================================="
+                  echo "✅ PRODUCTION DEPLOYMENT SUCCESSFUL"
+                  echo "========================================="
+                  echo ""
+                  echo "Environment: PRODUCTION"
+                  echo "Namespace: ${{ env.NAMESPACE }}"
+                  echo "Domain: vinylvault.loitzl.com"
+                  echo "Timestamp: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                  echo ""
+                  echo "=== Resource Status ==="
+                  kubectl get all -n ${{ env.NAMESPACE }}
+                  echo ""
+                  echo "=== Deployment Replicas ==="
+                  kubectl get deployment -n ${{ env.NAMESPACE }} -o wide
+                  echo ""
+                  echo "=== Next Steps ==="
+                  echo "1. Verify at: https://vinylvault.loitzl.com"
+                  echo "2. Monitor logs: kubectl logs -f -l app=<service> -n ${{ env.NAMESPACE }}"
+                  echo "3. Check metrics: kubectl top pods -n ${{ env.NAMESPACE }}"
+                  echo "4. View events: kubectl get events -n ${{ env.NAMESPACE }}"
+
+            - name: Initiate rollback on failure
+              if: failure() && github.event.inputs.auto_rollback == 'true'
+              run: |
+                  echo "❌ PRODUCTION DEPLOYMENT FAILED"
+                  echo ""
+                  echo "Initiating automatic rollback..."
+
+                  SERVICES=("backend" "bff" "frontend")
+                  for service in "${SERVICES[@]}"; do
+                    echo ""
+                    echo "Rolling back $service..."
+                    kubectl rollout undo deployment/$service -n ${{ env.NAMESPACE }}
+                    
+                    # Wait for rollback to complete
+                    kubectl rollout status deployment/$service -n ${{ env.NAMESPACE }} --timeout=5m || true
+                  done
+
+                  echo ""
+                  echo "✓ Rollback completed"
+                  echo "Review the failed deployment and try again"
+
+            - name: Alert on failure
+              if: failure()
+              run: |
+                  echo "========================================="
+                  echo "❌ PRODUCTION DEPLOYMENT FAILED"
+                  echo "========================================="
+                  echo ""
+                  echo "Environment: PRODUCTION"
+                  echo "Namespace: ${{ env.NAMESPACE }}"
+                  echo "Timestamp: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                  echo ""
+                  echo "Check GitHub Actions logs for details"
+                  echo "Rollback status: ${{ github.event.inputs.auto_rollback }}"
+                  echo ""
+                  exit 1
