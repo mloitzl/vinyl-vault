@@ -2,7 +2,7 @@
 // TODO: Implement record data access
 
 import { ObjectId } from 'mongodb';
-import { CounterRepository } from './counter';
+import { CounterRepository } from './counter.js';
 import { logger } from '../utils/logger.js';
 
 export interface RecordDocument {
