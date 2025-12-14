@@ -5,6 +5,7 @@ on:
         branches:
             - main
             - develop
+            - feature/production-readyness
     pull_request:
         branches:
             - main
