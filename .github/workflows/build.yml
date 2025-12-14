@@ -71,8 +71,8 @@ jobs:
                   tags: |
                       ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
                       ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
+                  cache-from: type=local,src=/tmp/.buildx-cache
+                  cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
             - name: Image digest
               run: |
