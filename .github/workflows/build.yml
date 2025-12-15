@@ -1,68 +1,68 @@
 name: Build Docker Images
 
 on:
-    push:
-        branches:
-            - main
-            - develop
-            - feature/production-readyness
-    pull_request:
-        branches:
-            - main
-            - develop
+  push:
+    branches:
+      - main
+      - develop
+      - feature/production-readyness
+  pull_request:
+    branches:
+      - main
+      - develop
 
 env:
-    REGISTRY: ghcr.io
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  REGISTRY: ghcr.io
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-    build:
-        runs-on: self-hosted
-        permissions:
-            contents: read
-            packages: write
+  build:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
 
-        strategy:
-            matrix:
-                service:
-                    - backend
-                    - bff
-                    - frontend
+    strategy:
+      matrix:
+        service:
+          - backend
+          - bff
+          - frontend
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-            - name: Log in to Container Registry
-              uses: docker/login-action@v3
-              with:
-                  registry: ${{ env.REGISTRY }}
-                  username: ${{ github.actor }}
-                  password: ${{ env.GITHUB_TOKEN }}
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ env.GITHUB_TOKEN }}
 
-            - name: Determine image tag
-              id: image-tag
-              run: |
-                  BRANCH=$(echo ${{ github.ref }} | sed 's/refs\/heads\///')
-                  COMMIT_SHA=$(git rev-parse --short HEAD)
+      - name: Determine image tag
+        id: image-tag
+        run: |
+          BRANCH=$(echo ${{ github.ref }} | sed 's/refs\/heads\///')
+          COMMIT_SHA=$(git rev-parse --short HEAD)
 
-                  if [ "$BRANCH" = "main" ]; then
-                    TAG="latest-production"
-                  elif [ "$BRANCH" = "develop" ]; then
-                    TAG="latest-staging"
-                  elif [ "${{ github.event_name }}" = "pull_request" ]; then
-                    TAG="pr-${{ github.event.pull_request.number }}"
-                  else
-                    TAG="$COMMIT_SHA"
-                  fi
+          if [ "$BRANCH" = "main" ]; then
+            TAG="latest-production"
+          elif [ "$BRANCH" = "develop" ]; then
+            TAG="latest-staging"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="pr-${{ github.event.pull_request.number }}"
+          else
+            TAG="$COMMIT_SHA"
+          fi
 
-                  IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-${{ matrix.service }}"
-                  echo "image=${IMAGE_NAME}" >> $GITHUB_OUTPUT
-                  echo "tag=${TAG}" >> $GITHUB_OUTPUT
-                  echo "commit-tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-${{ matrix.service }}"
+          echo "image=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "commit-tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
 
             - name: Build and push Docker image
               uses: docker/build-push-action@v5
@@ -76,7 +76,124 @@ jobs:
                   cache-from: type=local,src=/tmp/.buildx-cache
                   cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
-            - name: Image digest
-              run: |
-                  echo "Built image: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}"
-                  echo "Commit tag: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}"
+      - name: Image digest
+        run: |
+          echo "Built image: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}"
+          echo "Commit tag: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}"
+
+  deploy_pr_to_staging:
+    name: Deploy PR to Staging
+    runs-on: self-hosted
+    needs: build
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-staging')
+    permissions:
+      contents: read
+      packages: read
+    env:
+      REGISTRY: ghcr.io
+      KUBE_NAMESPACE: vinylvault-staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Determine commit image tag
+        id: commit-tag
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          echo "image_tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Update image tags in manifests
+        run: |
+          IMAGE_TAG="${{ steps.commit-tag.outputs.image_tag }}"
+
+          kubectl set image deployment/backend \
+            backend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-backend:${IMAGE_TAG}" \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl set image deployment/bff \
+            bff="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-bff:${IMAGE_TAG}" \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl set image deployment/frontend \
+            frontend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-frontend:${IMAGE_TAG}" \
+            -n ${{ env.KUBE_NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/backend -n ${{ env.KUBE_NAMESPACE }} --timeout=10m
+          kubectl rollout status deployment/bff -n ${{ env.KUBE_NAMESPACE }} --timeout=10m
+          kubectl rollout status deployment/frontend -n ${{ env.KUBE_NAMESPACE }} --timeout=10m
+
+      - name: Post deployment comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `✅ PR deployed to Staging using image tag \`${{ steps.commit-tag.outputs.image_tag }}\`\n\nView staging at: https://staging.vinylvault.app`
+            })
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          set -o pipefail
+          {
+            echo "Namespace: ${{ env.KUBE_NAMESPACE }}"
+            echo "\n== Deployments =="
+            kubectl get deploy -n ${{ env.KUBE_NAMESPACE }} -o wide || true
+            echo "\n== Pods (last 20) =="
+            kubectl get pods -n ${{ env.KUBE_NAMESPACE }} --sort-by=.status.startTime | tail -n 20 || true
+            echo "\n== Backend describe =="
+            kubectl describe deploy/backend -n ${{ env.KUBE_NAMESPACE }} || true
+            echo "\n== BFF describe =="
+            kubectl describe deploy/bff -n ${{ env.KUBE_NAMESPACE }} || true
+            echo "\n== Frontend describe =="
+            kubectl describe deploy/frontend -n ${{ env.KUBE_NAMESPACE }} || true
+            echo "\n== Recent events =="
+            kubectl get events -n ${{ env.KUBE_NAMESPACE }} --sort-by=.lastTimestamp | tail -n 50 || true
+          } > deploy_error.txt
+
+      - name: Post deployment failure comment
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let details = '';
+            try {
+              details = fs.readFileSync('deploy_error.txt', 'utf8');
+            } catch (e) {
+              details = 'No diagnostics captured.';
+            }
+            const maxLen = 3000; // avoid overly long comments
+            const snippet = details.length > maxLen ? details.slice(0, maxLen) + '\n\n... (truncated)' : details;
+
+            const body = [
+              `❌ Deployment to Staging failed for tag \`${process.env.IMAGE_TAG || '${{ steps.commit-tag.outputs.image_tag }}'}\`.`,
+              '',
+              'Diagnostics (truncated):',
+              '```\n' + snippet + '\n```',
+              '',
+              `Check workflow logs: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            })
