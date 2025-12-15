@@ -64,17 +64,17 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "commit-tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
 
-            - name: Build and push Docker image
-              uses: docker/build-push-action@v5
-              with:
-                  context: .
-                  file: ./infra/Dockerfile.${{ matrix.service }}
-                  push: true
-                  tags: |
-                      ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
-                      ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}
-                  cache-from: type=local,src=/tmp/.buildx-cache
-                  cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./infra/Dockerfile.${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
       - name: Image digest
         run: |
