@@ -1,7 +1,7 @@
 // Domain Backend GraphQL resolvers
 
 import { upsertReleases } from '../services/releasesCache.js';
-import { findUserById, upsertUser, updateUserRole } from '../services/users.js';
+import { findUserById, upsertUser } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
   createPersonalTenant,
@@ -236,16 +236,6 @@ export const resolvers = {
       }
     ) => {
       return upsertUser(_args.input);
-    },
-    updateUserRole: async (
-      _parent: unknown,
-      _args: { userId: string; role: 'ADMIN' | 'MEMBER' | 'VIEWER' }
-    ) => {
-      const user = await updateUserRole(_args.userId, _args.role);
-      if (!user) {
-        throw new Error('User not found');
-      }
-      return user;
     },
     handleGitHubInstallationWebhook: async (
       _parent: unknown,

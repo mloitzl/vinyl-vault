@@ -11,7 +11,6 @@ export interface UserDocument {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,7 +30,6 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
-  role: 'ADMIN' | 'MEMBER' | 'VIEWER';
   createdAt: string;
   updatedAt: string;
 }
@@ -44,7 +42,6 @@ function documentToUser(doc: UserDocument): User {
     displayName: doc.displayName,
     avatarUrl: doc.avatarUrl,
     email: doc.email,
-    role: doc.role,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -97,10 +94,7 @@ export async function upsertUser(input: UpsertUserInput): Promise<User> {
     const updated = await collection.findOne({ githubId: input.githubId });
     return documentToUser(updated!);
   } else {
-    // Create new user - first user becomes ADMIN, others become MEMBER
-    const userCount = await collection.countDocuments();
-    const role = userCount === 0 ? 'ADMIN' : 'MEMBER';
-    
+    // Create new user
     const result = await collection.insertOne({
       _id: new ObjectId(),
       githubId: input.githubId,
@@ -108,7 +102,6 @@ export async function upsertUser(input: UpsertUserInput): Promise<User> {
       displayName: input.displayName,
       avatarUrl: input.avatarUrl,
       email: input.email,
-      role,
       createdAt: now,
       updatedAt: now,
     });
@@ -116,27 +109,4 @@ export async function upsertUser(input: UpsertUserInput): Promise<User> {
     const created = await collection.findOne({ _id: result.insertedId });
     return documentToUser(created!);
   }
-}
-
-export async function updateUserRole(
-  userId: string,
-  role: 'ADMIN' | 'MEMBER' | 'VIEWER'
-): Promise<User | null> {
-  const db = await connectToDatabase();
-  const collection = db.collection<UserDocument>(COLLECTIONS.USERS);
-  
-  let objectId: ObjectId;
-  try {
-    objectId = new ObjectId(userId);
-  } catch {
-    return null;
-  }
-  
-  const result = await collection.findOneAndUpdate(
-    { _id: objectId },
-    { $set: { role, updatedAt: new Date() } },
-    { returnDocument: 'after' }
-  );
-  
-  return result ? documentToUser(result) : null;
 }
