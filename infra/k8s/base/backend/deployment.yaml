@@ -25,7 +25,7 @@ spec:
           name: http
           protocol: TCP
         env:
-        - name: PORT
+        - name: BACKEND_PORT
           value: "4000"
         - name: NODE_ENV
           value: production
@@ -54,6 +54,11 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: JWT_SECRET
+        - name: GITHUB_APP_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: github-secrets
+              key: GITHUB_APP_WEBHOOK_SECRET
         resources:
           requests:
             memory: "256Mi"
