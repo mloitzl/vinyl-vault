@@ -10,7 +10,7 @@ data:
   BFF_URL: "http://bff.NAMESPACE_PLACEHOLDER.svc.cluster.local:3000"
   
   # Backend URL - internal cluster URL
-  BACKEND_URL: "http://backend.NAMESPACE_PLACEHOLDER.svc.cluster.local:4000"
+  BACKEND_URL: "http://backend.NAMESPACE_PLACEHOLDER.svc.cluster.local:4000/graphql"
   
   # GitHub App Installation URL - will be overridden by overlays
   GITHUB_APP_INSTALLATION_URL: "https://github.com/apps/YOUR_APP_NAME/installations/new"
