@@ -44,6 +44,11 @@ spec:
             secretKeyRef:
               name: mongodb-secrets
               key: MONGODB_REGISTRY_URI
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: MONGODB_BACKEND_URI
         - name: MONGODB_URI_BASE
           valueFrom:
             secretKeyRef:
