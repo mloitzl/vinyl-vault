@@ -89,6 +89,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+      issues: write
+      pull-requests: write
     env:
       REGISTRY: ghcr.io
       KUBE_NAMESPACE: vinylvault-staging
@@ -110,6 +112,7 @@ jobs:
         run: |
           COMMIT_SHA=$(git rev-parse --short HEAD)
           echo "image_tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${COMMIT_SHA}" >> $GITHUB_ENV
 
       - name: Update image tags in manifests
         run: |
@@ -183,7 +186,7 @@ jobs:
             const snippet = details.length > maxLen ? details.slice(0, maxLen) + '\n\n... (truncated)' : details;
 
             const body = [
-              `❌ Deployment to Staging failed for tag \`${process.env.IMAGE_TAG || '${{ steps.commit-tag.outputs.image_tag }}'}\`.`,
+              `❌ Deployment to Staging failed for tag \`${process.env.IMAGE_TAG || 'unknown'}\`.`,
               '',
               'Diagnostics (truncated):',
               '```\n' + snippet + '\n```',
