@@ -3,7 +3,8 @@
 
 import { ApolloServer } from '@apollo/server';
 import { ApolloServerPluginLandingPageDisabled } from '@apollo/server/plugin/disabled';
-import { startStandaloneServer } from '@apollo/server/standalone';
+import { expressMiddleware } from '@apollo/server/express4';
+import express from 'express';
 import { readFileSync } from 'fs';
 import { config as dotenvConfig } from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -42,46 +43,71 @@ async function main() {
     plugins: config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : [],
   });
 
-  const { url } = await startStandaloneServer(server, {
-    // bind to all interfaces so the backend is reachable from the LAN
-    listen: { port: config.port, host: '0.0.0.0' },
-    context: async ({ req }): Promise<GraphQLContext> => {
-      const auth = req.headers.authorization as string | undefined;
-      const token = extractTokenFromHeader(auth);
-      const tenantCtx = extractTenantContext(token ?? undefined);
+  // Start Apollo server
+  await server.start();
 
-      let db = null;
-      let registryDb = null;
+  // Create Express app with Apollo middleware
+  const app = express();
 
-      // If we have a valid tenant context, get the database connections
-      if (tenantCtx?.tenantId) {
-        try {
-          [db, registryDb] = await Promise.all([getTenantDb(tenantCtx.tenantId), getRegistryDb()]);
-
-          // Initialize indexes for this tenant database (blocking to ensure indexes exist before queries)
-          if (db) {
-            await initializeTenantIndexes(db, tenantCtx.tenantId);
-          }
-        } catch (error) {
-          logger.error({ err: error }, 'Failed to get database connections');
-          // Continue without db/registryDb - resolvers should handle gracefully
-        }
-      }
-
-      return {
-        userId: tenantCtx?.userId ?? null,
-        username: tenantCtx?.username ?? null,
-        avatarUrl: tenantCtx?.avatarUrl ?? null,
-        tenantId: tenantCtx?.tenantId ?? null,
-        tenantRole: tenantCtx?.tenantRole ?? null,
-        githubLogin: tenantCtx?.githubLogin ?? null,
-        db: db ?? undefined,
-        registryDb: registryDb ?? undefined,
-      };
-    },
+  // Health check endpoint for Kubernetes probes
+  app.get('/health', (_req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
   });
 
-  logger.info({ url }, 'Domain Backend running');
+  // Apollo GraphQL middleware
+  app.use(
+    '/graphql',
+    expressMiddleware(server, {
+      context: async ({ req }): Promise<GraphQLContext> => {
+        const auth = req.headers.authorization as string | undefined;
+        const token = extractTokenFromHeader(auth);
+        const tenantCtx = extractTenantContext(token ?? undefined);
+
+        let db = null;
+        let registryDb = null;
+
+        // If we have a valid tenant context, get the database connections
+        if (tenantCtx?.tenantId) {
+          try {
+            [db, registryDb] = await Promise.all([
+              getTenantDb(tenantCtx.tenantId),
+              getRegistryDb(),
+            ]);
+
+            // Initialize indexes for this tenant database (blocking to ensure indexes exist before queries)
+            if (db) {
+              await initializeTenantIndexes(db, tenantCtx.tenantId);
+            }
+          } catch (error) {
+            logger.error({ err: error }, 'Failed to get database connections');
+            // Continue without db/registryDb - resolvers should handle gracefully
+          }
+        }
+
+        return {
+          userId: tenantCtx?.userId ?? null,
+          username: tenantCtx?.username ?? null,
+          avatarUrl: tenantCtx?.avatarUrl ?? null,
+          tenantId: tenantCtx?.tenantId ?? null,
+          tenantRole: tenantCtx?.tenantRole ?? null,
+          githubLogin: tenantCtx?.githubLogin ?? null,
+          db: db ?? undefined,
+          registryDb: registryDb ?? undefined,
+        };
+      },
+    })
+  );
+
+  // Start server
+  await new Promise<void>((resolve) => {
+    app.listen({ port: config.port, host: '0.0.0.0' }, () => {
+      logger.info({ port: config.port }, 'Domain Backend running');
+      resolve();
+    });
+  });
 
   // Graceful shutdown
   const shutdown = async (signal: NodeJS.Signals) => {
