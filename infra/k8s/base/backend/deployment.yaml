@@ -39,6 +39,11 @@ spec:
             configMapKeyRef:
               name: app-config
               key: BFF_URL
+        - name: DISCOGS_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: discogs-secrets
+              key: DISCOGS_API_TOKEN
         - name: MONGODB_REGISTRY_URI
           valueFrom:
             secretKeyRef:
