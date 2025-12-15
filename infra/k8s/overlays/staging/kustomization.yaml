@@ -17,11 +17,11 @@ replicas:
 
 # Update image tags for staging
 images:
-  - name: ghcr.io/mloitzl/vinyl-vault-backend
+  - name: ghcr.io/mloitzl/vinylvault-backend
     newTag: latest-staging
-  - name: ghcr.io/mloitzl/vinyl-vault-bff
+  - name: ghcr.io/mloitzl/vinylvault-bff
     newTag: latest-staging
-  - name: ghcr.io/mloitzl/vinyl-vault-frontend
+  - name: ghcr.io/mloitzl/vinylvault-frontend
     newTag: latest-staging
 
 # ConfigMap for staging-specific configuration

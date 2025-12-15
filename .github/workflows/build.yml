@@ -82,6 +82,7 @@ jobs:
           echo "Built image: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}"
           echo "Commit tag: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}"
 
+
   deploy_pr_to_staging:
     name: Deploy PR to Staging
     runs-on: self-hosted
@@ -95,6 +96,7 @@ jobs:
     env:
       REGISTRY: ghcr.io
       KUBE_NAMESPACE: vinylvault-staging
+      KUSTOMIZE_PATH: infra/k8s/overlays/staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -109,24 +111,18 @@ jobs:
           echo "image_tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
           echo "IMAGE_TAG=${COMMIT_SHA}" >> $GITHUB_ENV
 
-      - name: Update image tags in manifests
+      - name: Preview Kustomize manifests with commit tag
         run: |
-          IMAGE_TAG="${{ steps.commit-tag.outputs.image_tag }}"
+          IMAGE_TAG=${{ steps.commit-tag.outputs.image_tag }}
+          cp ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak
+          sed -i "s/newTag: latest-staging/newTag: ${IMAGE_TAG}/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
+          echo "=== Staging Manifests Preview (tag: ${IMAGE_TAG}) ==="
+          kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
 
-          kubectl set image deployment/backend \
-            backend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-backend:${IMAGE_TAG}" \
-            -n ${{ env.KUBE_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl set image deployment/bff \
-            bff="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-bff:${IMAGE_TAG}" \
-            -n ${{ env.KUBE_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl set image deployment/frontend \
-            frontend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-frontend:${IMAGE_TAG}" \
-            -n ${{ env.KUBE_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Apply manifests to staging
+        run: |
+          kubectl apply -k ${{ env.KUSTOMIZE_PATH }}
+          echo "✓ Kustomize apply completed"
 
       - name: Wait for rollout
         run: |

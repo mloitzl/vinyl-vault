@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: bff
-        image: ghcr.io/mloitzl/vinyl-vault-bff:latest
+        image: ghcr.io/mloitzl/vinylvault-bff:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
