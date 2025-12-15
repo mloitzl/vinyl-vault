@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-      - feature/production-readyness
   pull_request:
     branches:
       - main
@@ -17,6 +16,8 @@ env:
 
 jobs:
   build:
+    # Run for PRs, or for direct pushes to main/develop only
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     runs-on: self-hosted
     permissions:
       contents: read
@@ -100,12 +101,6 @@ jobs:
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
-
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
 
       - name: Determine commit image tag
         id: commit-tag
