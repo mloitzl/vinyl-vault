@@ -29,12 +29,25 @@ vi.mock('../types/session.js', () => ({
 
 import { queryBackend } from '../services/backendClient.js';
 import { getAvailableTenants } from '../types/session.js';
+import { signJwt } from '../auth/jwt.js';
 
 describe('BFF Resolvers', () => {
   let mockContext: GraphQLContext;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+
+    // Default tenant role for most tests
+    vi.mocked(getAvailableTenants).mockReturnValue([
+      {
+        tenantId: 'user_123',
+        name: 'Test User',
+        tenantType: 'USER',
+        role: 'ADMIN',
+      },
+    ]);
+
+    vi.mocked(signJwt).mockReturnValue('mock-jwt-token');
 
     mockContext = {
       user: {
@@ -204,8 +217,7 @@ describe('BFF Resolvers', () => {
         deleteRecord: true,
       });
 
-      const result = await resolvers.Mutation.deleteRecord({}, { id: 'record-1' }, mockContext);
-
+      const result = await resolvers.Mutation.deleteRecord({}, { input: { id: 'record-1' } }, mockContext);
       expect(result.deletedRecordId).toBe('record-1');
       expect(result.errors).toEqual([]);
     });
@@ -215,7 +227,7 @@ describe('BFF Resolvers', () => {
         deleteRecord: false,
       });
 
-      const result = await resolvers.Mutation.deleteRecord({}, { id: 'record-1' }, mockContext);
+      const result = await resolvers.Mutation.deleteRecord({}, { input: { id: 'record-1' } }, mockContext);
 
       expect(result.deletedRecordId).toBeNull();
       expect(result.errors).toContain('Failed to delete record');
