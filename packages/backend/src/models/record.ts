@@ -155,11 +155,27 @@ export class RecordRepository {
     }
 
     // Fetch records with limit + 1 to determine hasNextPage
-    const records = await collection
-      .find(query)
-      .sort({ _id: 1 })
-      .limit(limit + 1)
-      .toArray();
+    let records: RecordDocument[] = [];
+    try {
+      records = await collection
+        .find(query)
+        .sort({ _id: 1 })
+        .limit(limit + 1)
+        .toArray();
+    } catch (error: any) {
+      // If text search fails due to missing index, retry without text search
+      if (error.errmsg?.includes('text index') && filter.search) {
+        console.warn(`[findMany] Text search index not ready, retrying without search`);
+        delete query.$text;
+        records = await collection
+          .find(query)
+          .sort({ _id: 1 })
+          .limit(limit + 1)
+          .toArray();
+      } else {
+        throw error;
+      }
+    }
 
     const hasNextPage = records.length > limit;
     const edges = records.slice(0, limit).map((record) => ({
