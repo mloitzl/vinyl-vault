@@ -680,21 +680,23 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
 
                   const body = await res.json();
 
+                  let hasError = false;
+
                   if (body.errors) {
                     setToast({
                       message: body.errors[0]?.message || 'Failed to add record',
                       type: 'error',
                     });
-                    return;
+                    hasError = true;
                   }
 
                   const payload = body.data?.createRecord;
-                  if (payload?.errors && payload.errors.length > 0) {
+                  if (!hasError && payload?.errors && payload.errors.length > 0) {
                     setToast({ message: payload.errors[0], type: 'error' });
-                    return;
+                    hasError = true;
                   }
 
-                  if (payload?.record) {
+                  if (!hasError && payload?.record) {
                     // Success! Show success message and reset
                     setToast({
                       message: `Added "${selected.title}" by ${selected.artist} to your collection`,
