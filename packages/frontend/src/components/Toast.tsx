@@ -27,17 +27,18 @@ export function Toast({ message, type = 'success', duration = 3000, onDismiss }:
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    if (!isVisible) {
-      onDismiss?.();
-      return;
-    }
-
     const timer = setTimeout(() => {
       setIsVisible(false);
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [isVisible, duration, onDismiss]);
+  }, [duration]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      onDismiss?.();
+    }
+  }, [isVisible, onDismiss]);
 
   if (!isVisible) {
     return null;
