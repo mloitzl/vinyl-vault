@@ -138,7 +138,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `✅ PR deployed to Staging using image tag \`${{ steps.commit-tag.outputs.image_tag }}\`\n\nView staging at: https://staging.vinylvault.app`
+              body: `✅ PR deployed to Staging using image tag \`${{ steps.commit-tag.outputs.image_tag }}\`\n\nView staging at: https://vinylvault.antisocializer.org`
             })
 
       - name: Collect diagnostics on failure

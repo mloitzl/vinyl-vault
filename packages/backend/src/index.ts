@@ -60,6 +60,7 @@ async function main() {
   // Apollo GraphQL middleware
   app.use(
     '/graphql',
+    express.json(),
     expressMiddleware(server, {
       context: async ({ req }): Promise<GraphQLContext> => {
         const auth = req.headers.authorization as string | undefined;
