@@ -32,7 +32,7 @@ configMapGenerator:
       - FRONTEND_URL=https://vinylvault.antisocializer.org
       - BFF_URL=http://bff.vinylvault-staging.svc.cluster.local:3000
       - BACKEND_URL=http://backend.vinylvault-staging.svc.cluster.local:4000/graphql
-      - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault-staging/installations/new
+      - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault-multiuser/installations/new
       - GITHUB_CALLBACK_URL=https://vinylvault.antisocializer.org/auth/github/callback
       - ENABLE_DISCOGS_INTEGRATION=true
 
