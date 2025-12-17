@@ -89,12 +89,17 @@ async function main() {
   // This allows the session to persist through GitHub OAuth round-trip during org setup
   // Only applies when the main session cookie is missing (user not yet authenticated)
   app.use('/auth/setup', (req, _res, next) => {
-    const onboardingSessionId = req.cookies[config.session.onboardingCookieName];
-    if (onboardingSessionId && !req.cookies[config.session.cookieName]) {
-      // Copy onboarding cookie as the session cookie so express-session can load it
-      req.cookies[config.session.cookieName] = onboardingSessionId;
+    const onboardingCookieVal = req.cookies[config.session.onboardingCookieName];
+    const cookieHeader = req.headers.cookie || '';
+    const hasMainCookieInHeader = cookieHeader.includes(`${config.session.cookieName}=`);
+
+    if (onboardingCookieVal && !hasMainCookieInHeader) {
+      // Inject the main session cookie into the request Cookie header so express-session can load it
+      const appended = `${config.session.cookieName}=${encodeURIComponent(onboardingCookieVal)}`;
+      req.headers.cookie = cookieHeader ? `${cookieHeader}; ${appended}` : appended;
+
       logger.debug(
-        { onboardingSessionId: onboardingSessionId.substring(0, 8) },
+        { onboardingCookiePreview: onboardingCookieVal.substring(0, 8) },
         'Hydrating session from onboarding cookie'
       );
     }

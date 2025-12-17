@@ -2,6 +2,7 @@
 // Manages SameSite=lax cookie for organization setup to persist session through GitHub OAuth
 
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { config } from '../config/env.js';
 
 /**
@@ -23,7 +24,15 @@ function getOnboardingCookieOptions() {
  * Called after successful OAuth to carry session through setup flow
  */
 export function setOnboardingCookie(res: Response, sessionId: string): void {
-  res.cookie(config.session.onboardingCookieName, sessionId, getOnboardingCookieOptions());
+  // Produce a signed cookie value compatible with express-session / cookie-parser format:
+  // value format: 's:' + sessionId + '.' + HMAC-SHA256(sessionId, secret) base64 (no padding)
+  const signature = crypto
+    .createHmac('sha256', config.session.secret)
+    .update(sessionId)
+    .digest('base64')
+    .replace(/=+$/, '');
+  const signedValue = `s:${sessionId}.${signature}`;
+  res.cookie(config.session.onboardingCookieName, signedValue, getOnboardingCookieOptions());
 }
 
 /**
