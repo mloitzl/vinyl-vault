@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { queryBackend } from '../services/backendClient.js';
 import { signJwt } from './jwt.js';
 import { handleSetup } from './setup.js';
+import { setOnboardingCookie } from './cookies.js';
 import type { SessionUser, AvailableTenant } from '../types/session.js';
 import { setActiveTenant, setAvailableTenants } from '../types/session.js';
 
@@ -402,6 +403,12 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Store available tenants in session
     setAvailableTenants(req.session, availableTenants);
 
+    // Detect if this is an onboarding flow (returnToUrl points to /auth/setup)
+    const isOnboarding = returnToUrl?.startsWith('/auth/setup');
+    if (isOnboarding) {
+      logger.debug({ userId: user.id, returnToUrl }, 'OAuth callback part of org onboarding flow');
+    }
+
     // Save session and redirect to frontend
     req.session.save((err) => {
       if (err) {
@@ -413,7 +420,18 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       logger.info({ userId: user.id }, 'User logged in via GitHub OAuth');
 
       const dest = returnToUrl || config.frontend.url;
-      logger.debug({ dest, returnToUrl }, 'Redirecting user after successful login');
+      logger.debug({ dest, returnToUrl, isOnboarding }, 'Redirecting user after successful login');
+
+      // If onboarding flow, set the onboarding cookie with the session ID
+      // This allows /auth/setup to load the session via the lax cookie
+      if (isOnboarding && req.sessionID) {
+        setOnboardingCookie(res, req.sessionID);
+        logger.debug(
+          { sessionId: req.sessionID.substring(0, 8) },
+          'Set onboarding cookie for setup flow'
+        );
+      }
+
       res.redirect(dest);
     });
   } catch (err) {
