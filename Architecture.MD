@@ -172,6 +172,69 @@ The system uses two complementary GitHub authentication modes:
 - No permission confusion: GitHub guarantees install only if user has authority
 - Webhook-driven: Installation events create tenants in real-time, not on login
 
+### 5.1.2 Onboarding Cookie Handling
+
+The organization onboarding flow requires special cookie handling to maintain session state through the GitHub OAuth redirect while preserving security for normal application usage.
+
+**The Challenge:**
+
+When GitHub redirects back to `/auth/setup` after app installation, browsers treat this as a cross-site navigation (from github.com to your domain). With `SameSite=Strict` cookies (the most secure option), browsers block the session cookie from being sent, causing an authentication loop where the user appears logged out on the setup page.
+
+**The Solution: Scoped SameSite=Lax Cookie**
+
+A dual-cookie strategy maintains strict security for normal app usage while allowing the onboarding flow to complete:
+
+**Main Session Cookie:**
+- Name: `vinylvault.sid`
+- `SameSite=Strict` - Maximum security for all normal app operations
+- `path=/` - Available across entire application
+- `maxAge=24h` - Standard session duration
+- `HttpOnly=true`, `Secure=true` (production)
+
+**Onboarding Cookie (Temporary):**
+- Name: `vinylvault.sid.onboarding`
+- `SameSite=Lax` - Allows cross-site navigation (GitHub → app)
+- `path=/auth/setup` - Restricted to setup flow only
+- `maxAge=15min` - Short-lived, expires quickly
+- `HttpOnly=true`, `Secure=true` (production)
+- Contains: Session ID only (not full session data)
+
+**Flow:**
+
+1. User initiates org setup → detected as unauthenticated → redirected to `/auth/github?return_to=/auth/setup...`
+2. OAuth callback detects `return_to` starts with `/auth/setup` (onboarding flow)
+3. After successful OAuth, BFF creates session and sets **both** cookies:
+   - Main session cookie (`SameSite=Strict`)
+   - Onboarding cookie (`SameSite=Lax`) with same session ID
+4. GitHub redirects to `/auth/setup?installation_id=...`
+5. **Pre-session middleware** (runs before `express-session`):
+   - Matches route: `/auth/setup*`
+   - Checks: If onboarding cookie exists AND main cookie missing
+   - Hydrates: Copies onboarding session ID into `req.cookies` for main session name
+   - Effect: `express-session` loads the session from store using the lax cookie's ID
+6. Setup handler processes installation with authenticated session
+7. **Cookie cleanup**: `clearOnboardingCookie(res)` called on:
+   - All error paths in setup handler
+   - Natural expiration after 15 minutes
+8. Future requests use only the strict main session cookie
+
+**Security Properties:**
+
+- Minimal lax surface: Only `/auth/setup` path, only 15 minutes
+- No data in lax cookie: Only carries session ID, not user data
+- Strict by default: Normal app flows always use `SameSite=Strict`
+- Automatic cleanup: Onboarding cookie cleared after setup or on errors
+- HTTPS required: Both cookies require secure transport in production
+- Session validation: Backend still validates JWT on every request
+
+**Implementation Files:**
+
+- `packages/bff/src/auth/cookies.ts` - Cookie utility functions (set/clear/get onboarding cookie)
+- `packages/bff/src/index.ts` - Pre-session middleware for cookie hydration
+- `packages/bff/src/auth/github.ts` - OAuth callback sets onboarding cookie when detected
+- `packages/bff/src/auth/setup.ts` - Setup handler clears onboarding cookie on all paths
+- `packages/bff/src/config/env.ts` - Configuration for cookie names and TTL
+
 ### 5.2 Authorization
 
 **Role Model:**
