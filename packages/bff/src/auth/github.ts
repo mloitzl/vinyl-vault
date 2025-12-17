@@ -43,6 +43,17 @@ authRouter.get('/github', (req: Request, res: Response) => {
   const candidateCallback = typeof req.query.callback === 'string' ? req.query.callback : undefined;
   const returnTo = typeof req.query.return_to === 'string' ? req.query.return_to : undefined;
 
+  // If already authenticated, skip OAuth and redirect to return_to or home.
+  if (req.session?.user) {
+    const isRelative = returnTo && returnTo.startsWith('/');
+    const dest = isRelative ? returnTo : config.frontend.url;
+    logger.info(
+      { userId: req.session.user.id, dest },
+      'User already authenticated; skipping GitHub OAuth'
+    );
+    return res.redirect(dest);
+  }
+
   logger.debug({ query: req.query }, 'Query string parameters');
   logger.debug('GitHub OAuth initiation requested');
   logger.debug({ candidateCallback }, 'Candidate callback URL:');
