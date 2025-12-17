@@ -53,6 +53,9 @@ MONGODB_REGISTRY_URI="mongodb://root:${MONGODB_BACKEND_PASSWORD}@mongodb-backend
 
 # Backend Tenant Base URI
 MONGODB_URI_BASE="mongodb://root:${MONGODB_BACKEND_PASSWORD}@mongodb-backend-0.mongodb-backend.vinylvault-staging.svc.cluster.local:27017?authSource=admin"
+
+# Backend MongoDB Uri
+MONGODB_BACKEND_URI="mongodb://root:${MONGODB_BACKEND_PASSWORD}@mongodb-backend-0.mongodb-backend.vinylvault-staging.svc.cluster.local:27017/vinylvault_backend?authSource=admin"
 ```
 
 ---
@@ -78,6 +81,7 @@ kubectl create secret generic mongodb-secrets \
   --from-literal=MONGODB_BFF_URI="${MONGODB_BFF_URI}" \
   --from-literal=MONGODB_REGISTRY_URI="${MONGODB_REGISTRY_URI}" \
   --from-literal=MONGODB_URI_BASE="${MONGODB_URI_BASE}" \
+  --from-literal=MONGODB_BACKEND_URI="${MONGODB_BACKEND_URI}" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
@@ -103,6 +107,14 @@ kubectl create secret generic github-secrets \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
+
+### Secret 3.5: discogs
+```bash
+kubectl create secret generic discogs-secrets \
+  --namespace=vinylvault-staging \
+  --from-literal=DISCOGS_API_TOKEN="${DISCOGS_API_TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f - 
+```
 ### Secret 4: github-app-key (Private Key)
 
 ```bash

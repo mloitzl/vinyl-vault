@@ -90,14 +90,16 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       const parts = state.split('|');
       if (parts.length >= 2) {
         const decodedRedirect = Buffer.from(parts[1], 'base64').toString('utf-8');
+        logger.debug({ decodedRedirect }, 'Decoded redirectUri from state');
         if (decodedRedirect) usedRedirectUri = decodedRedirect;
       }
       if (parts.length >= 3) {
         const decodedReturn = Buffer.from(parts[2], 'base64').toString('utf-8');
+        logger.debug({ decodedReturn }, 'Decoded returnTo from state');
         if (decodedReturn) returnToUrl = decodedReturn;
       }
     } catch {
-      // ignore malformed state
+      logger.error('Failed to decode state parameter');
     }
   }
 

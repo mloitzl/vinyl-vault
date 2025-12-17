@@ -74,3 +74,20 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 3
+
+  # Override LOG_LEVEL for debugging in staging
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: debug
+
+  - target:
+      kind: Deployment
+      name: bff
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: debug
