@@ -399,7 +399,10 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       }
       // If a returnToUrl was provided in the initial request and is present in state, redirect there.
       // Otherwise fallback to configured frontend URL.
+      logger.info({ userId: user.id }, 'User logged in via GitHub OAuth');
+
       const dest = returnToUrl || config.frontend.url;
+      logger.debug({ dest, returnToUrl }, 'Redirecting user after successful login');
       res.redirect(dest);
     });
   } catch (err) {
