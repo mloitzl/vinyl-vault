@@ -25,7 +25,7 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
 
   if (!req.session.user && !isTestMode) {
     logger.info('Setup: User not authenticated, redirecting to login');
-    res.redirect(`/auth/github?redirect_to=${encodeURIComponent(req.originalUrl)}`);
+    res.redirect(`/auth/github?return_to=${encodeURIComponent(req.originalUrl)}`);
     return;
   }
 
