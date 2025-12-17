@@ -121,9 +121,7 @@ async function main() {
       cookie: {
         httpOnly: true,
         secure: config.isProduction,
-        // OAuth redirects require cookies on top-level cross-site navigations.
-        // Use 'lax' in production so the session persists through GitHub callback.
-        sameSite: config.isProduction ? 'lax' : 'lax',
+        sameSite: config.isProduction ? 'strict' : 'lax',
         maxAge: config.session.maxAge,
       },
     })
