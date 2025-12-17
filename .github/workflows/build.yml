@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - develop
+      - feature/**
 
 env:
   REGISTRY: ghcr.io
