@@ -75,7 +75,7 @@ jobs:
                   IMAGE_TAG=${{ steps.image-tag.outputs.commit }}
                   # Temporarily override image tags in overlay to the commit SHA
                   cp ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak
-                  sed -i "s/newTag: latest-staging/newTag: ${IMAGE_TAG}/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
+                  sed -i "s/newTag: latest-staging/newTag: \"${IMAGE_TAG}\"/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
                   echo "=== Staging Manifests Preview ==="
                   kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
                   echo "... (see full output above)"

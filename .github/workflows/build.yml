@@ -115,7 +115,7 @@ jobs:
         run: |
           IMAGE_TAG=${{ steps.commit-tag.outputs.image_tag }}
           cp ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak
-          sed -i "s/newTag: latest-staging/newTag: ${IMAGE_TAG}/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
+          sed -i "s/newTag: latest-staging/newTag: \"${IMAGE_TAG}\"/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
           echo "=== Staging Manifests Preview (tag: ${IMAGE_TAG}) ==="
           kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
 
