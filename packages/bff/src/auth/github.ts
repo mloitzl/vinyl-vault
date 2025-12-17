@@ -43,27 +43,28 @@ authRouter.get('/github', (req: Request, res: Response) => {
   const candidateCallback = typeof req.query.callback === 'string' ? req.query.callback : undefined;
   const returnTo = typeof req.query.return_to === 'string' ? req.query.return_to : undefined;
 
-  console.log('GitHub OAuth initiation requested');
-  console.log('Candidate callback URL:', candidateCallback);
-  console.log('Return to URL:', returnTo);
+  logger.debug({ query: req.query }, 'Query string parameters');
+  logger.debug('GitHub OAuth initiation requested');
+  logger.debug({ candidateCallback }, 'Candidate callback URL:');
+  logger.debug({ returnTo }, 'Return to URL:');
   // Build allowed callbacks list from env or config
   const allowed = (process.env.GITHUB_CALLBACK_URLS || config.github.callbackUrl)
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 
-  console.log('Allowed GitHub callback URLs:', allowed);
+  logger.debug({ allowed }, 'Allowed GitHub callback URLs:');
 
   const redirectUri =
     candidateCallback && allowed.includes(candidateCallback)
       ? candidateCallback
       : config.github.callbackUrl;
 
-  console.log('Using redirect URI for OAuth:', redirectUri);
+  logger.debug({ redirectUri }, 'Using redirect URI for OAuth:');
 
   const state = generateState(redirectUri, returnTo);
 
-  console.log('Generated state parameter for OAuth:', state);
+  logger.debug({ state }, 'Generated state parameter for OAuth:');
 
   const params = new URLSearchParams({
     client_id: config.github.clientId,
