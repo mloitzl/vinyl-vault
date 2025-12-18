@@ -28,10 +28,6 @@ function getConfig() {
       secret: process.env.SESSION_SECRET || 'dev-session-secret-change-in-production',
       cookieName: 'vinylvault.sid',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      // Onboarding cookie for organization setup OAuth flow (SameSite=lax)
-      // Carries session ID to persist through GitHub OAuth round-trip during /auth/setup
-      onboardingCookieName: 'vinylvault.sid.onboarding',
-      onboardingMaxAge: 15 * 60 * 1000, // 15 minutes
     },
 
     // JWT (for BFF to Backend communication)

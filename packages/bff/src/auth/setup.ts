@@ -7,7 +7,6 @@ import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { queryBackend } from '../services/backendClient.js';
 import { setActiveTenant } from '../types/session.js';
-import { clearOnboardingCookie } from './cookies.js';
 
 interface SetupQuery {
   installation_id?: string;
@@ -26,16 +25,12 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
 
   if (!req.session.user && !isTestMode) {
     logger.info('Setup: User not authenticated, redirecting to login');
-    // Clear any stale onboarding cookie before redirecting to login
-    clearOnboardingCookie(res);
     res.redirect(`/auth/github?return_to=${encodeURIComponent(req.originalUrl)}`);
     return;
   }
 
   if (!installationId) {
     logger.warn('Setup: Missing installation_id parameter');
-    // Clear onboarding cookie on error responses
-    clearOnboardingCookie(res);
     res.status(400).json({
       error: 'Missing installation_id parameter',
       code: 'MISSING_INSTALLATION_ID',
@@ -77,8 +72,6 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
     if (result.errors) {
       logger.error({ errors: result.errors }, 'Setup: Backend error');
       const error = result.errors[0];
-      // Clear onboarding cookie on error responses
-      clearOnboardingCookie(res);
       res.status(400).json({
         error: error.message || 'Setup failed',
         code: 'SETUP_FAILED',
@@ -90,8 +83,6 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
 
     if (!tenantId) {
       logger.error('Setup: No tenant returned from backend');
-      // Clear onboarding cookie on error responses
-      clearOnboardingCookie(res);
       res.status(500).json({
         error: 'Failed to create organization tenant',
         code: 'TENANT_CREATION_FAILED',
@@ -116,7 +107,6 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
     req.session.save((err) => {
       if (err) {
         logger.error({ err }, 'Setup: Session save error');
-        clearOnboardingCookie(res);
         res.status(500).json({
           error: 'Session update failed',
           code: 'SESSION_ERROR',
@@ -138,7 +128,6 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
     });
   } catch (error: any) {
     logger.error({ err: error }, 'Setup: Error completing installation setup');
-    clearOnboardingCookie(res);
     res.status(500).json({
       error: error.message || 'Internal server error',
       code: 'INTERNAL_ERROR',

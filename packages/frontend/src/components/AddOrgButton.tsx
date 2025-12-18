@@ -103,8 +103,6 @@ export function AddOrgButton({ className = '' }: AddOrgButtonProps) {
   return (
     <a
       href={installUrl || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
       className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-700 transition-colors ${className}`}
       title="Install Vinyl Vault on a GitHub organization you manage"
     >

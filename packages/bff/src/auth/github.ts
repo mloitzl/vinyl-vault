@@ -7,7 +7,6 @@ import { logger } from '../utils/logger.js';
 import { queryBackend } from '../services/backendClient.js';
 import { signJwt } from './jwt.js';
 import { handleSetup } from './setup.js';
-import { setOnboardingCookie } from './cookies.js';
 import type { SessionUser, AvailableTenant } from '../types/session.js';
 import { setActiveTenant, setAvailableTenants } from '../types/session.js';
 
@@ -421,16 +420,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
       const dest = returnToUrl || config.frontend.url;
       logger.debug({ dest, returnToUrl, isOnboarding }, 'Redirecting user after successful login');
-
-      // If onboarding flow, set the onboarding cookie with the session ID
-      // This allows /auth/setup to load the session via the lax cookie
-      if (isOnboarding && req.sessionID) {
-        setOnboardingCookie(res, req.sessionID);
-        logger.debug(
-          { sessionId: req.sessionID.substring(0, 8) },
-          'Set onboarding cookie for setup flow'
-        );
-      }
 
       res.redirect(dest);
     });

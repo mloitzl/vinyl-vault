@@ -85,27 +85,6 @@ async function main() {
 
   app.use(cookieParser());
 
-  // Pre-session middleware: hydrate session from onboarding cookie on /auth/setup* routes
-  // This allows the session to persist through GitHub OAuth round-trip during org setup
-  // Only applies when the main session cookie is missing (user not yet authenticated)
-  app.use('/auth/setup', (req, _res, next) => {
-    const onboardingCookieVal = req.cookies[config.session.onboardingCookieName];
-    const cookieHeader = req.headers.cookie || '';
-    const hasMainCookieInHeader = cookieHeader.includes(`${config.session.cookieName}=`);
-
-    if (onboardingCookieVal && !hasMainCookieInHeader) {
-      // Inject the main session cookie into the request Cookie header so express-session can load it
-      const appended = `${config.session.cookieName}=${encodeURIComponent(onboardingCookieVal)}`;
-      req.headers.cookie = cookieHeader ? `${cookieHeader}; ${appended}` : appended;
-
-      logger.debug(
-        { onboardingCookiePreview: onboardingCookieVal.substring(0, 8) },
-        'Hydrating session from onboarding cookie'
-      );
-    }
-    next();
-  });
-
   // GitHub webhook endpoint (raw body needed for signature validation)
   app.post('/webhook/github', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
