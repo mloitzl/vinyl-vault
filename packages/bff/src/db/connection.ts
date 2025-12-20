@@ -2,6 +2,7 @@
 
 import { MongoClient, Db } from 'mongodb';
 import { config } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
@@ -15,7 +16,7 @@ export async function connectToDatabase(): Promise<Db> {
   await client.connect();
   db = client.db();
 
-  console.log('BFF connected to MongoDB');
+  logger.info('BFF connected to MongoDB');
   return db;
 }
 
@@ -24,7 +25,7 @@ export async function disconnectFromDatabase(): Promise<void> {
     await client.close();
     client = null;
     db = null;
-    console.log('BFF disconnected from MongoDB');
+    logger.info('BFF disconnected from MongoDB');
   }
 }
 

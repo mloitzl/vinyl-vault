@@ -1,4 +1,3 @@
-#deploy-staging.yml
 name: Deploy to Staging
 
 on:
@@ -27,6 +26,12 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
+
+            - name: Determine image tag (commit SHA)
+              id: image-tag
+              run: |
+                  COMMIT_SHA=$(git rev-parse --short HEAD)
+                  echo "commit=${COMMIT_SHA}" >> $GITHUB_OUTPUT
 
             - name: Set up kubectl context
               run: |
@@ -67,6 +72,10 @@ jobs:
 
             - name: Preview Kustomize manifests
               run: |
+                  IMAGE_TAG=${{ steps.image-tag.outputs.commit }}
+                  # Temporarily override image tags in overlay to the commit SHA
+                  cp ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak
+                  sed -i "s/newTag: latest-staging/newTag: \"${IMAGE_TAG}\"/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
                   echo "=== Staging Manifests Preview ==="
                   kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
                   echo "... (see full output above)"

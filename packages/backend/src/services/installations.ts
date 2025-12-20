@@ -2,6 +2,7 @@
 
 import { ObjectId } from 'mongodb';
 import { getRegistryDb } from '../db/registry.js';
+import { logger } from '../utils/logger.js';
 
 export async function upsertInstallationFromEvent(event: any): Promise<void> {
   const db = await getRegistryDb();
@@ -31,10 +32,13 @@ export async function upsertInstallationFromEvent(event: any): Promise<void> {
     { upsert: true }
   );
 
-  console.log(
-    `[installations] Stored installation ${installation.id} for ${account.login} (${
-      account.type ?? 'unknown'
-    })`
+  logger.info(
+    {
+      installationId: installation.id,
+      accountLogin: account.login,
+      accountType: account.type ?? 'unknown',
+    },
+    'Stored installation'
   );
 }
 
@@ -46,7 +50,7 @@ export async function deleteInstallationFromEvent(event: any): Promise<void> {
   await db.collection('installations').deleteOne({ installation_id: installation.id });
   await db.collection('user_installation_roles').deleteMany({ installation_id: installation.id });
 
-  console.log(`[installations] Deleted installation ${installation.id}`);
+  logger.info({ installationId: installation.id }, 'Deleted installation');
 }
 
 // Lookup installation by ID
@@ -101,14 +105,16 @@ export async function linkUserToInstallation(
 
   try {
     await db.collection('user_installation_roles').insertOne(userInstallationRole);
-    console.log(
-      `[installations] Linked user ${userId} to installation ${installationId} (${orgName}) with role ${role}`
+    logger.info(
+      { userId: userId.toString(), installationId, orgName, role },
+      'Linked user to installation'
     );
   } catch (err: any) {
     if (err.code === 11000) {
       // User already linked to this installation
-      console.log(
-        `[installations] User ${userId} already linked to installation ${installationId}`
+      logger.info(
+        { userId: userId.toString(), installationId },
+        'User already linked to installation'
       );
     } else {
       throw err;

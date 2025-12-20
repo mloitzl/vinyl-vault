@@ -1,6 +1,8 @@
 // Counter model for tracking record counts per tenant
 // Supports incremental updates and reconciliation
 
+import { logger } from '../utils/logger.js';
+
 export interface CounterDocument {
   _id: string; // Fixed as 'records'
   total: number;
@@ -36,11 +38,9 @@ export class CounterRepository {
       update.$inc[`byLocation.${location}`] = 1;
     }
 
-    await this.db.collection<CounterDocument>('counters').updateOne(
-      { _id: 'records' },
-      update,
-      { upsert: true }
-    );
+    await this.db
+      .collection<CounterDocument>('counters')
+      .updateOne({ _id: 'records' }, update, { upsert: true });
   }
 
   /**
@@ -67,11 +67,9 @@ export class CounterRepository {
       update.$inc[`byLocation.${location}`] = -1;
     }
 
-    await this.db.collection<CounterDocument>('counters').updateOne(
-      { _id: 'records' },
-      update,
-      { upsert: true }
-    );
+    await this.db
+      .collection<CounterDocument>('counters')
+      .updateOne({ _id: 'records' }, update, { upsert: true });
   }
 
   /**
@@ -79,8 +77,14 @@ export class CounterRepository {
    * Returns the total count if no specific filter, otherwise per-user or per-location count.
    * For regex/complex filters, returns null to indicate fallback to countDocuments.
    */
-  async getCount(filter: { userId?: string; location?: string; isRegexLocation?: boolean }): Promise<number | null> {
-    const counters = await this.db.collection<CounterDocument>('counters').findOne({ _id: 'records' });
+  async getCount(filter: {
+    userId?: string;
+    location?: string;
+    isRegexLocation?: boolean;
+  }): Promise<number | null> {
+    const counters = await this.db
+      .collection<CounterDocument>('counters')
+      .findOne({ _id: 'records' });
 
     if (!counters) {
       return null; // No counters yet, fallback to countDocuments
@@ -169,7 +173,7 @@ export class CounterRepository {
       );
     } catch (error) {
       // Log error but don't throw (reconciliation is non-critical)
-      console.error('Counter reconciliation failed:', error);
+      logger.error({ err: error }, 'Counter reconciliation failed');
     }
   }
 }

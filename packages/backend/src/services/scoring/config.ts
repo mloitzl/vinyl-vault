@@ -10,6 +10,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { ScoringConfig } from './types.js';
 import { config } from '../../config/index.js';
+import { logger } from '../../utils/logger.js';
 
 // Get the directory of this file for resolving config path
 const __filename = fileURLToPath(import.meta.url);
@@ -189,17 +190,17 @@ function loadConfigFromFile(): Partial<ScoringConfig> | null {
   const configPath = getConfigFilePath();
 
   if (!existsSync(configPath)) {
-    console.log(`Scoring config file not found at ${configPath}, using defaults`);
+    logger.debug({ configPath }, 'Scoring config file not found, using defaults');
     return null;
   }
 
   try {
     const content = readFileSync(configPath, 'utf-8');
     const parsed = JSON.parse(content);
-    console.log(`Loaded scoring config from ${configPath}`);
+    logger.info({ configPath }, 'Loaded scoring config from file');
     return parsed;
   } catch (err: any) {
-    console.warn(`Failed to load scoring config from ${configPath}: ${err?.message}`);
+    logger.warn({ configPath, err }, 'Failed to load scoring config from file');
     return null;
   }
 }

@@ -1,0 +1,93 @@
+---
+# MongoDB for Backend (Registry + Tenant Databases)
+# Single replica for simplicity - can scale to replica set later
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-backend
+  namespace: vinylvault-staging
+  labels:
+    app: mongodb-backend
+    component: database
+spec:
+  clusterIP: None  # Headless service
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+  selector:
+    app: mongodb-backend
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb-backend
+  namespace: vinylvault-staging
+  labels:
+    app: mongodb-backend
+    component: database
+spec:
+  serviceName: mongodb-backend
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-backend
+  template:
+    metadata:
+      labels:
+        app: mongodb-backend
+        component: database
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      containers:
+        - name: mongodb
+          image: mongo:4.4.6
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "root"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-backend-secret
+                  key: mongodb-root-password
+          volumeMounts:
+            - name: mongodb-store
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-store
+        labels:
+          app: mongodb-backend
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: nfs-client
+        resources:
+          requests:
+            storage: 50Gi

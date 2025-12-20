@@ -67,8 +67,12 @@ export class ReleaseRepository {
       trackList: input.trackList || [],
       externalId: input.externalId,
       source: input.source,
+      createdAt: now,
       updatedAt: now,
     };
+
+    // Avoid conflicting updates on createdAt when upserting
+    const { createdAt, ...releaseWithoutCreatedAt } = release;
 
     // Upsert by barcode + externalId + source to avoid duplicates
     const filter: any = { barcode: input.barcode, source: input.source };
@@ -76,16 +80,14 @@ export class ReleaseRepository {
       filter.externalId = input.externalId;
     }
 
-    const result = await this.db
-      .collection<ReleaseDocument>('releases')
-      .findOneAndUpdate(
-        filter,
-        {
-          $set: { ...release, updatedAt: now },
-          $setOnInsert: { createdAt: now },
-        },
-        { upsert: true, returnDocument: 'after' }
-      );
+    const result = await this.db.collection<ReleaseDocument>('releases').findOneAndUpdate(
+      filter,
+      {
+        $set: { ...releaseWithoutCreatedAt, updatedAt: now },
+        $setOnInsert: { createdAt },
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
 
     return result!;
   }

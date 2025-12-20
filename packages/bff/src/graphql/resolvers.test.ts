@@ -50,6 +50,8 @@ describe('BFF Resolvers', () => {
     vi.mocked(signJwt).mockReturnValue('mock-jwt-token');
 
     mockContext = {
+      req: {} as any,
+      res: {} as any,
       user: {
         id: '123',
         githubId: '456',

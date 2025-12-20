@@ -1,0 +1,127 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vinylvault-production
+
+resources:
+  - ../../base
+
+# Replica count for production (4 replicas per service)
+replicas:
+  - name: backend
+    count: 4
+  - name: bff
+    count: 4
+  - name: frontend
+    count: 4
+
+# Update image tags for production
+images:
+  - name: ghcr.io/mloitzl/vinyl-vault-backend
+    newTag: latest-production
+  - name: ghcr.io/mloitzl/vinyl-vault-bff
+    newTag: latest-production
+  - name: ghcr.io/mloitzl/vinyl-vault-frontend
+    newTag: latest-production
+
+# ConfigMap for production-specific configuration
+configMapGenerator:
+  - name: app-config
+    behavior: replace
+    literals:
+      - FRONTEND_URL=https://vinylvault.loitzl.com
+      - BFF_URL=http://bff.vinylvault-production.svc.cluster.local:3000
+      - BACKEND_URL=http://backend.vinylvault-production.svc.cluster.local:4000/graphql
+      - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault/installations/new
+      - ENABLE_DISCOGS_INTEGRATION=true
+
+# Patches for production environment
+patches:
+  # Update ingress domain
+  - target:
+      kind: Ingress
+      name: vinylvault-ingress
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: vinylvault.loitzl.com
+      - op: replace
+        path: /spec/rules/0/host
+        value: vinylvault.loitzl.com
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: vinylvault-production-tls
+
+  # Add production label to all resources
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /metadata/labels/environment
+        value: production
+      - op: add
+        path: /spec/template/metadata/labels/environment
+        value: production
+
+  # Increase resource limits for production
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 1000m
+
+  - target:
+      kind: Deployment
+      name: bff
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 1000m
+
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 128Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 200m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 256Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 400m
+
+  # Adjust HPA for production
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 4
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6

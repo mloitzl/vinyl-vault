@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Backend resources
+  - backend/deployment.yaml
+  - backend/service.yaml
+  - backend/hpa.yaml
+  
+  # BFF resources
+  - bff/deployment.yaml
+  - bff/service.yaml
+  - bff/hpa.yaml
+  
+  # Frontend resources
+  - frontend/deployment.yaml
+  - frontend/service.yaml
+  - frontend/hpa.yaml
+  
+  # Ingress
+  - ingress/ingress.yaml
+  
+  # ConfigMaps only (Secrets must be created manually via kubectl)
+  - configmaps/app-config.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: vinylvault
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: ghcr.io/mloitzl/vinyl-vault-backend
+    newTag: latest
+  - name: ghcr.io/mloitzl/vinyl-vault-bff
+    newTag: latest
+  - name: ghcr.io/mloitzl/vinyl-vault-frontend
+    newTag: latest

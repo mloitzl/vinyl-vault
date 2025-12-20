@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-      - feature/production-readyness
   pull_request:
     branches:
       - main
@@ -17,6 +16,8 @@ env:
 
 jobs:
   build:
+    # Run for PRs, or for direct pushes to main/develop only
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     runs-on: self-hosted
     permissions:
       contents: read
@@ -81,6 +82,7 @@ jobs:
           echo "Built image: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}"
           echo "Commit tag: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}"
 
+
   deploy_pr_to_staging:
     name: Deploy PR to Staging
     runs-on: self-hosted
@@ -89,9 +91,12 @@ jobs:
     permissions:
       contents: read
       packages: read
+      issues: write
+      pull-requests: write
     env:
       REGISTRY: ghcr.io
       KUBE_NAMESPACE: vinylvault-staging
+      KUSTOMIZE_PATH: infra/k8s/overlays/staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -99,36 +104,25 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
 
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Determine commit image tag
         id: commit-tag
         run: |
           COMMIT_SHA=$(git rev-parse --short HEAD)
           echo "image_tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${COMMIT_SHA}" >> $GITHUB_ENV
 
-      - name: Update image tags in manifests
+      - name: Preview Kustomize manifests with commit tag
         run: |
-          IMAGE_TAG="${{ steps.commit-tag.outputs.image_tag }}"
+          IMAGE_TAG=${{ steps.commit-tag.outputs.image_tag }}
+          cp ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak
+          sed -i "s/newTag: latest-staging/newTag: \"${IMAGE_TAG}\"/g" ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
+          echo "=== Staging Manifests Preview (tag: ${IMAGE_TAG}) ==="
+          kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
 
-          kubectl set image deployment/backend \
-            backend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-backend:${IMAGE_TAG}" \
-            -n ${{ env.KUBE_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl set image deployment/bff \
-            bff="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-bff:${IMAGE_TAG}" \
-            -n ${{ env.KUBE_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl set image deployment/frontend \
-            frontend="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-frontend:${IMAGE_TAG}" \
-            -n ${{ env.KUBE_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Apply manifests to staging
+        run: |
+          kubectl apply -k ${{ env.KUSTOMIZE_PATH }}
+          echo "✓ Kustomize apply completed"
 
       - name: Wait for rollout
         run: |
@@ -144,7 +138,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `✅ PR deployed to Staging using image tag \`${{ steps.commit-tag.outputs.image_tag }}\`\n\nView staging at: https://staging.vinylvault.app`
+              body: `✅ PR deployed to Staging using image tag \`${{ steps.commit-tag.outputs.image_tag }}\`\n\nView staging at: https://vinylvault.antisocializer.org`
             })
 
       - name: Collect diagnostics on failure
@@ -183,7 +177,7 @@ jobs:
             const snippet = details.length > maxLen ? details.slice(0, maxLen) + '\n\n... (truncated)' : details;
 
             const body = [
-              `❌ Deployment to Staging failed for tag \`${process.env.IMAGE_TAG || '${{ steps.commit-tag.outputs.image_tag }}'}\`.`,
+              `❌ Deployment to Staging failed for tag \`${process.env.IMAGE_TAG || 'unknown'}\`.`,
               '',
               'Diagnostics (truncated):',
               '```\n' + snippet + '\n```',

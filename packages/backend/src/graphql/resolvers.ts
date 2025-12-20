@@ -1,5 +1,6 @@
 // Domain Backend GraphQL resolvers
 
+import { logger } from '../utils/logger.js';
 import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
@@ -236,8 +237,9 @@ export const resolvers = {
       // Use the new blended scoring orchestrator
       const result = await lookupAndScoreBarcode(barcode);
 
-      console.log(
-        `[lookupBarcode] Got ${result.albums.length} albums, ${result.rawReleases.length} raw releases`
+      logger.debug(
+        { barcode, albums: result.albums.length, rawReleases: result.rawReleases.length },
+        'Barcode lookup complete'
       );
 
       // Build a lookup map from rawReleases by id (format: SOURCE‡externalId)
@@ -314,7 +316,7 @@ export const resolvers = {
         try {
           await upsertReleases(context.db, releases as any);
         } catch (err: any) {
-          console.warn('Failed to upsert releases cache:', err?.message ?? String(err));
+          logger.warn({ err }, 'Failed to upsert releases cache');
         }
       }
 
@@ -477,9 +479,7 @@ export const resolvers = {
     ) => {
       const { userId, installationId } = _args.input;
 
-      console.log(
-        `[completeInstallationSetup] User ${userId} setting up installation ${installationId}`
-      );
+      logger.info({ userId, installationId }, 'User setting up installation');
 
       // 1. Verify installation exists
       // Webhook can arrive slightly after the user is redirected here; wait briefly.
@@ -515,7 +515,7 @@ export const resolvers = {
       // 5. Add user as ADMIN to the new org tenant
       await addUserToTenant(userObjId, existingTenant.tenantId, 'ADMIN');
 
-      console.log(`[completeInstallationSetup] Created org tenant ${existingTenant.tenantId}`);
+      logger.info({ tenantId: existingTenant.tenantId }, 'Created org tenant');
 
       return {
         ok: true,

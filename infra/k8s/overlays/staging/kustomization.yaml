@@ -1,0 +1,93 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vinylvault-staging
+
+resources:
+  - ../../base
+
+# Replica count for staging (2 replicas per service)
+replicas:
+  - name: backend
+    count: 2
+  - name: bff
+    count: 2
+  - name: frontend
+    count: 2
+
+# Update image tags for staging
+images:
+  - name: ghcr.io/mloitzl/vinylvault-backend
+    newTag: latest-staging
+  - name: ghcr.io/mloitzl/vinylvault-bff
+    newTag: latest-staging
+  - name: ghcr.io/mloitzl/vinylvault-frontend
+    newTag: latest-staging
+
+# ConfigMap for staging-specific configuration
+configMapGenerator:
+  - name: app-config
+    behavior: replace
+    literals:
+      - FRONTEND_URL=https://vinylvault.antisocializer.org
+      - BFF_URL=http://bff.vinylvault-staging.svc.cluster.local:3000
+      - BACKEND_URL=http://backend.vinylvault-staging.svc.cluster.local:4000/graphql
+      - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault-multiuser/installations/new
+      - GITHUB_CALLBACK_URL=https://vinylvault.antisocializer.org/auth/github/callback
+      - ENABLE_DISCOGS_INTEGRATION=true
+
+# Patches for staging environment
+patches:
+  # Update ingress domain
+  - target:
+      kind: Ingress
+      name: vinylvault-ingress
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: vinylvault.antisocializer.org
+      - op: replace
+        path: /spec/rules/0/host
+        value: vinylvault.antisocializer.org
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: vinylvault-staging-tls
+
+  # Add staging label to all resources
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /metadata/labels/environment
+        value: staging
+      - op: add
+        path: /spec/template/metadata/labels/environment
+        value: staging
+
+  # Adjust HPA min replicas for staging
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+
+  # Override LOG_LEVEL for debugging in staging
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: debug
+
+  - target:
+      kind: Deployment
+      name: bff
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: debug

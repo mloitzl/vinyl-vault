@@ -8,13 +8,8 @@
  * Implements the complete pipeline for FR-NG-*, FR-SC-*, FR-AG-*, and QR-*.
  */
 
-import type {
-  RawRelease,
-  ScoringConfig,
-  ScoringDetail,
-  LookupResult,
-  Track,
-} from './types.js';
+import { logger } from '../../utils/logger.js';
+import type { RawRelease, ScoringConfig, ScoringDetail, LookupResult, Track } from './types.js';
 import { getScoringConfig } from './config.js';
 import { normalizeAndGroup } from './normalize.js';
 import { scoreRelease } from './score.js';
@@ -47,7 +42,7 @@ async function fetchMusicBrainzReleases(barcode: string): Promise<{
 
   try {
     const results = await musicbrainz.searchByBarcode(barcode);
-    console.log(`MusicBrainz: found ${results.length} results for barcode ${barcode}`);
+    logger.debug({ barcode, count: results.length, source: 'MusicBrainz' }, 'Found results');
 
     for (const r of results) {
       const artist =
@@ -88,7 +83,7 @@ async function fetchMusicBrainzReleases(barcode: string): Promise<{
         }
       } catch (err: any) {
         // Non-fatal: continue with basic info
-        console.warn('MusicBrainz details fetch failed:', err?.message ?? String(err));
+        logger.warn({ err, externalId }, 'MusicBrainz details fetch failed');
       }
 
       releases.push({
@@ -115,7 +110,7 @@ async function fetchMusicBrainzReleases(barcode: string): Promise<{
     }
   } catch (err: any) {
     const errorMsg = `MusicBrainz error: ${err?.message ?? String(err)}`;
-    console.error(errorMsg);
+    logger.error({ err, barcode }, 'MusicBrainz error');
     errors.push(errorMsg);
   }
 
@@ -134,7 +129,7 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
 
   try {
     const results = await discogs.searchByBarcode(barcode);
-    console.log(`Discogs: found ${results.length} results for barcode ${barcode}`);
+    logger.debug({ barcode, count: results.length, source: 'Discogs' }, 'Found results');
 
     for (const r of results) {
       const externalId = String(r.id);
@@ -170,7 +165,7 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
         }
       } catch (err: any) {
         // Non-fatal: continue with basic info
-        console.warn('Discogs details fetch failed:', err?.message ?? String(err));
+        logger.warn({ err, externalId }, 'Discogs details fetch failed');
       }
 
       // Parse artist from Discogs "Artist - Title" format
@@ -200,7 +195,7 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
     }
   } catch (err: any) {
     const errorMsg = `Discogs error: ${err?.message ?? String(err)}`;
-    console.error(errorMsg);
+    logger.error({ err, barcode }, 'Discogs error');
     errors.push(errorMsg);
   }
 
@@ -224,7 +219,14 @@ async function fetchAllReleases(barcode: string): Promise<{
   const releases = [...mbResult.releases, ...dgResult.releases];
   const errors = [...mbResult.errors, ...dgResult.errors];
 
-  console.log(`Total releases fetched: ${releases.length} (MB: ${mbResult.releases.length}, DG: ${dgResult.releases.length})`);
+  logger.debug(
+    {
+      total: releases.length,
+      musicBrainz: mbResult.releases.length,
+      discogs: dgResult.releases.length,
+    },
+    'Total releases fetched'
+  );
 
   return { releases, errors };
 }
@@ -232,10 +234,7 @@ async function fetchAllReleases(barcode: string): Promise<{
 /**
  * Generate scoring details for all releases (QR-02 traceability)
  */
-function generateScoringDetails(
-  releases: RawRelease[],
-  config: ScoringConfig
-): ScoringDetail[] {
+function generateScoringDetails(releases: RawRelease[], config: ScoringConfig): ScoringDetail[] {
   // We need to normalize releases first to score them
   const groups = normalizeAndGroup(releases, config);
   const details: ScoringDetail[] = [];
@@ -250,9 +249,7 @@ function generateScoringDetails(
         mediaTypeScore: result.breakdown.mediaType,
         countryScore: result.breakdown.country,
         completenessScore:
-          result.breakdown.trackList +
-          result.breakdown.coverArt +
-          result.breakdown.labelInfo,
+          result.breakdown.trackList + result.breakdown.coverArt + result.breakdown.labelInfo,
         appliedRules: result.appliedRules,
       });
     }
@@ -316,14 +313,14 @@ export async function lookupAndScoreBarcode(
 
   // Normalize and group releases (FR-NG-1, FR-NG-2, FR-NG-3)
   const groups = normalizeAndGroup(rawReleases, cfg);
-  console.log(`Created ${groups.length} album group(s) from ${rawReleases.length} releases`);
+  logger.debug({ groups: groups.length, releases: rawReleases.length }, 'Created album groups');
 
   // Create aggregated albums (FR-AG-1 through FR-AG-6)
   // This also handles scoring and primary release selection (FR-SC-*)
   const albums = createAlbums(groups, cfg);
 
   const processingTimeMs = Date.now() - startTime;
-  console.log(`Barcode lookup completed in ${processingTimeMs}ms`);
+  logger.info({ processingTimeMs, albums: albums.length, barcode }, 'Barcode lookup completed');
 
   return {
     albums,
@@ -366,7 +363,10 @@ export function rescoreReleases(
   const groups = normalizeAndGroup(rawReleases, cfg);
   const albums = createAlbums(groups, cfg);
 
-  console.log(`Re-scored ${rawReleases.length} releases into ${albums.length} albums in ${Date.now() - startTime}ms`);
+  logger.debug(
+    { releases: rawReleases.length, albums: albums.length, durationMs: Date.now() - startTime },
+    'Re-scored releases'
+  );
 
   return {
     albums,

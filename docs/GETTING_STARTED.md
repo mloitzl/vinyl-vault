@@ -248,6 +248,18 @@ This starts three servers concurrently:
 
 Wait until you see output indicating all servers are ready.
 
+### Optional: Pretty Logs in Development
+
+To enable human-readable, colorized logs for BFF and Backend during development, set this in your `.env`:
+
+```env
+ENABLE_PRETTY_LOGS=true
+```
+
+Notes:
+- Pretty logs are only enabled when `NODE_ENV !== 'production`.
+- Frontend uses Vite, which already prints formatted output; this setting affects server logs.
+
 ---
 
 ## Step 7: Access the Application

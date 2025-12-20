@@ -4,6 +4,7 @@
 
 import { Request, Response } from 'express';
 import { config } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 import { queryBackend } from '../services/backendClient.js';
 import { setActiveTenant } from '../types/session.js';
 
@@ -23,13 +24,13 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
   const isTestMode = !!testUserId;
 
   if (!req.session.user && !isTestMode) {
-    console.log('[setup] User not authenticated, redirecting to login');
-    res.redirect(`/auth/github?redirect_to=${encodeURIComponent(req.originalUrl)}`);
+    logger.info('Setup: User not authenticated, redirecting to login');
+    res.redirect(`/auth/github?return_to=${encodeURIComponent(req.originalUrl)}`);
     return;
   }
 
   if (!installationId) {
-    console.warn('[setup] Missing installation_id parameter');
+    logger.warn('Setup: Missing installation_id parameter');
     res.status(400).json({
       error: 'Missing installation_id parameter',
       code: 'MISSING_INSTALLATION_ID',
@@ -40,7 +41,7 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
   // For test mode, use test_user_id as userId
   const userId = isTestMode ? testUserId : req.session.user!.id;
 
-  console.log(`[setup] User ${userId} setting up installation ${installationId}`);
+  logger.info({ userId, installationId }, 'User setting up installation');
 
   try {
     // 2. Call backend mutation to complete installation setup
@@ -69,7 +70,7 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
     });
 
     if (result.errors) {
-      console.error('[setup] Backend error:', result.errors);
+      logger.error({ errors: result.errors }, 'Setup: Backend error');
       const error = result.errors[0];
       res.status(400).json({
         error: error.message || 'Setup failed',
@@ -81,7 +82,7 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
     const { tenantId, tenantName } = result.completeInstallationSetup || {};
 
     if (!tenantId) {
-      console.error('[setup] No tenant returned from backend');
+      logger.error('Setup: No tenant returned from backend');
       res.status(500).json({
         error: 'Failed to create organization tenant',
         code: 'TENANT_CREATION_FAILED',
@@ -105,7 +106,7 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
     setActiveTenant(req.session, tenantId);
     req.session.save((err) => {
       if (err) {
-        console.error('[setup] Session save error:', err);
+        logger.error({ err }, 'Setup: Session save error');
         res.status(500).json({
           error: 'Session update failed',
           code: 'SESSION_ERROR',
@@ -113,8 +114,10 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
         return;
       }
 
-      console.log(`[setup] Successfully linked user ${userId} to installation ${installationId}`);
-      console.log(`[setup] Created organization tenant ${tenantId}`);
+      logger.info(
+        { userId, installationId, tenantId },
+        'Successfully linked user to installation and created org tenant'
+      );
 
       // 4. Redirect to frontend with success message
       const redirectUrl = new URL(config.frontend.url);
@@ -124,7 +127,7 @@ export async function handleSetup(req: Request, res: Response<any>): Promise<voi
       res.redirect(redirectUrl.toString());
     });
   } catch (error: any) {
-    console.error('[setup] Error completing installation setup:', error);
+    logger.error({ err: error }, 'Setup: Error completing installation setup');
     res.status(500).json({
       error: error.message || 'Internal server error',
       code: 'INTERNAL_ERROR',

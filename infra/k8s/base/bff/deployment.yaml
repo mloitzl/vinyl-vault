@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bff
+  labels:
+    app: bff
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bff
+  template:
+    metadata:
+      labels:
+        app: bff
+        component: api
+    spec:
+      containers:
+      - name: bff
+        image: ghcr.io/mloitzl/vinylvault-bff:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: BFF_PORT
+          value: "3000"
+        - name: NODE_ENV
+          value: production
+        - name: LOG_LEVEL
+          value: info
+        - name: FRONTEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: FRONTEND_URL
+        - name: BACKEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: BACKEND_URL
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: MONGODB_BFF_URI
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SESSION_SECRET
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: JWT_SECRET
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: github-secrets
+              key: GITHUB_CLIENT_ID
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: github-secrets
+              key: GITHUB_CLIENT_SECRET
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: github-secrets
+              key: GITHUB_APP_ID
+        - name: GITHUB_APP_PRIVATE_KEY_PATH
+          value: "/secrets/github-app-private-key.pem"
+        - name: GITHUB_APP_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: github-secrets
+              key: GITHUB_APP_WEBHOOK_SECRET
+        - name: GITHUB_APP_INSTALLATION_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: GITHUB_APP_INSTALLATION_URL
+        - name: GITHUB_CALLBACK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: GITHUB_CALLBACK_URL
+        - name: DISCOGS_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DISCOGS_API_TOKEN
+              optional: true
+        volumeMounts:
+        - name: github-app-key
+          mountPath: /secrets
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: github-app-key
+        secret:
+          secretName: github-app-key
+          items:
+          - key: private-key
+            path: github-app-private-key.pem
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      # Session affinity for sticky sessions
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - bff
+              topologyKey: kubernetes.io/hostname

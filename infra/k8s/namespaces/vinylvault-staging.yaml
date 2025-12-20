@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vinylvault-staging
+  labels:
+    app.kubernetes.io/name: vinylvault
+    app.kubernetes.io/environment: staging

@@ -2,7 +2,8 @@
 // TODO: Implement record data access
 
 import { ObjectId } from 'mongodb';
-import { CounterRepository } from './counter';
+import { CounterRepository } from './counter.js';
+import { logger } from '../utils/logger.js';
 
 export interface RecordDocument {
   _id: ObjectId;
@@ -90,10 +91,10 @@ export class RecordRepository {
     };
 
     const result = await this.db.collection<RecordDocument>('records').insertOne(record as any);
-    
+
     // Increment counters
     await this.counterRepo.increment(input.userId, input.location);
-    
+
     return {
       ...record,
       _id: result.insertedId,
@@ -165,7 +166,7 @@ export class RecordRepository {
     } catch (error: any) {
       // If text search fails due to missing index, retry without text search
       if (error.errmsg?.includes('text index') && filter.search) {
-        console.warn(`[findMany] Text search index not ready, retrying without search`);
+        logger.warn('Text search index not ready, retrying without search');
         delete query.$text;
         records = await collection
           .find(query)
@@ -217,12 +218,12 @@ export class RecordRepository {
   async update(id: string, input: UpdateRecordInput): Promise<RecordDocument | null> {
     try {
       const objectId = new ObjectId(id);
-      
+
       // Fetch the existing record to compare location changes
       const existingRecord = await this.db
         .collection<RecordDocument>('records')
         .findOne({ _id: objectId });
-      
+
       if (!existingRecord) {
         return null;
       }
@@ -262,28 +263,23 @@ export class RecordRepository {
   async delete(id: string): Promise<boolean> {
     try {
       const objectId = new ObjectId(id);
-      
+
       // Fetch the record before deletion to get userId and location for counter update
-      const record = await this.db
-        .collection<RecordDocument>('records')
-        .findOne({ _id: objectId });
-      
+      const record = await this.db.collection<RecordDocument>('records').findOne({ _id: objectId });
+
       if (!record) {
         return false;
       }
-      
+
       const result = await this.db
         .collection<RecordDocument>('records')
         .deleteOne({ _id: objectId });
-      
+
       if (result.deletedCount > 0) {
         // Decrement counters
-        await this.counterRepo.decrement(
-          record.userId.toString(),
-          record.location
-        );
+        await this.counterRepo.decrement(record.userId.toString(), record.location);
       }
-      
+
       return result.deletedCount > 0;
     } catch {
       return false;
