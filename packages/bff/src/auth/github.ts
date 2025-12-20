@@ -402,7 +402,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Store available tenants in session
     setAvailableTenants(req.session, availableTenants);
 
-
     // Save session and redirect to frontend
     req.session.save((err) => {
       if (err) {
@@ -415,7 +414,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
 
       const dest = returnToUrl || config.frontend.url;
       logger.debug({ dest, returnToUrl }, 'Redirecting user after successful login');
-
       res.redirect(dest);
     });
   } catch (err) {
