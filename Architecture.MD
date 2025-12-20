@@ -117,10 +117,37 @@ Security hardening on the Pi:
 
 - Sessions stored in BFF MongoDB `sessions` collection (via `connect-mongo`).
 - Cookie: `vinylvault.sid`, HTTP-only, secure in production.
+- SameSite: `Lax` (required for OAuth/GitHub App redirects to preserve the session cookie across cross-site callback navigations; `Strict` would drop it). In production, pair with `Secure` (already enabled) and HTTPS termination at the proxy.
 - Session contains: `userId`, `githubId`, `username`, `role`, `avatarUrl`, `displayName`, `tenantId`, `tenantType`, `availableTenants`, `createdAt`, `updatedAt`.
 - Frontend fetches user and tenant info via `/auth/me` endpoint on load.
 - Users can switch tenants via `/auth/switch-tenant` endpoint, updating session context.
 - No backend JWT is exposed to the browser.
+
+**Why OAuth-style redirects need at least SameSite=Lax**
+
+When the user returns from GitHub (OAuth) or a GitHub App installation, the browser performs a cross-site top-level navigation back to `/auth/github/callback` or `/auth/setup`. With `SameSite=Strict`, the session cookie is **not** sent on that cross-site navigation, so the callback cannot see `req.session.user` and treats the user as unauthenticated. With `SameSite=Lax`, cookies are sent on top-level GET navigations, which is what OAuth flows use, so the session survives.
+
+Flow (happy path with Lax):
+
+````mermaid
+sequenceDiagram
+  participant U as User Browser
+  participant FE as Frontend/BFF
+  participant GH as GitHub (OAuth/App)
+  Note over FE: Session cookie set (SameSite=Lax)
+  U->>FE: Click "Login" or "Install App"
+  FE->>U: 302 to GH (auth/install request)
+  U->>GH: Navigate to GitHub
+  GH-->>U: Login & consent/install UI
+  U->>GH: Approve
+  GH->>U: 302 back to FE /auth/.../callback
+  U->>FE: Navigate to callback (top-level GET)
+  Note over U: Cookie SENT because SameSite=Lax on top-level nav
+  FE->>FE: Read session (user present), finalize login/setup
+  FE-->>U: Redirect to app with session intact
+````
+
+If the provider used a POST redirect (rare), `Lax` would still drop the cookie; the alternative is `SameSite=None; Secure` on HTTPS. For GitHub OAuth and GitHub App installs (top-level GET), `Lax` is sufficient and avoids `None`/third-party semantics.
 
 **Data Flow Between BFF and Backend:**
 

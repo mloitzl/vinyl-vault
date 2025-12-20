@@ -125,7 +125,9 @@ async function main() {
       cookie: {
         httpOnly: true,
         secure: config.isProduction,
-        sameSite: 'strict' as const,
+        // Lax is required so the GitHub App installation redirect (cross-site)
+        // can carry the session cookie; Strict would drop the cookie.
+        sameSite: 'lax' as const,
         maxAge: config.session.maxAge,
       },
     })
