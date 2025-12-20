@@ -35,7 +35,7 @@ import type { GraphQLContext } from './types/context.js';
 import './types/session.js'; // Import session types
 import { getActiveTenant } from './types/session.js';
 import { verifyWebhookSignature, forwardWebhookToBackend } from './auth/webhook.js';
-import { logger } from './utils/logger.js';
+import { logger, httpLogger } from './utils/logger.js';
 
 async function main() {
   // Validate configuration
@@ -45,6 +45,9 @@ async function main() {
   await connectToDatabase();
 
   const app = express();
+
+  // HTTP request logging (pretty in dev when ENABLE_PRETTY_LOGS=true)
+  app.use(httpLogger);
 
   // Trust proxy for secure cookies behind reverse proxy
   app.set('trust proxy', 1);
@@ -107,6 +110,7 @@ async function main() {
   app.use(express.json());
 
   // Session middleware with MongoDB store
+  // Main session cookie: SameSite=strict (secure by default), carries user auth state
   app.use(
     session({
       name: config.session.cookieName,
@@ -121,7 +125,7 @@ async function main() {
       cookie: {
         httpOnly: true,
         secure: config.isProduction,
-        sameSite: config.isProduction ? 'strict' : 'lax',
+        sameSite: 'strict' as const,
         maxAge: config.session.maxAge,
       },
     })
