@@ -402,11 +402,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
     // Store available tenants in session
     setAvailableTenants(req.session, availableTenants);
 
-    // Detect if this is an onboarding flow (returnToUrl points to /auth/setup)
-    const isOnboarding = returnToUrl?.startsWith('/auth/setup');
-    if (isOnboarding) {
-      logger.debug({ userId: user.id, returnToUrl }, 'OAuth callback part of org onboarding flow');
-    }
 
     // Save session and redirect to frontend
     req.session.save((err) => {
@@ -419,7 +414,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       logger.info({ userId: user.id }, 'User logged in via GitHub OAuth');
 
       const dest = returnToUrl || config.frontend.url;
-      logger.debug({ dest, returnToUrl, isOnboarding }, 'Redirecting user after successful login');
+      logger.debug({ dest, returnToUrl }, 'Redirecting user after successful login');
 
       res.redirect(dest);
     });
