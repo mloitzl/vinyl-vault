@@ -223,6 +223,169 @@ The system uses two complementary GitHub authentication modes:
 
 ### 5.3 Data Model (Logical)
 
+#### Database Architecture Overview
+
+The system uses a multi-tenant database architecture with three separate MongoDB instances/databases:
+
+```mermaid
+graph TB
+    subgraph "BFF MongoDB"
+        SESS[sessions<br/>Session storage]
+    end
+    
+    subgraph "Registry Database<br/>(vinylvault_registry)"
+        USERS[users<br/>Global user profiles]
+        TENANTS[tenants<br/>Tenant metadata]
+        UTR[user_tenant_roles<br/>User-tenant mappings]
+        INST[installations<br/>GitHub App installations]
+    end
+    
+    subgraph "Tenant Databases"
+        subgraph "vinylvault_user_{userId}"
+            TREC1[records]
+            TREL1[releases]
+            TSCR1[scoring_configs]
+        end
+        
+        subgraph "vinylvault_org_{orgName}"
+            TREC2[records]
+            TREL2[releases]
+            TSCR2[scoring_configs]
+        end
+    end
+    
+    BFF[BFF Service]
+    BACKEND[Backend Service]
+    
+    BFF -->|Session management| SESS
+    BFF -->|User/tenant lookup| USERS
+    BFF -->|User/tenant lookup| TENANTS
+    BFF -->|User/tenant lookup| UTR
+    
+    BACKEND -->|Tenant operations| TREC1
+    BACKEND -->|Tenant operations| TREL1
+    BACKEND -->|Tenant operations| TSCR1
+    BACKEND -->|Tenant operations| TREC2
+    BACKEND -->|Tenant operations| TREL2
+    BACKEND -->|Tenant operations| TSCR2
+    BACKEND -->|Webhook processing| INST
+    BACKEND -->|User/tenant management| USERS
+    BACKEND -->|User/tenant management| TENANTS
+    BACKEND -->|User/tenant management| UTR
+    
+    style SESS fill:#e1f5ff
+    style USERS fill:#fff4e1
+    style TENANTS fill:#fff4e1
+    style UTR fill:#fff4e1
+    style INST fill:#fff4e1
+    style TREC1 fill:#e8f5e9
+    style TREL1 fill:#e8f5e9
+    style TSCR1 fill:#e8f5e9
+    style TREC2 fill:#e8f5e9
+    style TREL2 fill:#e8f5e9
+    style TSCR2 fill:#e8f5e9
+```
+
+**Database Responsibilities:**
+- **BFF MongoDB**: Session-only storage (`connect-mongo`), isolated from business data
+- **Registry Database**: Global user profiles, tenant metadata, user-tenant-role mappings, GitHub App installations
+- **Tenant Databases**: Isolated per-tenant data (records, cached releases, optional scoring configs)
+
+#### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    %% Registry Database Entities
+    USER ||--o{ USER_TENANT_ROLE : "has roles in"
+    TENANT ||--o{ USER_TENANT_ROLE : "has members"
+    INSTALLATION ||--o{ USER_TENANT_ROLE : "creates"
+    
+    %% Tenant Database Entities (within each tenant DB)
+    USER ||--o{ RECORD : "owns"
+    RELEASE ||--o{ RECORD : "describes"
+    
+    USER {
+        ObjectId _id PK
+        string githubId UK
+        string username
+        string displayName
+        string email
+        string avatarUrl
+        date createdAt
+        date updatedAt
+    }
+    
+    TENANT {
+        ObjectId _id PK
+        string tenantId UK
+        string tenantType "user|org"
+        string name
+        string githubOrgName
+        string databaseName
+        date createdAt
+        date updatedAt
+    }
+    
+    USER_TENANT_ROLE {
+        ObjectId _id PK
+        string userId FK
+        string tenantId FK
+        string tenantType
+        string role "ADMIN|MEMBER|VIEWER"
+        date createdAt
+        date updatedAt
+    }
+    
+    INSTALLATION {
+        ObjectId _id PK
+        int installationId UK
+        string accountLogin
+        string accountType
+        int accountId
+        date createdAt
+    }
+    
+    RECORD {
+        ObjectId _id PK
+        ObjectId releaseId FK
+        ObjectId userId FK
+        date purchaseDate
+        float price
+        string condition
+        string location
+        string notes
+        date createdAt
+        date updatedAt
+    }
+    
+    RELEASE {
+        ObjectId _id PK
+        string barcode
+        string artist
+        string title
+        int year
+        string format
+        array genre
+        array style
+        string label
+        string country
+        string coverImageUrl
+        array trackList
+        string externalId
+        string source "DISCOGS|MUSICBRAINZ|MANUAL"
+        date createdAt
+        date updatedAt
+    }
+```
+
+**Key Relationships:**
+- **User ↔ Tenant** (N:M): Users can access multiple tenants (personal + organizations), mapped via `user_tenant_roles`
+- **Installation → Tenant** (1:1): Each GitHub App installation creates one organization tenant
+- **User → Record** (1:N): Within a tenant, users own multiple records
+- **Release → Record** (1:N): A release (cached metadata) can be referenced by multiple physical records
+
+#### Schema Details
+
 **User** (Tenant MongoDB `users` collection)
 ```
 {
@@ -338,20 +501,27 @@ The system uses two complementary GitHub authentication modes:
 **BFF GraphQL Schema (`packages/bff/src/schema.graphql`):**
 - Relay-friendly schema with `Node` interface for refetchable objects.
 - Queries: `viewer` (current user with tenant context), `node` (by ID), `records` (paginated tenant collection with filtering and text search).
-- Mutations: `scanBarcode` (tenant-scoped barcode lookup), `createRecord` ✅, `updateRecord` ✅, `deleteRecord` ✅, `switchToPersonalTenant`, `switchToOrganizationTenant`.
+- Mutations: `scanBarcode` (tenant-scoped barcode lookup), `createRecord`, `updateRecord`, `deleteRecord`, `switchTenant` (unified tenant switching).
 - All record mutations proxy to backend with role-based authorization (ADMIN/MEMBER required).
-- Key types: `User`, `Tenant`, `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
+- Key types: `User`, `Tenant` (with `id`, `name`, `type`, `role`), `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
 - Connection types for pagination: `RecordConnection`, `RecordEdge`, `PageInfo`.
-- Viewer includes `activeTenant`, `availableTenants[]`, and `role` within current tenant.
+- Enums: `TenantType` (USER, ORGANIZATION), `TenantRole` (ADMIN, MEMBER, VIEWER), `ReleaseSource` (DISCOGS, MUSICBRAINZ, MANUAL).
+- Viewer includes `activeTenant`, `availableTenants[]`, each with tenant `role`.
 - Complete CRUD implementation with optimistic UI updates and error handling.
 
 **Backend GraphQL Schema (`packages/backend/src/schema.graphql`):**
 - Domain-centric schema for internal use by BFF.
 - All operations execute within tenant database context (extracted from JWT).
-- Queries: `user`, `record`, `release`, `releasesByBarcode`, `records` (all tenant-scoped), `tenant`, `userTenantRoles`.
-- Mutations: `lookupBarcode` (uses tenant cache), `createRecord`, `updateRecord`, `deleteRecord`, `upsertUser`, `createTenant`, `addUserToTenant`, `removeUserFromTenant`, `updateUserTenantRole`.
-- Full `Album` type with detailed scoring information and alternative releases.
-- `LookupBarcodePayload` includes timing information for performance analysis.
+- Queries: `user`, `record`, `release`, `releasesByBarcode`, `records` (all tenant-scoped), `userTenants` (returns user's tenant roles).
+- Mutations: 
+  - Barcode & Records: `lookupBarcode` (uses tenant cache), `createRecord`, `updateRecord`, `deleteRecord`
+  - User Management: `upsertUser`
+  - Tenant Management: `createTenant`, `addUserToTenant`
+  - GitHub App Integration: `handleGitHubInstallationWebhook`, `completeInstallationSetup`
+- Full `Album` type with detailed scoring information, alternative releases, and external IDs.
+- `LookupBarcodePayload` includes `albums[]`, legacy `releases[]` (deprecated), `fromCache`, `timing`, and `errors[]`.
+- `ScoreBreakdown` type provides detailed point attribution: `mediaType`, `countryPreference`, `trackListCompleteness`, `coverArt`, `labelInfo`, `catalogNumber`, `yearInfo`, `sourceBonus`.
+- GitHub App types: `GitHubInstallationWebhookInput` (with payload and signature), `CompleteInstallationSetupInput` (with userId and installationId).
 - Tenant-aware authorization checks for admin-only mutations (tenant management).
 
 **JWT Token Structure:**
