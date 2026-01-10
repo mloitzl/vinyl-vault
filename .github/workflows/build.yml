@@ -15,10 +15,16 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  test:
+    name: Run Tests
+    uses: ./.github/workflows/test.yml
+
   build:
+    name: Build Docker Images
     # Run for PRs, or for direct pushes to main/develop only
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     runs-on: self-hosted
+    needs: test
     permissions:
       contents: read
       packages: write

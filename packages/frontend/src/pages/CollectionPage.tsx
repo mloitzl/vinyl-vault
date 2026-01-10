@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
-import { ErrorAlert } from '../components/ErrorAlert';
+import { Alert } from '../components/ui/Alert';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
 import { Toast } from '../components/Toast';
 
@@ -304,21 +307,22 @@ export function CollectionPage() {
                 {totalCount} {totalCount === 1 ? 'record' : 'records'}
               </p>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => setShowFilters(!showFilters)}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                  />
+                </svg>
+              }
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                />
-              </svg>
               Filters
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -329,50 +333,32 @@ export function CollectionPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <form onSubmit={handleSearch} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
-                    Search
-                  </label>
-                  <input
-                    type="text"
-                    id="search"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search notes, condition, location..."
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="location"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    id="location"
-                    value={locationFilter}
-                    onChange={(e) => setLocationFilter(e.target.value)}
-                    placeholder="Filter by location..."
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
+                <Input
+                  label="Search"
+                  id="search"
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search notes, condition, location..."
+                  fullWidth
+                />
+                <Input
+                  label="Location"
+                  id="location"
+                  type="text"
+                  value={locationFilter}
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                  placeholder="Filter by location..."
+                  fullWidth
+                />
               </div>
               <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-                >
+                <Button type="submit" variant="primary">
                   Apply Filters
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                </Button>
+                <Button type="button" onClick={handleClearFilters} variant="secondary">
                   Clear
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -381,8 +367,16 @@ export function CollectionPage() {
 
       {/* Error Messages */}
       {errors.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <ErrorAlert errors={errors} onDismiss={() => setErrors([])} />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-2">
+          {errors.map((error, idx) => (
+            <Alert
+              key={idx}
+              type="error"
+              onDismiss={() => setErrors(errors.filter((_, i) => i !== idx))}
+            >
+              {error}
+            </Alert>
+          ))}
         </div>
       )}
 
@@ -391,7 +385,7 @@ export function CollectionPage() {
         {isLoading && records.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+              <LoadingSpinner size="lg" color="primary" />
               <p className="mt-2 text-sm text-gray-500">Loading your collection...</p>
             </div>
           </div>
@@ -417,26 +411,22 @@ export function CollectionPage() {
                 : 'Get started by scanning a barcode to add your first vinyl record.'}
             </p>
             <div className="mt-6">
-              <button
-                type="button"
+              <Button
                 onClick={() => navigate('/scan')}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700"
+                variant="primary"
+                icon={
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                }
               >
-                <svg
-                  className="-ml-1 mr-2 h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
                 Scan Barcode
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -456,21 +446,15 @@ export function CollectionPage() {
             {/* Load More Button */}
             {pageInfo.hasNextPage && (
               <div className="mt-8 text-center">
-                <button
-                  type="button"
+                <Button
                   onClick={handleLoadMore}
-                  disabled={isLoading}
-                  className="inline-flex items-center px-6 py-3 border border-gray-300 shadow-sm text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  isDisabled={isLoading}
+                  variant="secondary"
+                  size="lg"
+                  icon={isLoading ? <LoadingSpinner size="sm" color="secondary" /> : undefined}
                 >
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load More'
-                  )}
-                </button>
+                  {isLoading ? 'Loading...' : 'Load More'}
+                </Button>
               </div>
             )}
           </>

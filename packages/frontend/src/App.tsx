@@ -5,12 +5,12 @@ import { RelayEnvironment } from './relay/environment';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import {
   Header,
-  ErrorAlert,
   LoadingSpinner,
   OrgInstalledNotification,
   DesktopNavigation,
   MobileNavigation,
 } from './components';
+import { Alert } from './components/ui/Alert';
 import {
   HomePage,
   ScanPage,
@@ -95,8 +95,10 @@ function AppContent() {
 
       {/* Error display */}
       {error && (
-        <div className="px-4 py-2 bg-red-50 border-b border-red-100">
-          <ErrorAlert message={error} />
+        <div className="px-4">
+          <Alert type="error" onDismiss={() => refreshUser()}>
+            {error}
+          </Alert>
         </div>
       )}
 

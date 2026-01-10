@@ -83,7 +83,7 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
               key={item.path}
               to={item.path}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                isActive ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                isActive ? 'bg-emerald-600 text-white' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
               <span className="w-5 h-5">{item.icon}</span>
@@ -123,7 +123,7 @@ export function MobileNavigation() {
               key={item.path}
               to={item.path}
               className={`flex-1 flex flex-col items-center py-2 px-3 ${
-                isActive ? 'text-gray-900' : 'text-gray-400'
+                isActive ? 'text-emerald-600' : 'text-gray-400'
               }`}
             >
               {item.icon}

@@ -27,5 +27,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
+    reporters: process.env.CI ? ['default', 'json'] : ['default'],
+    outputFile: process.env.CI ? { json: './test-results.json' } : undefined,
   },
 });

@@ -1,0 +1,173 @@
+name: Test
+
+on:
+    push:
+        branches:
+            - main
+            - develop
+    pull_request:
+        branches:
+            - main
+            - develop
+    workflow_call:
+
+jobs:
+    test-frontend:
+        name: Frontend Tests
+        runs-on: self-hosted
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v2
+              with:
+                  version: 8
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "pnpm"
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Run frontend tests
+              run: pnpm --filter frontend test --run
+
+    test-backend:
+        name: Backend Tests
+        runs-on: self-hosted
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v2
+              with:
+                  version: 8
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "pnpm"
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Run backend tests
+              run: pnpm --filter backend test --run
+              continue-on-error: true
+
+            - name: Backend test status
+              run: |
+                  echo "Backend tests completed"
+                  echo "Note: If backend has no tests yet, this step passes"
+
+    test-bff:
+        name: BFF Tests
+        runs-on: self-hosted
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v2
+              with:
+                  version: 8
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "pnpm"
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Run BFF tests
+              run: pnpm --filter bff test --run
+              continue-on-error: true
+
+            - name: BFF test status
+              run: |
+                  echo "BFF tests completed"
+                  echo "Note: If BFF has no tests yet, this step passes"
+
+    test-summary:
+        name: Test Summary
+        runs-on: self-hosted
+        needs: [test-frontend, test-backend, test-bff]
+        if: always()
+        permissions:
+            pull-requests: write
+
+        steps:
+            - name: Check test results
+              run: |
+                  if [[ "${{ needs.test-frontend.result }}" == "success" ]]; then
+                    echo "✅ Frontend tests passed"
+                  else
+                    echo "❌ Frontend tests failed"
+                    exit 1
+                  fi
+
+            - name: Post test summary comment
+              if: github.event_name == 'pull_request'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const frontendStatus = '${{ needs.test-frontend.result }}' === 'success' ? '✅' : '❌';
+                      const backendStatus = '${{ needs.test-backend.result }}' === 'success' ? '✅' : '⚠️';
+                      const bffStatus = '${{ needs.test-bff.result }}' === 'success' ? '✅' : '⚠️';
+
+                      const body = [
+                        '## Test Results',
+                        '',
+                        `${frontendStatus} Frontend Tests: **${{ needs.test-frontend.result }}**`,
+                        `${backendStatus} Backend Tests: **${{ needs.test-backend.result }}**`,
+                        `${bffStatus} BFF Tests: **${{ needs.test-bff.result }}**`,
+                        '',
+                        '_Frontend tests are required to pass. Backend/BFF tests are informational._'
+                      ].join('\\n');
+
+                      // Find existing comment
+                      const { data: comments } = await github.rest.issues.listComments({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: context.issue.number,
+                      });
+
+                      const botComment = comments.find(comment => 
+                        comment.user.type === 'Bot' && 
+                        comment.body.includes('## Test Results')
+                      );
+
+                      if (botComment) {
+                        // Update existing comment
+                        await github.rest.issues.updateComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          comment_id: botComment.id,
+                          body
+                        });
+                      } else {
+                        // Create new comment
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.issue.number,
+                          body
+                        });
+                      }

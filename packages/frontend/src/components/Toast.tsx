@@ -5,9 +5,11 @@ import { useEffect, useState } from 'react';
 
 interface ToastProps {
   message: string;
+  title?: string; // Optional title for richer notifications
   type?: 'success' | 'error' | 'info';
   duration?: number; // milliseconds, default 3000
   onDismiss?: () => void;
+  autoClose?: boolean; // default true
 }
 
 /**
@@ -22,17 +24,34 @@ interface ToastProps {
  * - Smooth animations
  * - Type variants (success, error, info)
  * - Accessible with ARIA labels
+ * - Flexible with optional title for richer notifications
+ *
+ * Examples:
+ * - Simple: <Toast message="Record saved" type="success" />
+ * - Rich: <Toast title="Organization Added" message="GitHub org has been added..." type="success" />
+ * - No auto-close: <Toast message="Important notice" duration={0} autoClose={false} onDismiss={...} />
  */
-export function Toast({ message, type = 'success', duration = 3000, onDismiss }: ToastProps) {
+export function Toast({
+  message,
+  title,
+  type = 'success',
+  duration = 3000,
+  onDismiss,
+  autoClose = true,
+}: ToastProps) {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
+    if (!autoClose) {
+      return; // Don't auto-close if disabled
+    }
+
     const timer = setTimeout(() => {
       setIsVisible(false);
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [duration]);
+  }, [duration, autoClose]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -108,7 +127,8 @@ export function Toast({ message, type = 'success', duration = 3000, onDismiss }:
 
           {/* Message Content */}
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium ${color.text}`}>{message}</p>
+            {title && <p className={`text-sm font-semibold ${color.text}`}>{title}</p>}
+            <p className={`text-sm ${title ? 'mt-1' : ''} ${color.text}`}>{message}</p>
           </div>
 
           {/* Close Button */}
