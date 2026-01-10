@@ -46,14 +46,13 @@ jobs:
     test-backend:
         name: Backend Tests
         runs-on: self-hosted
-        continue-on-error: true
         services:
             mongodb:
                 image: mongo:4.4.6
                 ports:
                     - 27017:27017
                 options: >-
-                    --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+                    --health-cmd="mongo --quiet --eval 'db.runCommand({ ping: 1 })'"
                     --health-interval=10s
                     --health-timeout=5s
                     --health-retries=15
@@ -96,7 +95,7 @@ jobs:
             - name: Print MongoDB container logs on failure
               if: failure()
               run: |
-                  docker logs $(docker ps -q --filter ancestor=mongo:6) || true
+                  docker logs $(docker ps -q --filter ancestor=mongo:4.4.6) || true
 
     test-bff:
         name: BFF Tests
@@ -129,12 +128,6 @@ jobs:
 
             - name: Run BFF tests
               run: pnpm --filter bff test --run
-              continue-on-error: true
-
-            - name: BFF test status
-              run: |
-                  echo "BFF tests completed"
-                  echo "Note: If BFF has no tests yet, this step passes"
 
     test-summary:
         name: Test Summary
@@ -147,10 +140,13 @@ jobs:
         steps:
             - name: Check test results
               run: |
-                  if [[ "${{ needs.test-frontend.result }}" == "success" ]]; then
-                    echo "✅ Frontend tests passed"
+                  if [[ "${{ needs.test-frontend.result }}" == "success" && "${{ needs.test-backend.result }}" == "success" && "${{ needs.test-bff.result }}" == "success" ]]; then
+                    echo "✅ All tests passed"
                   else
-                    echo "❌ Frontend tests failed"
+                    echo "❌ One or more test suites failed"
+                    echo "Frontend: ${{ needs.test-frontend.result }}"
+                    echo "Backend: ${{ needs.test-backend.result }}"
+                    echo "BFF: ${{ needs.test-bff.result }}"
                     exit 1
                   fi
 
@@ -160,8 +156,8 @@ jobs:
               with:
                   script: |
                       const frontendStatus = '${{ needs.test-frontend.result }}' === 'success' ? '✅' : '❌';
-                      const backendStatus = '${{ needs.test-backend.result }}' === 'success' ? '✅' : '⚠️';
-                      const bffStatus = '${{ needs.test-bff.result }}' === 'success' ? '✅' : '⚠️';
+                      const backendStatus = '${{ needs.test-backend.result }}' === 'success' ? '✅' : '❌';
+                      const bffStatus = '${{ needs.test-bff.result }}' === 'success' ? '✅' : '❌';
 
                       const body = [
                         '## Test Results',
@@ -170,7 +166,7 @@ jobs:
                         `${backendStatus} Backend Tests: **${{ needs.test-backend.result }}**`,
                         `${bffStatus} BFF Tests: **${{ needs.test-bff.result }}**`,
                         '',
-                        '_Frontend tests are required to pass. Backend/BFF tests are informational._'
+                        '_All tests are required to pass._'
                       ].join('\\n');
 
                       // Find existing comment

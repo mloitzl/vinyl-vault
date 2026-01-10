@@ -15,39 +15,15 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  test-frontend:
-    name: Frontend Tests
-    runs-on: self-hosted
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run frontend tests
-        run: pnpm --filter frontend test --run
+  tests:
+    name: Run Tests
+    uses: ./.github/workflows/test.yml
 
   build:
     name: Build Docker Images
     # Run for PRs, or for direct pushes to main/develop only
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     runs-on: self-hosted
-    needs: test-frontend
     permissions:
       contents: read
       packages: write
@@ -115,7 +91,7 @@ jobs:
   deploy_pr_to_staging:
     name: Deploy PR to Staging
     runs-on: self-hosted
-    needs: build
+    needs: [tests, build]
     if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-staging')
     permissions:
       contents: read
