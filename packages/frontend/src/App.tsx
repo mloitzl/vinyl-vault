@@ -23,22 +23,14 @@ import {
   NotFoundPage,
 } from './pages';
 
-function AppContent() {
-  const { user, isLoading, error, refreshUser } = useAuth();
-  const [orgInstalled, setOrgInstalled] = useState<string | null>(null);
+function AuthedContent() {
   const [recordCount, setRecordCount] = useState(0);
   const [artistCount, setArtistCount] = useState(0);
+  const recordsData = useRecordsQuery({ first: 1000 });
 
-  // Fetch record statistics using Relay hook
-  const recordsData = useRecordsQuery({
-    first: 1000,
-  });
-
-  // Calculate stats from records query
   useEffect(() => {
     if (recordsData && recordsData.edges) {
       setRecordCount(recordsData.totalCount);
-      // Count unique artists
       const artists = new Set(
         recordsData.edges
           .map((edge: any) => edge.node.release?.artist)
@@ -47,6 +39,40 @@ function AppContent() {
       setArtistCount(artists.size);
     }
   }, [recordsData]);
+
+  return (
+    <div className="flex-1 flex">
+      <DesktopNavigation recordCount={recordCount} artistCount={artistCount} />
+      <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto md:mx-0 md:max-w-none">
+        <RelayErrorBoundary>
+          <Suspense
+            fallback={
+              <div className="flex-1 flex justify-center items-center">
+                <LoadingSpinner size="lg" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route
+                path="/"
+                element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
+              />
+              <Route path="/scan" element={<ScanPage />} />
+              <Route path="/collection" element={<CollectionPage />} />
+              <Route path="/collection/:recordId" element={<RecordDetailPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
+        </RelayErrorBoundary>
+      </main>
+    </div>
+  );
+}
+
+function AppContent() {
+  const { user, isLoading, error, refreshUser } = useAuth();
+  const [orgInstalled, setOrgInstalled] = useState<string | null>(null);
 
   // Detect org_installed query parameter from GitHub App installation redirect
   useEffect(() => {
@@ -87,36 +113,15 @@ function AppContent() {
         <div className="flex-1 flex justify-center items-center">
           <LoadingSpinner size="lg" />
         </div>
+      ) : user ? (
+        <AuthedContent />
       ) : (
-        <div className="flex-1 flex">
-          {/* Desktop Sidebar Navigation - visible on md and up */}
-          {user && <DesktopNavigation recordCount={recordCount} artistCount={artistCount} />}
-
-          {/* Main content area */}
-          <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto md:mx-0 md:max-w-none">
-            <RelayErrorBoundary>
-              <Suspense
-                fallback={
-                  <div className="flex-1 flex justify-center items-center">
-                    <LoadingSpinner size="lg" />
-                  </div>
-                }
-              >
-                <Routes>
-                  <Route
-                    path="/"
-                    element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
-                  />
-                  <Route path="/scan" element={<ScanPage />} />
-                  <Route path="/collection" element={<CollectionPage />} />
-                  <Route path="/collection/:recordId" element={<RecordDetailPage />} />
-                  <Route path="/search" element={<SearchPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-              </Suspense>
-            </RelayErrorBoundary>
-          </main>
-        </div>
+        <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto md:mx-0 md:max-w-none">
+          <Routes>
+            <Route path="/" element={<HomePage recordCount={0} artistCount={0} />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </main>
       )}
 
       {/* Bottom Navigation - Mobile only, authenticated users */}

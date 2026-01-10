@@ -1,80 +1,8 @@
-import { graphql } from 'babel-plugin-relay/macro';
 import { useMutation } from 'react-relay';
 import type { useScanBarcodeMutation as UseScanBarcodeMutationType } from '../../__generated__/useScanBarcodeMutation.graphql';
+import ScanBarcodeMutationArtifact from '../../__generated__/useScanBarcodeMutation.graphql';
 
-const ScanBarcodeMutation = graphql`
-  mutation useScanBarcodeMutation($barcode: String!) {
-    scanBarcode(barcode: $barcode) {
-      albums {
-        id
-        artist
-        title
-        barcodes
-        primaryRelease {
-          score
-          release {
-            id
-            barcode
-            artist
-            title
-            year
-            format
-            genre
-            style
-            label
-            country
-            coverImageUrl
-            externalId
-            source
-            trackList {
-              position
-              title
-              duration
-            }
-          }
-        }
-        alternativeReleases {
-          externalId
-          source
-          country
-          year
-          format
-          label
-          score
-          editionNote
-        }
-      }
-      releases {
-        id
-        barcode
-        artist
-        title
-        year
-        format
-        genre
-        style
-        label
-        country
-        coverImageUrl
-        externalId
-        source
-        trackList {
-          position
-          title
-          duration
-        }
-      }
-      fromCache
-      timing {
-        discogsMs
-        musicbrainzMs
-        scoringMs
-        totalMs
-      }
-      errors
-    }
-  }
-`;
+const ScanBarcodeMutation = ScanBarcodeMutationArtifact;
 
 /**
  * Hook to scan a barcode and lookup release candidates.

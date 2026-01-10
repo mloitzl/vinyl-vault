@@ -6,7 +6,7 @@ import { render, screen, fireEvent, waitFor } from '../test/test-utils';
 vi.mock('../hooks/relay', () => ({
   useScanBarcodeMutation: () => {
     const [loading, setLoading] = React.useState(false);
-    const mutate = async (barcode: string) => {
+    const mutate = async (_barcode: string) => {
       setLoading(true);
       const res = await (global.fetch as any)('/graphql', { method: 'POST' });
       const json = await res.json();
@@ -17,7 +17,7 @@ vi.mock('../hooks/relay', () => ({
   },
   useCreateRecordMutation: () => {
     const [loading, setLoading] = React.useState(false);
-    const mutate = async (input: any) => {
+    const mutate = async (_input: any) => {
       setLoading(true);
       const res = await (global.fetch as any)('/graphql', { method: 'POST' });
       const json = await res.json();

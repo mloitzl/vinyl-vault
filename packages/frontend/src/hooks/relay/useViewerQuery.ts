@@ -1,31 +1,8 @@
-import { graphql } from 'babel-plugin-relay/macro';
 import { useLazyLoadQuery } from 'react-relay';
 import type { useViewerQuery as UseViewerQueryType } from '../../__generated__/useViewerQuery.graphql';
+import ViewerQueryArtifact from '../../__generated__/useViewerQuery.graphql';
 
-const ViewerQuery = graphql`
-  query useViewerQuery {
-    viewer {
-      id
-      githubLogin
-      displayName
-      avatarUrl
-      availableTenants {
-        id
-        name
-        type
-        role
-      }
-      activeTenant {
-        id
-        name
-        type
-        role
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
+const ViewerQuery = ViewerQueryArtifact;
 
 /**
  * Hook to fetch the current authenticated viewer with tenant context.

@@ -1,9 +1,16 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        // Enable Babel Macros so `babel-plugin-relay/macro` is transformed at build time
+        plugins: ['babel-plugin-macros'],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -22,6 +29,7 @@ export default defineConfig({
       },
     },
   },
+  // @ts-expect-error: Vitest extends Vite config with a `test` key
   test: {
     globals: true,
     environment: 'jsdom',

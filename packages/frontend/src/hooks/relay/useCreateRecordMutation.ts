@@ -1,6 +1,6 @@
-import { graphql } from 'babel-plugin-relay/macro';
 import { useMutation } from 'react-relay';
 import type { useCreateRecordMutation as UseCreateRecordMutationType } from '../../__generated__/useCreateRecordMutation.graphql';
+import CreateRecordMutationArtifact from '../../__generated__/useCreateRecordMutation.graphql';
 
 interface CreateRecordInput {
   releaseId: string;
@@ -11,49 +11,7 @@ interface CreateRecordInput {
   notes?: string;
 }
 
-const CreateRecordMutation = graphql`
-  mutation useCreateRecordMutation($input: CreateRecordInput!) {
-    createRecord(input: $input) {
-      record {
-        id
-        purchaseDate
-        price
-        condition
-        location
-        notes
-        createdAt
-        updatedAt
-        release {
-          id
-          barcode
-          artist
-          title
-          year
-          format
-          genre
-          style
-          label
-          country
-          coverImageUrl
-          externalId
-          source
-          trackList {
-            position
-            title
-            duration
-          }
-        }
-        owner {
-          id
-          githubLogin
-          displayName
-          avatarUrl
-        }
-      }
-      errors
-    }
-  }
-`;
+const CreateRecordMutation = CreateRecordMutationArtifact;
 
 /**
  * Hook to create a new record in the collection.

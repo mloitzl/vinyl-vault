@@ -1,6 +1,6 @@
-import { graphql } from 'babel-plugin-relay/macro';
 import { useMutation } from 'react-relay';
 import type { useUpdateRecordMutation as UseUpdateRecordMutationType } from '../../__generated__/useUpdateRecordMutation.graphql';
+import UpdateRecordMutationArtifact from '../../__generated__/useUpdateRecordMutation.graphql';
 
 interface UpdateRecordInput {
   id: string;
@@ -11,49 +11,7 @@ interface UpdateRecordInput {
   notes?: string;
 }
 
-const UpdateRecordMutation = graphql`
-  mutation useUpdateRecordMutation($input: UpdateRecordInput!) {
-    updateRecord(input: $input) {
-      record {
-        id
-        purchaseDate
-        price
-        condition
-        location
-        notes
-        createdAt
-        updatedAt
-        release {
-          id
-          barcode
-          artist
-          title
-          year
-          format
-          genre
-          style
-          label
-          country
-          coverImageUrl
-          externalId
-          source
-          trackList {
-            position
-            title
-            duration
-          }
-        }
-        owner {
-          id
-          githubLogin
-          displayName
-          avatarUrl
-        }
-      }
-      errors
-    }
-  }
-`;
+const UpdateRecordMutation = UpdateRecordMutationArtifact;
 
 /**
  * Hook to update an existing record.

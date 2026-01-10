@@ -1,31 +1,8 @@
-import { graphql } from 'babel-plugin-relay/macro';
 import { useMutation } from 'react-relay';
 import type { useSwitchTenantMutation as UseSwitchTenantMutationType } from '../../__generated__/useSwitchTenantMutation.graphql';
+import SwitchTenantMutationArtifact from '../../__generated__/useSwitchTenantMutation.graphql';
 
-const SwitchTenantMutation = graphql`
-  mutation useSwitchTenantMutation($tenantId: String!) {
-    switchTenant(tenantId: $tenantId) {
-      id
-      githubLogin
-      displayName
-      avatarUrl
-      availableTenants {
-        id
-        name
-        type
-        role
-      }
-      activeTenant {
-        id
-        name
-        type
-        role
-      }
-      createdAt
-      updatedAt
-    }
-  }
-`;
+const SwitchTenantMutation = SwitchTenantMutationArtifact;
 
 /**
  * Hook to switch the active tenant for the current user.
