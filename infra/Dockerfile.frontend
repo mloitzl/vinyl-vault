@@ -11,8 +11,16 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/frontend ./packages/frontend
 
+# Relay compiler requires the GraphQL schema from the BFF
+# Copy only the schema file to the expected relative path
+RUN mkdir -p packages/bff/src
+COPY packages/bff/src/schema.graphql ./packages/bff/src/schema.graphql
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile
+
+# Create __generated__ directory for relay-compiler
+RUN mkdir -p /app/packages/frontend/src/__generated__
 
 # Build
 WORKDIR /app/packages/frontend
