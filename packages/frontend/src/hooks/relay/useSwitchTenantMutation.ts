@@ -1,8 +1,28 @@
-import { useMutation } from 'react-relay';
+import { useMutation, graphql } from 'react-relay';
 import type { useSwitchTenantMutation as UseSwitchTenantMutationType } from '../../__generated__/useSwitchTenantMutation.graphql';
-import SwitchTenantMutationArtifact from '../../__generated__/useSwitchTenantMutation.graphql';
 
-const SwitchTenantMutation = SwitchTenantMutationArtifact;
+const SwitchTenantMutation = graphql`
+  mutation useSwitchTenantMutation($tenantId: String!) {
+    switchTenant(tenantId: $tenantId) {
+      id
+      githubLogin
+      displayName
+      avatarUrl
+      activeTenant {
+        id
+        name
+        type
+        role
+      }
+      availableTenants {
+        id
+        name
+        type
+        role
+      }
+    }
+  }
+`;
 
 /**
  * Hook to switch the active tenant for the current user.

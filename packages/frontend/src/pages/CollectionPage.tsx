@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
 import { Alert } from '../components/ui/Alert';
@@ -6,7 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
-import { useRecordsQuery, useDeleteRecordMutation, useUpdateRecordMutation } from '../hooks/relay';
+import { useRecordsQueryPreloaded, useDeleteRecordMutation, useUpdateRecordMutation } from '../hooks/relay';
+import { useRecordsQueryLoader } from '../hooks/relay/useRecordsQueryLoader';
 import { useToast } from '../contexts';
 import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
 
@@ -22,26 +23,72 @@ type RecordFilter = {
 };
 
 export function CollectionPage() {
+  const { queryRef, loadQuery, refetch } = useRecordsQueryLoader();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+
+  // Load initial query
+  useEffect(() => {
+    loadQuery({ first: 20 });
+  }, [loadQuery]);
+
+  // Wait for initial query to load before rendering child component
+  if (!queryRef) {
+    return <CollectionPageLoading />;
+  }
+
+  return (
+    <Suspense fallback={<CollectionPageLoading />}>
+      <CollectionPageContent
+        queryRef={queryRef}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        locationFilter={locationFilter}
+        setLocationFilter={setLocationFilter}
+        onRefetch={refetch}
+      />
+    </Suspense>
+  );
+}
+
+function CollectionPageLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <LoadingSpinner size="lg" color="primary" />
+    </div>
+  );
+}
+
+interface CollectionPageContentProps {
+  queryRef: any;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  locationFilter: string;
+  setLocationFilter: (filter: string) => void;
+  onRefetch: (variables: { [key: string]: any }) => void;
+}
+
+function CollectionPageContent({
+  queryRef,
+  searchTerm,
+  setSearchTerm,
+  locationFilter,
+  setLocationFilter,
+  onRefetch,
+}: CollectionPageContentProps) {
   const navigate = useNavigate();
   const { addToast } = useToast();
   const [editingRecord, setEditingRecord] = useState<Record | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [after, setAfter] = useState<string | undefined>(undefined);
   const [errors, setErrors] = useState<string[]>([]);
+
+  // Use preloaded query
+  const recordsData = useRecordsQueryPreloaded(queryRef);
 
   // Build filter object
   const filter: RecordFilter = {};
   if (searchTerm.trim()) filter.search = searchTerm.trim();
   if (locationFilter.trim()) filter.location = locationFilter.trim();
-
-  // Use Relay hook to fetch records
-  const recordsData = useRecordsQuery({
-    first: 20,
-    after,
-    filter: Object.keys(filter).length > 0 ? filter : undefined,
-  });
 
   const records = recordsData.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
   const pageInfo = recordsData.pageInfo;
@@ -54,10 +101,11 @@ export function CollectionPage() {
 
   const handleDelete = async (record: Record) => {
     try {
-      await deleteRecord({ id: record.id });
+      await deleteRecord({ id: record.id }, () => {
+        // Refetch records after delete
+        onRefetch({ first: 20, filter: Object.keys(filter).length > 0 ? filter : undefined });
+      });
       addToast('Record deleted successfully', 'success');
-      // Refresh by resetting pagination
-      setAfter(undefined);
     } catch (err: any) {
       addToast(err?.message ?? 'Failed to delete record', 'error');
     }
@@ -71,14 +119,18 @@ export function CollectionPage() {
     if (!editingRecord) return;
 
     try {
-      await updateRecord({
-        id: editingRecord.id,
-        ...updates,
-      });
+      await updateRecord(
+        {
+          id: editingRecord.id,
+          ...updates,
+        },
+        () => {
+          // Refetch records after update
+          onRefetch({ first: 20, filter: Object.keys(filter).length > 0 ? filter : undefined });
+        }
+      );
       addToast('Record updated successfully', 'success');
       setEditingRecord(null);
-      // Refresh by resetting pagination
-      setAfter(undefined);
     } catch (err: any) {
       throw new Error(err?.message ?? 'Failed to update record');
     }
@@ -86,18 +138,23 @@ export function CollectionPage() {
 
   const handleLoadMore = () => {
     if (pageInfo.endCursor && pageInfo.hasNextPage) {
-      setAfter(pageInfo.endCursor);
+      // For pagination, we'd need to handle this differently with useQueryLoader
+      // For now, just load more from the start
+      onRefetch({ first: (records.length + 20), filter: Object.keys(filter).length > 0 ? filter : undefined });
     }
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setAfter(undefined);
+    // Refetch with new filter
+    onRefetch({ first: 20, filter: Object.keys(filter).length > 0 ? filter : undefined });
   };
 
   const handleClearFilters = () => {
     setSearchTerm('');
     setLocationFilter('');
+    // Refetch without filters
+    onRefetch({ first: 20 });
   };
 
   return (

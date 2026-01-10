@@ -1,8 +1,28 @@
-import { useLazyLoadQuery } from 'react-relay';
+import { useLazyLoadQuery, graphql } from 'react-relay';
 import type { useViewerQuery as UseViewerQueryType } from '../../__generated__/useViewerQuery.graphql';
-import ViewerQueryArtifact from '../../__generated__/useViewerQuery.graphql';
 
-const ViewerQuery = ViewerQueryArtifact;
+const ViewerQuery = graphql`
+  query useViewerQuery {
+    viewer {
+      id
+      githubLogin
+      displayName
+      avatarUrl
+      availableTenants {
+        id
+        name
+        type
+        role
+      }
+      activeTenant {
+        id
+        name
+        type
+        role
+      }
+    }
+  }
+`;
 
 /**
  * Hook to fetch the current authenticated viewer with tenant context.

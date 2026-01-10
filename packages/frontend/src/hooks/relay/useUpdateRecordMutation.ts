@@ -1,6 +1,5 @@
-import { useMutation } from 'react-relay';
+import { useMutation, graphql } from 'react-relay';
 import type { useUpdateRecordMutation as UseUpdateRecordMutationType } from '../../__generated__/useUpdateRecordMutation.graphql';
-import UpdateRecordMutationArtifact from '../../__generated__/useUpdateRecordMutation.graphql';
 
 interface UpdateRecordInput {
   id: string;
@@ -11,7 +10,18 @@ interface UpdateRecordInput {
   notes?: string;
 }
 
-const UpdateRecordMutation = UpdateRecordMutationArtifact;
+type RefetchFn = (variables: Record<string, any>) => void;
+
+const UpdateRecordMutation = graphql`
+  mutation useUpdateRecordMutation($input: UpdateRecordInput!) {
+    updateRecord(input: $input) {
+      record {
+        id
+      }
+      errors
+    }
+  }
+`;
 
 /**
  * Hook to update an existing record.
@@ -20,7 +30,7 @@ const UpdateRecordMutation = UpdateRecordMutationArtifact;
 export function useUpdateRecordMutation() {
   const [commit, isInFlight] = useMutation<UseUpdateRecordMutationType>(UpdateRecordMutation);
 
-  const mutate = async (input: UpdateRecordInput) => {
+  const mutate = async (input: UpdateRecordInput, refetch?: RefetchFn) => {
     return new Promise((resolve, reject) => {
       commit({
         variables: { input },
@@ -28,6 +38,8 @@ export function useUpdateRecordMutation() {
           if (response.updateRecord.errors && response.updateRecord.errors.length > 0) {
             reject(new Error(response.updateRecord.errors[0]));
           } else {
+            // Refetch records list after update
+            refetch?.({ first: 20 });
             resolve(response.updateRecord.record);
           }
         },

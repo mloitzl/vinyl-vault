@@ -1,5 +1,5 @@
 export { useViewerQuery } from './useViewerQuery';
-export { useRecordsQuery } from './useRecordsQuery';
+export { useRecordsQuery, useRecordsQueryPreloaded } from './useRecordsQuery';
 export { useCreateRecordMutation } from './useCreateRecordMutation';
 export { useUpdateRecordMutation } from './useUpdateRecordMutation';
 export { useDeleteRecordMutation } from './useDeleteRecordMutation';

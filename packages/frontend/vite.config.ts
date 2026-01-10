@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -6,8 +6,10 @@ export default defineConfig({
   plugins: [
     react({
       babel: {
-        // Enable Babel Macros so `babel-plugin-relay/macro` is transformed at build time
-        plugins: ['babel-plugin-macros'],
+        plugins: [[
+          'babel-plugin-relay',
+          { artifactDirectory: './src/__generated__' }
+        ]],
       },
     }),
   ],
@@ -29,7 +31,6 @@ export default defineConfig({
       },
     },
   },
-  // @ts-expect-error: Vitest extends Vite config with a `test` key
   test: {
     globals: true,
     environment: 'jsdom',
