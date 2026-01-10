@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
@@ -37,11 +38,8 @@ type FetchRecordsVariables = {
   filter?: RecordFilter;
 };
 
-interface CollectionPageProps {
-  onNavigateToScan?: () => void;
-}
-
-export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
+export function CollectionPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Record[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo>({
     hasNextPage: false,
@@ -421,7 +419,7 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
             <div className="mt-6">
               <button
                 type="button"
-                onClick={onNavigateToScan}
+                onClick={() => navigate('/scan')}
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700"
               >
                 <svg
