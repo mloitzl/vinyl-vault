@@ -6,6 +6,7 @@ import { Alert } from './ui/Alert';
 import { Toast } from './Toast';
 import { BarcodeInput } from './BarcodeInput';
 import { AlbumCard } from './AlbumCard';
+import { useScanBarcodeMutation, useCreateRecordMutation } from '../hooks/relay';
 
 type Track = {
   position?: string;
@@ -85,12 +86,15 @@ type LookupTiming = {
 
 export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const [barcode, setBarcode] = useState('5099902988313');
-  const [isLoading, setIsLoading] = useState(false);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [timing, setTiming] = useState<LookupTiming | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const { mutate: scanBarcode, isLoading: isScanning } = useScanBarcodeMutation();
+  const { mutate: createRecord, isLoading: isCreating } = useCreateRecordMutation();
+  const isLoading = isScanning || isCreating;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -99,77 +103,26 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const detectedRef = useRef(false);
 
   const lookup = useCallback(async (bc: string) => {
-    setIsLoading(true);
     setErrors([]);
     setAlbums([]);
     setTiming(null);
     setSelectedAlbumId(null);
 
-    // BFF exposes `scanBarcode` mutation with albums (blended scoring)
-    const query = `mutation Scan($barcode: String!) {
-      scanBarcode(barcode: $barcode) {
-        albums {
-          id
-          artist
-          title
-          barcodes
-          primaryRelease {
-            release {
-              id barcode artist title year format label country coverImageUrl externalId source genre style
-              trackList { position title duration }
-            }
-            score
-            scoreBreakdown {
-              mediaType countryPreference trackListCompleteness coverArt labelInfo catalogNumber yearInfo sourceBonus
-            }
-          }
-          alternativeReleases { externalId source country year format label score editionNote }
-          trackList { position title duration }
-          genres
-          styles
-          externalIds { discogs musicbrainz }
-          coverImageUrl
-          otherTitles
-          editionNotes
-          releaseCount
-          score
-        }
-        timing { totalMs }
-        errors
-      }
-    }`;
-
     try {
-      const res = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ query, variables: { barcode: bc } }),
-      });
-      const body = await res.json();
-
-      // Handle GraphQL errors
-      if (body.errors) {
-        setErrors(body.errors.map((e: any) => e.message));
+      const result = await scanBarcode(bc) as any; // Type from mutation response
+      if (result.albums) {
+        setAlbums(result.albums);
       }
-
-      // Process data even if there were some errors
-      const payload = body.data?.scanBarcode;
-      if (payload) {
-        if (payload.errors && payload.errors.length) {
-          setErrors((prev) => [...prev, ...payload.errors]);
-        }
-        if (payload.albums) {
-          setAlbums(payload.albums);
-        }
-        if (payload.timing) setTiming(payload.timing);
+      if (result.timing) {
+        setTiming(result.timing);
+      }
+      if (result.errors && result.errors.length > 0) {
+        setErrors(result.errors);
       }
     } catch (err: any) {
       setErrors([err?.message ?? String(err)]);
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
+  }, [scanBarcode]);
 
   const onSubmit = useCallback(
     (e?: React.FormEvent) => {
@@ -306,79 +259,23 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
     const selected = albums.find((a) => a.id === selectedAlbumId);
     if (!selected) return;
 
-    setIsLoading(true);
-
     try {
-      const mutation = `mutation CreateRecord($input: CreateRecordInput!) {
-        createRecord(input: $input) {
-          record {
-            id
-            purchaseDate
-            price
-            condition
-            location
-            notes
-            createdAt
-            release {
-              id
-              artist
-              title
-              coverImageUrl
-            }
-          }
-          errors
-        }
-      }`;
-
-      const res = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          query: mutation,
-          variables: {
-            input: {
-              releaseId: selected.primaryRelease.release.id,
-            },
-          },
-        }),
+      await createRecord({
+        releaseId: selected.primaryRelease.release.id,
       });
-
-      const body = await res.json();
-
-      let hasError = false;
-
-      if (body.errors) {
-        setToast({
-          message: body.errors[0]?.message || 'Failed to add record',
-          type: 'error',
-        });
-        hasError = true;
-      }
-
-      const payload = body.data?.createRecord;
-      if (!hasError && payload?.errors && payload.errors.length > 0) {
-        setToast({ message: payload.errors[0], type: 'error' });
-        hasError = true;
-      }
-
-      if (!hasError && payload?.record) {
-        setToast({
-          message: `Added "${selected.title}" by ${selected.artist} to your collection`,
-          type: 'success',
-        });
-        setSelectedAlbumId(null);
-        setAlbums([]);
-        setBarcode('');
-        onRecordAdded?.();
-      }
+      setToast({
+        message: `Added "${selected.title}" by ${selected.artist} to your collection`,
+        type: 'success',
+      });
+      setSelectedAlbumId(null);
+      setAlbums([]);
+      setBarcode('');
+      onRecordAdded?.();
     } catch (err: any) {
       setToast({
         message: err?.message ?? 'Failed to add record to collection',
         type: 'error',
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 

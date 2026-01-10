@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { RelayEnvironmentProvider } from 'react-relay';
 import { RelayEnvironment } from './relay/environment';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useRecordsQuery } from './hooks/relay';
 import {
   Header,
   LoadingSpinner,
   OrgInstalledNotification,
   DesktopNavigation,
   MobileNavigation,
+  RelayErrorBoundary,
 } from './components';
 import { Alert } from './components/ui/Alert';
 import {
@@ -21,57 +23,29 @@ import {
 } from './pages';
 
 function AppContent() {
-  const { user, isLoading, error, refreshUser, activeTenant } = useAuth();
+  const { user, isLoading, error, refreshUser } = useAuth();
   const [orgInstalled, setOrgInstalled] = useState<string | null>(null);
   const [recordCount, setRecordCount] = useState(0);
   const [artistCount, setArtistCount] = useState(0);
 
-  // Fetch record statistics
-  const fetchStats = async () => {
-    try {
-      const query = `query FetchRecords($first: Int) {
-        records(first: $first) {
-          edges {
-            node {
-              id
-              release {
-                artist
-              }
-            }
-          }
-          totalCount
-        }
-      }`;
+  // Fetch record statistics using Relay hook
+  const recordsData = useRecordsQuery({
+    first: 1000,
+  });
 
-      const res = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ query, variables: { first: 1000 } }),
-      });
-
-      const body = await res.json();
-      const data = body.data?.records;
-
-      if (data) {
-        setRecordCount(data.totalCount);
-        // Count unique artists
-        const artists = new Set(
-          data.edges.map((edge: any) => edge.node.release?.artist).filter((artist: any) => artist)
-        );
-        setArtistCount(artists.size);
-      }
-    } catch (err) {
-      console.warn('Failed to fetch stats:', err);
-    }
-  };
-
-  // Fetch stats when user changes, tenant changes, or when adding records
+  // Calculate stats from records query
   useEffect(() => {
-    if (user) {
-      fetchStats();
+    if (recordsData && recordsData.edges) {
+      setRecordCount(recordsData.totalCount);
+      // Count unique artists
+      const artists = new Set(
+        recordsData.edges
+          .map((edge: any) => edge.node.release?.artist)
+          .filter((artist: any) => artist)
+      );
+      setArtistCount(artists.size);
     }
-  }, [user, activeTenant]);
+  }, [recordsData]);
 
   // Detect org_installed query parameter from GitHub App installation redirect
   useEffect(() => {
@@ -119,17 +93,27 @@ function AppContent() {
 
           {/* Main content area */}
           <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto md:mx-0 md:max-w-none">
-            <Routes>
-              <Route
-                path="/"
-                element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
-              />
-              <Route path="/scan" element={<ScanPage onRecordAdded={fetchStats} />} />
-              <Route path="/collection" element={<CollectionPage />} />
-              <Route path="/collection/:recordId" element={<RecordDetailPage />} />
-              <Route path="/search" element={<SearchPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
+            <RelayErrorBoundary>
+              <Suspense
+                fallback={
+                  <div className="flex-1 flex justify-center items-center">
+                    <LoadingSpinner size="lg" />
+                  </div>
+                }
+              >
+                <Routes>
+                <Route
+                  path="/"
+                  element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
+                />
+                <Route path="/scan" element={<ScanPage />} />
+                <Route path="/collection" element={<CollectionPage />} />
+                <Route path="/collection/:recordId" element={<RecordDetailPage />} />
+                <Route path="/search" element={<SearchPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+            </RelayErrorBoundary>
           </main>
         </div>
       )}

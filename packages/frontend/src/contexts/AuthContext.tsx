@@ -1,6 +1,7 @@
 // Auth context for managing authentication state
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { executeGraphQLMutation } from '../utils/graphqlExecutor';
 
 export interface AvailableTenant {
   id: string;
@@ -138,24 +139,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }`;
 
-      const response = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ query, variables: { tenantId } }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to switch tenant');
-      }
-
-      const data = await response.json();
-
-      if (data.errors) {
-        throw new Error(data.errors[0]?.message || 'Failed to switch tenant');
-      }
-
-      const result = data.data.switchTenant;
+      const data = await executeGraphQLMutation(query, { tenantId });
+      const result = data.switchTenant;
 
       // Update state with new tenant context
       setAvailableTenants(result.availableTenants || []);

@@ -3,7 +3,13 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [['relay', { artifactDirectory: './src/__generated__' }]],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

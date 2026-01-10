@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
 import { Alert } from '../components/ui/Alert';
@@ -7,24 +7,10 @@ import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
 import { Toast } from '../components/Toast';
+import { useRecordsQuery, useDeleteRecordMutation, useUpdateRecordMutation } from '../hooks/relay';
+import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
 
-type PageInfo = {
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-  startCursor?: string | null;
-  endCursor?: string | null;
-};
-
-type RecordEdge = {
-  cursor: string;
-  node: Record;
-};
-
-type RecordsResponse = {
-  edges: RecordEdge[];
-  pageInfo: PageInfo;
-  totalCount: number;
-};
+type RecordEdge = useRecordsQuery$data['records']['edges'][number];
 
 type RecordFilter = {
   artist?: string;
@@ -35,173 +21,48 @@ type RecordFilter = {
   search?: string;
 };
 
-type FetchRecordsVariables = {
-  first: number;
-  after?: string;
-  filter?: RecordFilter;
-};
-
 export function CollectionPage() {
   const navigate = useNavigate();
-  const [records, setRecords] = useState<Record[]>([]);
-  const [pageInfo, setPageInfo] = useState<PageInfo>({
-    hasNextPage: false,
-    hasPreviousPage: false,
-  });
-  const [totalCount, setTotalCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errors, setErrors] = useState<string[]>([]);
   const [editingRecord, setEditingRecord] = useState<Record | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [after, setAfter] = useState<string | undefined>(undefined);
+  const [errors, setErrors] = useState<string[]>([]);
 
-  const fetchRecords = useCallback(
-    async (after?: string) => {
-      setIsLoading(true);
-      setErrors([]);
+  // Build filter object
+  const filter: RecordFilter = {};
+  if (searchTerm.trim()) filter.search = searchTerm.trim();
+  if (locationFilter.trim()) filter.location = locationFilter.trim();
 
-      const query = `query FetchRecords($first: Int, $after: String, $filter: RecordFilter) {
-      records(first: $first, after: $after, filter: $filter) {
-        edges {
-          cursor
-          node {
-            id
-            purchaseDate
-            price
-            condition
-            location
-            notes
-            createdAt
-            updatedAt
-            release {
-              id
-              barcode
-              artist
-              title
-              year
-              format
-              genre
-              style
-              label
-              country
-              coverImageUrl
-              externalId
-              source
-              trackList { position title duration }
-            }
-            owner {
-              id
-              githubLogin
-              displayName
-              avatarUrl
-            }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          hasPreviousPage
-          startCursor
-          endCursor
-        }
-        totalCount
-      }
-    }`;
+  // Use Relay hook to fetch records
+  const recordsData = useRecordsQuery({
+    first: 20,
+    after,
+    filter: Object.keys(filter).length > 0 ? filter : undefined,
+  });
 
-      const variables: FetchRecordsVariables = { first: 20 };
-      if (after) variables.after = after;
+  const records = recordsData.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
+  const pageInfo = recordsData.pageInfo;
+  const totalCount = recordsData.totalCount;
 
-      // Apply filters
-      const filter: RecordFilter = {};
-      if (searchTerm.trim()) filter.search = searchTerm.trim();
-      if (locationFilter.trim()) filter.location = locationFilter.trim();
-      if (Object.keys(filter).length > 0) variables.filter = filter;
+  const { mutate: deleteRecord, isLoading: isDeleting } = useDeleteRecordMutation();
+  const { mutate: updateRecord, isLoading: isUpdating } = useUpdateRecordMutation();
 
-      try {
-        const res = await fetch('/graphql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ query, variables }),
-        });
-
-        const body = await res.json();
-
-        if (body.errors) {
-          setErrors(body.errors.map((e: any) => e.message));
-          return;
-        }
-
-        const data: RecordsResponse = body.data?.records;
-        if (data) {
-          setRecords(data.edges.map((edge) => edge.node));
-          setPageInfo(data.pageInfo);
-          setTotalCount(data.totalCount);
-        }
-      } catch (err: any) {
-        setErrors([err?.message ?? 'Failed to load records']);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [searchTerm, locationFilter]
-  );
-
-  useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
+  const isLoading = isDeleting || isUpdating;
 
   const handleDelete = async (record: Record) => {
-    setIsLoading(true);
-
-    const mutation = `mutation DeleteRecord($input: DeleteRecordInput!) {
-      deleteRecord(input: $input) {
-        deletedRecordId
-        errors
-      }
-    }`;
-
     try {
-      const res = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          query: mutation,
-          variables: { input: { id: record.id } },
-        }),
-      });
-
-      const body = await res.json();
-
-      if (body.errors) {
-        setToast({
-          message: body.errors[0]?.message || 'Failed to delete record',
-          type: 'error',
-        });
-        return;
-      }
-
-      const payload = body.data?.deleteRecord;
-      if (payload?.errors && payload.errors.length > 0) {
-        setToast({ message: payload.errors[0], type: 'error' });
-        return;
-      }
-
-      if (payload?.deletedRecordId) {
-        // Remove from local state
-        setRecords((prev) => prev.filter((r) => r.id !== record.id));
-        setTotalCount((prev) => prev - 1);
-        setToast({ message: 'Record deleted successfully', type: 'success' });
-      }
+      await deleteRecord({ id: record.id });
+      setToast({ message: 'Record deleted successfully', type: 'success' });
+      // Refresh by resetting pagination
+      setAfter(undefined);
     } catch (err: any) {
       setToast({
         message: err?.message ?? 'Failed to delete record',
         type: 'error',
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -212,68 +73,15 @@ export function CollectionPage() {
   const handleSaveEdit = async (updates: RecordUpdates) => {
     if (!editingRecord) return;
 
-    const mutation = `mutation UpdateRecord($input: UpdateRecordInput!) {
-      updateRecord(input: $input) {
-        record {
-          id
-          purchaseDate
-          price
-          condition
-          location
-          notes
-          updatedAt
-        }
-        errors
-      }
-    }`;
-
     try {
-      const res = await fetch('/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          query: mutation,
-          variables: {
-            input: {
-              id: editingRecord.id,
-              ...updates,
-            },
-          },
-        }),
+      await updateRecord({
+        id: editingRecord.id,
+        ...updates,
       });
-
-      const body = await res.json();
-
-      if (body.errors) {
-        throw new Error(body.errors[0]?.message || 'Failed to update record');
-      }
-
-      const payload = body.data?.updateRecord;
-      if (payload?.errors && payload.errors.length > 0) {
-        throw new Error(payload.errors[0]);
-      }
-
-      if (payload?.record) {
-        // Update local state with new values
-        setRecords((prev) =>
-          prev.map((r) =>
-            r.id === editingRecord.id
-              ? {
-                  ...r,
-                  condition: payload.record.condition,
-                  location: payload.record.location,
-                  price: payload.record.price,
-                  purchaseDate: payload.record.purchaseDate,
-                  notes: payload.record.notes,
-                  updatedAt: payload.record.updatedAt,
-                }
-              : r
-          )
-        );
-        setToast({ message: 'Record updated successfully', type: 'success' });
-        setEditingRecord(null);
-      }
+      setToast({ message: 'Record updated successfully', type: 'success' });
+      setEditingRecord(null);
+      // Refresh by resetting pagination
+      setAfter(undefined);
     } catch (err: any) {
       throw new Error(err?.message ?? 'Failed to update record');
     }
@@ -281,13 +89,13 @@ export function CollectionPage() {
 
   const handleLoadMore = () => {
     if (pageInfo.endCursor && pageInfo.hasNextPage) {
-      fetchRecords(pageInfo.endCursor);
+      setAfter(pageInfo.endCursor);
     }
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchRecords();
+    setAfter(undefined);
   };
 
   const handleClearFilters = () => {
@@ -433,7 +241,7 @@ export function CollectionPage() {
           <>
             {/* Records Grid */}
             <div className="space-y-4">
-              {records.map((record) => (
+              {records.map((record: Record) => (
                 <RecordCard
                   key={record.id}
                   record={record}
