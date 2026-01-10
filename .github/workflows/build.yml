@@ -15,7 +15,15 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  tests:
+    name: Run Tests
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+      pull-requests: write
+
   build:
+    name: Build Docker Images
     # Run for PRs, or for direct pushes to main/develop only
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     runs-on: self-hosted
@@ -86,7 +94,7 @@ jobs:
   deploy_pr_to_staging:
     name: Deploy PR to Staging
     runs-on: self-hosted
-    needs: build
+    needs: [tests, build]
     if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-staging')
     permissions:
       contents: read
