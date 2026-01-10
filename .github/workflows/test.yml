@@ -50,7 +50,7 @@ jobs:
             mongodb:
                 image: mongo:4.4.6
                 ports:
-                    - 27017:27017
+                    - 27018:27017
                 options: >-
                     --health-cmd="mongo --quiet --eval 'db.runCommand({ ping: 1 })'"
                     --health-interval=10s
@@ -84,7 +84,7 @@ jobs:
 
             - name: Run backend tests
               env:
-                  MONGODB_URI_BASE: mongodb://localhost:27017
+                  MONGODB_URI_BASE: mongodb://localhost:27018
               run: pnpm --filter backend test --run
 
             - name: Backend test status
