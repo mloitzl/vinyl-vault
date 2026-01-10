@@ -6,8 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
-import { Toast } from '../components/Toast';
 import { useRecordsQuery, useDeleteRecordMutation, useUpdateRecordMutation } from '../hooks/relay';
+import { useToast } from '../contexts';
 import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
 
 type RecordEdge = useRecordsQuery$data['records']['edges'][number];
@@ -23,8 +23,8 @@ type RecordFilter = {
 
 export function CollectionPage() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [editingRecord, setEditingRecord] = useState<Record | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -55,14 +55,11 @@ export function CollectionPage() {
   const handleDelete = async (record: Record) => {
     try {
       await deleteRecord({ id: record.id });
-      setToast({ message: 'Record deleted successfully', type: 'success' });
+      addToast('Record deleted successfully', 'success');
       // Refresh by resetting pagination
       setAfter(undefined);
     } catch (err: any) {
-      setToast({
-        message: err?.message ?? 'Failed to delete record',
-        type: 'error',
-      });
+      addToast(err?.message ?? 'Failed to delete record', 'error');
     }
   };
 
@@ -78,7 +75,7 @@ export function CollectionPage() {
         id: editingRecord.id,
         ...updates,
       });
-      setToast({ message: 'Record updated successfully', type: 'success' });
+      addToast('Record updated successfully', 'success');
       setEditingRecord(null);
       // Refresh by resetting pagination
       setAfter(undefined);
@@ -276,11 +273,6 @@ export function CollectionPage() {
           onSave={handleSaveEdit}
           onCancel={() => setEditingRecord(null)}
         />
-      )}
-
-      {/* Toast notification */}
-      {toast && (
-        <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />
       )}
     </div>
   );

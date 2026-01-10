@@ -2,7 +2,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { RelayEnvironmentProvider } from 'react-relay';
 import { RelayEnvironment } from './relay/environment';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider, useAuth, ToastProvider, LoadingProvider } from './contexts';
 import { useRecordsQuery } from './hooks/relay';
 import {
   Header,
@@ -11,6 +11,7 @@ import {
   DesktopNavigation,
   MobileNavigation,
   RelayErrorBoundary,
+  ToastContainer,
 } from './components';
 import { Alert } from './components/ui/Alert';
 import {
@@ -102,17 +103,17 @@ function AppContent() {
                 }
               >
                 <Routes>
-                <Route
-                  path="/"
-                  element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
-                />
-                <Route path="/scan" element={<ScanPage />} />
-                <Route path="/collection" element={<CollectionPage />} />
-                <Route path="/collection/:recordId" element={<RecordDetailPage />} />
-                <Route path="/search" element={<SearchPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
+                  <Route
+                    path="/"
+                    element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
+                  />
+                  <Route path="/scan" element={<ScanPage />} />
+                  <Route path="/collection" element={<CollectionPage />} />
+                  <Route path="/collection/:recordId" element={<RecordDetailPage />} />
+                  <Route path="/search" element={<SearchPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
             </RelayErrorBoundary>
           </main>
         </div>
@@ -120,6 +121,9 @@ function AppContent() {
 
       {/* Bottom Navigation - Mobile only, authenticated users */}
       {user && <MobileNavigation />}
+
+      {/* Global Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }
@@ -127,11 +131,15 @@ function AppContent() {
 function App() {
   return (
     <RelayEnvironmentProvider environment={RelayEnvironment}>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
-      </AuthProvider>
+      <ToastProvider>
+        <LoadingProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              <AppContent />
+            </BrowserRouter>
+          </AuthProvider>
+        </LoadingProvider>
+      </ToastProvider>
     </RelayEnvironmentProvider>
   );
 }

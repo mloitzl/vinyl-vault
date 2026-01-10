@@ -1,13 +1,62 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '../test/test-utils';
+
+// Mock Relay hooks with React state to emulate in-flight loading
+vi.mock('../hooks/relay', () => ({
+  useScanBarcodeMutation: () => {
+    const [loading, setLoading] = React.useState(false);
+    const mutate = async (barcode: string) => {
+      setLoading(true);
+      const res = await (global.fetch as any)('/graphql', { method: 'POST' });
+      const json = await res.json();
+      setLoading(false);
+      return json.data.scanBarcode;
+    };
+    return { mutate, isLoading: loading };
+  },
+  useCreateRecordMutation: () => {
+    const [loading, setLoading] = React.useState(false);
+    const mutate = async (input: any) => {
+      setLoading(true);
+      const res = await (global.fetch as any)('/graphql', { method: 'POST' });
+      const json = await res.json();
+      setLoading(false);
+      return json.data.createRecord;
+    };
+    return { mutate, isLoading: loading };
+  },
+}));
+
 import { ScanBarcode } from './ScanBarcode';
 
-// Mock the fetch function
-global.fetch = vi.fn();
+// Mock the fetch function with a default implementation
+global.fetch = vi.fn(async (input: any) => {
+  const url = typeof input === 'string' ? input : input?.url;
+  if (url && url.startsWith('/auth/me')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ user: null }),
+    } as any;
+  }
+  // Fallback to a benign default; tests will override via mockResolvedValueOnce
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ data: {} }),
+  } as any;
+});
 
 describe('ScanBarcode Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // First network call is AuthContext fetching /auth/me
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: null }),
+    });
   });
 
   it('renders the barcode input section', () => {
@@ -27,6 +76,8 @@ describe('ScanBarcode Integration Tests', () => {
 
   it('displays loading state during barcode lookup', async () => {
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           scanBarcode: {
@@ -98,6 +149,8 @@ describe('ScanBarcode Integration Tests', () => {
     };
 
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           scanBarcode: {
@@ -126,6 +179,8 @@ describe('ScanBarcode Integration Tests', () => {
 
   it('displays error messages when lookup fails', async () => {
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           scanBarcode: {
@@ -185,6 +240,8 @@ describe('ScanBarcode Integration Tests', () => {
     };
 
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           scanBarcode: {
@@ -221,6 +278,8 @@ describe('ScanBarcode Integration Tests', () => {
 
   it('displays timing information after successful lookup', async () => {
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           scanBarcode: {
@@ -282,6 +341,8 @@ describe('ScanBarcode Integration Tests', () => {
 
     // First call for scanBarcode query
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           scanBarcode: {
@@ -295,6 +356,8 @@ describe('ScanBarcode Integration Tests', () => {
 
     // Second call for createRecord mutation
     (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({
         data: {
           createRecord: {

@@ -3,10 +3,10 @@ import type { BrowserMultiFormatReader } from '@zxing/browser';
 import { BrowserMultiFormatReader as ZXingBrowserMultiFormatReader } from '@zxing/browser';
 import { Button } from './ui/Button';
 import { Alert } from './ui/Alert';
-import { Toast } from './Toast';
 import { BarcodeInput } from './BarcodeInput';
 import { AlbumCard } from './AlbumCard';
 import { useScanBarcodeMutation, useCreateRecordMutation } from '../hooks/relay';
+import { useToast } from '../contexts';
 
 type Track = {
   position?: string;
@@ -85,12 +85,12 @@ type LookupTiming = {
 };
 
 export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
+  const { addToast } = useToast();
   const [barcode, setBarcode] = useState('5099902988313');
   const [albums, setAlbums] = useState<Album[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [timing, setTiming] = useState<LookupTiming | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const { mutate: scanBarcode, isLoading: isScanning } = useScanBarcodeMutation();
   const { mutate: createRecord, isLoading: isCreating } = useCreateRecordMutation();
@@ -102,27 +102,30 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const zxingRef = useRef<BrowserMultiFormatReader | null>(null);
   const detectedRef = useRef(false);
 
-  const lookup = useCallback(async (bc: string) => {
-    setErrors([]);
-    setAlbums([]);
-    setTiming(null);
-    setSelectedAlbumId(null);
+  const lookup = useCallback(
+    async (bc: string) => {
+      setErrors([]);
+      setAlbums([]);
+      setTiming(null);
+      setSelectedAlbumId(null);
 
-    try {
-      const result = await scanBarcode(bc) as any; // Type from mutation response
-      if (result.albums) {
-        setAlbums(result.albums);
+      try {
+        const result = (await scanBarcode(bc)) as any; // Type from mutation response
+        if (result.albums) {
+          setAlbums(result.albums);
+        }
+        if (result.timing) {
+          setTiming(result.timing);
+        }
+        if (result.errors && result.errors.length > 0) {
+          setErrors(result.errors);
+        }
+      } catch (err: any) {
+        setErrors([err?.message ?? String(err)]);
       }
-      if (result.timing) {
-        setTiming(result.timing);
-      }
-      if (result.errors && result.errors.length > 0) {
-        setErrors(result.errors);
-      }
-    } catch (err: any) {
-      setErrors([err?.message ?? String(err)]);
-    }
-  }, [scanBarcode]);
+    },
+    [scanBarcode]
+  );
 
   const onSubmit = useCallback(
     (e?: React.FormEvent) => {
@@ -263,19 +266,13 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
       await createRecord({
         releaseId: selected.primaryRelease.release.id,
       });
-      setToast({
-        message: `Added "${selected.title}" by ${selected.artist} to your collection`,
-        type: 'success',
-      });
+      addToast(`Added "${selected.title}" by ${selected.artist} to your collection`, 'success');
       setSelectedAlbumId(null);
       setAlbums([]);
       setBarcode('');
       onRecordAdded?.();
     } catch (err: any) {
-      setToast({
-        message: err?.message ?? 'Failed to add record to collection',
-        type: 'error',
-      });
+      addToast(err?.message ?? 'Failed to add record to collection', 'error');
     }
   };
 
@@ -379,11 +376,6 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
 
       {/* Spacer for fixed button */}
       {selectedAlbumId && <div className="h-20 md:h-16" />}
-
-      {/* Toast notification */}
-      {toast && (
-        <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />
-      )}
     </div>
   );
 }
