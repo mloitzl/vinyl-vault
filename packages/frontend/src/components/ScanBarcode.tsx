@@ -228,7 +228,7 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
       setErrors([message]);
       scanningRef.current = false;
     }
-  }, [lookup]);
+  }, [lookup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopCamera = useCallback(() => {
     scanningRef.current = false;

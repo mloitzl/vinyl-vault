@@ -39,7 +39,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
     }
 
     return id;
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));

@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { ReactNode } from 'react';
-import { render, RenderOptions } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { RelayEnvironmentProvider } from 'react-relay';
 import { RelayEnvironment } from '../relay/environment';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -26,7 +25,7 @@ function AllProviders({ children }: { children: ReactNode }) {
 /**
  * Custom render function that automatically wraps components with all providers
  */
-const customRender: typeof render = (ui: any, options?: any) =>
+const customRender = (ui: any, options?: any): any =>
   render(ui, { wrapper: AllProviders, ...(options as any) });
 
 export * from '@testing-library/react';
