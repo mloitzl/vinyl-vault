@@ -1,7 +1,10 @@
 // Auth context for managing authentication state
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { RecordSource as RelayRecordSource } from 'relay-runtime';
+import { RecordSource, Store } from 'relay-runtime';
 import { executeGraphQLMutation } from '../utils/graphqlExecutor';
+import { RelayEnvironment } from '../relay/environment';
 
 export interface AvailableTenant {
   id: string;
@@ -104,6 +107,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
       setActiveTenant(null);
       setAvailableTenants([]);
+
+      // Redirect to home page after logout
+      window.location.href = '/';
     } catch (err) {
       console.error('Error logging out:', err);
       setError(err instanceof Error ? err.message : 'Failed to logout');
@@ -115,9 +121,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Switch active tenant via GraphQL mutation
   const switchTenant = useCallback(async (tenantId: string) => {
     try {
-      setIsLoading(true);
-      setError(null);
-
       const query = `mutation SwitchTenant($tenantId: String!) {
         switchTenant(tenantId: $tenantId) {
           id
@@ -139,14 +142,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }`;
 
+      setIsLoading(true);
+      setError(null);
+
+      // 1. Tell the BFF to update the session and point to a new DB
       const data = await executeGraphQLMutation(query, { tenantId });
       const result = data.switchTenant;
 
-      // Update state with new tenant context
+      // 2. PURGE STORE: This is the enterprise-level fix.
+      // We clear the physical record source to ensure no IDs from the
+      // previous database leak into the new database view.
+      const source = RelayEnvironment.getStore().getSource() as RelayRecordSource;
+      source.clear();
+      // RelayEnvironment.getStore().getSource().clear();
+
+      // 3. Update React state with the new context
       setAvailableTenants(result.availableTenants || []);
       setActiveTenant(result.activeTenant || null);
 
-      console.log('[AuthContext] Switched to tenant:', tenantId);
+      console.log('[AuthContext] Cache purged and switched to tenant:', tenantId);
     } catch (err) {
       console.error('Error switching tenant:', err);
       setError(err instanceof Error ? err.message : 'Failed to switch tenant');
