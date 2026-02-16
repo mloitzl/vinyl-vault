@@ -5,9 +5,10 @@ import {
   Store,
   FetchFunction,
 } from 'relay-runtime';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 const fetchFn: FetchFunction = async (request, variables) => {
-  const response = await fetch('/graphql', {
+  const response = await fetch(getEndpoint('/graphql'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

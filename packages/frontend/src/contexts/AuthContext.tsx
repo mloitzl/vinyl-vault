@@ -1,6 +1,7 @@
 // Auth context for managing authentication state
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 export interface AvailableTenant {
   id: string;
@@ -49,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('/auth/me', {
+      const response = await fetch(getEndpoint('/auth/me'), {
         credentials: 'include',
       });
 
@@ -83,7 +84,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Redirect to GitHub OAuth login
   const login = useCallback(() => {
-    window.location.href = '/auth/github';
+    window.location.href = getEndpoint('/auth/github');
   }, []);
 
   // Logout and clear session

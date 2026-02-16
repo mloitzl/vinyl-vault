@@ -3,6 +3,7 @@ import { RecordCard, type Record } from '../components/RecordCard';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
 import { Toast } from '../components/Toast';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 type PageInfo = {
   hasNextPage: boolean;
@@ -118,7 +119,7 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
       if (Object.keys(filter).length > 0) variables.filter = filter;
 
       try {
-        const res = await fetch('/graphql', {
+        const res = await fetch(getEndpoint('/graphql'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -162,7 +163,7 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
     }`;
 
     try {
-      const res = await fetch('/graphql', {
+      const res = await fetch(getEndpoint('/graphql'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -227,7 +228,7 @@ export function CollectionPage({ onNavigateToScan }: CollectionPageProps) {
     }`;
 
     try {
-      const res = await fetch('/graphql', {
+      const res = await fetch(getEndpoint('/graphql'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

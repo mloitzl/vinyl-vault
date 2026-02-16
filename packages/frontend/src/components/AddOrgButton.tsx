@@ -3,6 +3,7 @@
 // Adheres to Architecture.MD section 5.1.1 - Dual Authentication Pattern (Mode 2)
 
 import { useEffect, useState } from 'react';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 interface AddOrgButtonProps {
   className?: string;
@@ -35,7 +36,7 @@ export function AddOrgButton({ className = '' }: AddOrgButtonProps) {
         setError(null);
 
         // Fetch from BFF /auth/me REST endpoint (much simpler than GraphQL)
-        const response = await fetch('/auth/me', {
+        const response = await fetch(getEndpoint('/auth/me'), {
           credentials: 'include',
         });
 

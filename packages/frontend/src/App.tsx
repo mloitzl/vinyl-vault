@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { RelayEnvironmentProvider } from 'react-relay';
 import { RelayEnvironment } from './relay/environment';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { getEndpoint } from './utils/apiUrl.js';
 import {
   Header,
   ErrorAlert,
@@ -37,7 +38,7 @@ function AppContent() {
         }
       }`;
 
-      const res = await fetch('/graphql', {
+      const res = await fetch(getEndpoint('/graphql'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BrowserMultiFormatReader } from '@zxing/browser';
 import { BrowserMultiFormatReader as ZXingBrowserMultiFormatReader } from '@zxing/browser';
 import { Toast } from './Toast';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 type Track = {
   position?: string;
@@ -138,7 +139,7 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
     }`;
 
     try {
-      const res = await fetch('/graphql', {
+      const res = await fetch(getEndpoint('/graphql'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -664,7 +665,7 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
                     }
                   }`;
 
-                  const res = await fetch('/graphql', {
+                  const res = await fetch(getEndpoint('/graphql'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
