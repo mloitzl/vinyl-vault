@@ -12,8 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Paths relative to packages/demo-server/dist/index.js
 // We go up three levels: dist -> src -> packages -> root
-const BACKEND_PATH = path.resolve(__dirname, '../../../backend/dist/index.js');
-const BFF_PATH = path.resolve(__dirname, '../../../bff/dist/index.js');
+const BACKEND_PATH = path.resolve(__dirname, '../../backend/dist/index.js');
+const BFF_PATH = path.resolve(__dirname, '../../bff/dist/index.js');
 
 console.log(`[Demo-Orchestrator]: Targeting Backend at ${BACKEND_PATH}`);
 console.log(`[Demo-Orchestrator]: Targeting BFF at ${BFF_PATH}`);
