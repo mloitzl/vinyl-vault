@@ -36,7 +36,32 @@ const bff = fork(BFF_PATH, {
 app.use('/graphql', createProxyMiddleware({ target: 'http://localhost:3001', changeOrigin: true }));
 app.use('/auth', createProxyMiddleware({ target: 'http://localhost:3001', changeOrigin: true }));
 
-app.get('/health', (_, res) => res.status(200).json({ status: 'ok', source: 'demo-package' }));
+// Health check endpoint that aggregates health from backend and bff
+app.get('/health', async (_, res) => {
+  try {
+    const [backendHealth, bffHealth] = await Promise.all([
+      fetch('http://localhost:4001/health').then((r) => r.json()),
+      fetch('http://localhost:3001/health').then((r) => r.json()),
+    ]);
+
+    const allHealthy = backendHealth.status === 'ok' && bffHealth.status === 'ok';
+
+    res.status(allHealthy ? 200 : 503).json({
+      status: allHealthy ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      services: {
+        backend: backendHealth,
+        bff: bffHealth,
+      },
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
 
 app.listen(PORT, () => console.log(`[Gateway]: Unified endpoint ready on port ${PORT}`));
 
