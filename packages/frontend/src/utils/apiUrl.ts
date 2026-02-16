@@ -22,10 +22,6 @@ export function getEndpoint(path: string): string {
   const normalizedBase = baseUrl.replace(/\/+$/, '');
   let normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
-  if (normalizedBase.endsWith('/auth') && normalizedPath.startsWith('/auth/')) {
-    normalizedPath = normalizedPath.replace('/auth', '');
-  }
-
   if (normalizedBase.endsWith('/graphql') && normalizedPath.startsWith('/graphql')) {
     normalizedPath = normalizedPath.replace('/graphql', '');
   }
