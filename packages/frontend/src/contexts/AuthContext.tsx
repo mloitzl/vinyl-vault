@@ -92,7 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setIsLoading(true);
 
-      const response = await fetch('/auth/logout', {
+      const response = await fetch(getEndpoint('/auth/logout'), {
         method: 'POST',
         credentials: 'include',
       });
@@ -139,7 +139,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }`;
 
-      const response = await fetch('/graphql', {
+      const response = await fetch(getEndpoint('/graphql'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
