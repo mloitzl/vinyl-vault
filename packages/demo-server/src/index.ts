@@ -33,8 +33,13 @@ const bff = fork(BFF_PATH, {
 });
 
 // 2. Gateway Routes
-app.use('/graphql', createProxyMiddleware({ target: 'http://localhost:3001', changeOrigin: true }));
-app.use('/auth', createProxyMiddleware({ target: 'http://localhost:3001', changeOrigin: true }));
+app.use(
+  createProxyMiddleware({
+    target: 'http://localhost:3001',
+    changeOrigin: true,
+    pathFilter: ['/graphql', '/auth'],
+  })
+);
 
 // Health check endpoint that aggregates health from backend and bff
 app.get('/health', async (_, res) => {
