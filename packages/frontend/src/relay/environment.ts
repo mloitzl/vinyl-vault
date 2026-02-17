@@ -8,6 +8,7 @@ import {
   GraphQLResponse,
 } from 'relay-runtime';
 import type { RequestParameters } from 'relay-runtime';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 /**
  * GraphQL error type from server response
@@ -46,7 +47,7 @@ const fetchGraphQL: FetchFunction = (request: RequestParameters, variables: any)
         });
 
         // Send POST request to BFF GraphQL endpoint
-        const response = await fetch('/graphql', {
+        const response = await fetch(getEndpoint('/graphql'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

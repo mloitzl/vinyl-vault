@@ -1,0 +1,41 @@
+# --- STAGE 1: Build ---
+FROM node:20-slim AS builder
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /app
+# We are copying from the root (build context) into the container
+COPY . .
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm -r build
+
+# --- STAGE 2: Runtime ---
+FROM node:20-slim
+ENV NODE_ENV=production
+RUN corepack enable
+WORKDIR /app
+
+# Copy root configs
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy compiled artifacts for all 3 packages
+COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
+COPY --from=builder /app/packages/backend/package.json ./packages/backend/package.json
+COPY --from=builder /app/packages/backend/src/schema.graphql ./packages/backend/dist/schema.graphql
+
+COPY --from=builder /app/packages/bff/dist ./packages/bff/dist
+COPY --from=builder /app/packages/bff/package.json ./packages/bff/package.json
+COPY --from=builder /app/packages/bff/src/schema.graphql ./packages/bff/dist/schema.graphql
+
+COPY --from=builder /app/packages/demo-server/dist ./packages/demo-server/dist
+COPY --from=builder /app/packages/demo-server/package.json ./packages/demo-server/package.json
+
+# Install production dependencies
+RUN pnpm install --prod --frozen-lockfile
+
+ENV NODE_OPTIONS="--max-old-space-size=200"
+EXPOSE 8080
+
+CMD ["node", "packages/demo-server/dist/index.js"]

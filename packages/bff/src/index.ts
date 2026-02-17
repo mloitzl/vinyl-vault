@@ -129,6 +129,10 @@ async function main() {
         // can carry the session cookie; Strict would drop the cookie.
         sameSite: 'lax' as const,
         maxAge: config.session.maxAge,
+        // When COOKIE_DOMAIN is set (e.g. '.vinylvault.example.com'), the cookie
+        // is shared across subdomains so the frontend (Vercel) and API (Koyeb)
+        // can share the same session.
+        ...(config.session.cookieDomain ? { domain: config.session.cookieDomain } : {}),
       },
     })
   );

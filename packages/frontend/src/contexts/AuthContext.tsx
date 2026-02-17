@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { RecordSource as RelayRecordSource } from 'relay-runtime';
 import { executeGraphQLMutation } from '../utils/graphqlExecutor';
 import { RelayEnvironment } from '../relay/environment';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 export interface AvailableTenant {
   id: string;
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('/auth/me', {
+      const response = await fetch(getEndpoint('/auth/me'), {
         credentials: 'include',
       });
 
@@ -86,7 +87,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Redirect to GitHub OAuth login
   const login = useCallback(() => {
-    window.location.href = '/auth/github';
+    window.location.href = getEndpoint('/auth/github');
   }, []);
 
   // Logout and clear session
@@ -94,7 +95,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setIsLoading(true);
 
-      const response = await fetch('/auth/logout', {
+      const response = await fetch(getEndpoint('/auth/logout'), {
         method: 'POST',
         credentials: 'include',
       });
@@ -203,10 +204,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
-  
+
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  
+
   return context;
 }

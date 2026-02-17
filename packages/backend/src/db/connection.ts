@@ -2,6 +2,7 @@
 // TODO: Implement MongoDB connection
 
 import { MongoClient, Db } from 'mongodb';
+import { createHash } from 'crypto';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -42,9 +43,11 @@ export function getDatabase(): Db {
 }
 
 // Derive a tenant database name from a tenantId (user_{id} or org_{id}).
-// Naming convention: vinylvault_<tenantId>, e.g., vinylvault_user_123, vinylvault_org_98765.
+// MongoDB has a 38-byte limit for database names, so we use a hash of the tenantId
+// Format: vv_<12-char-hash>, e.g., vv_a1b2c3d4e5f6
 export function getTenantDbName(tenantId: string): string {
-  return `vinylvault_${tenantId}`;
+  const hash = createHash('sha256').update(tenantId).digest('hex').substring(0, 12);
+  return `vv_${hash}`;
 }
 
 // Get or create a tenant database connection (cached by tenantId).

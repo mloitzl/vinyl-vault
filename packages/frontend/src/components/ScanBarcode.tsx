@@ -7,6 +7,7 @@ import { BarcodeInput } from './BarcodeInput';
 import { AlbumCard } from './AlbumCard';
 import { useScanBarcodeMutation, useCreateRecordMutation } from '../hooks/relay';
 import { useToast } from '../contexts';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 type Track = {
   position?: string;

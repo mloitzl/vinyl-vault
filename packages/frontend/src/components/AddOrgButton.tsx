@@ -36,7 +36,7 @@ export function AddOrgButton({ className = '' }: AddOrgButtonProps) {
         setError(null);
 
         // Fetch from BFF /auth/me REST endpoint (much simpler than GraphQL)
-        const response = await fetch('/auth/me', {
+        const response = await fetch(getEndpoint('/auth/me'), {
           credentials: 'include',
         });
 

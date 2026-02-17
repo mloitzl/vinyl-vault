@@ -6,7 +6,11 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
-import { useRecordsQueryPreloaded, useDeleteRecordMutation, useUpdateRecordMutation } from '../hooks/relay';
+import {
+  useRecordsQueryPreloaded,
+  useDeleteRecordMutation,
+  useUpdateRecordMutation,
+} from '../hooks/relay';
 import { useRecordsQueryLoader } from '../hooks/relay/useRecordsQueryLoader';
 import { useToast } from '../contexts';
 import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
@@ -140,7 +144,10 @@ function CollectionPageContent({
     if (pageInfo.endCursor && pageInfo.hasNextPage) {
       // For pagination, we'd need to handle this differently with useQueryLoader
       // For now, just load more from the start
-      onRefetch({ first: (records.length + 20), filter: Object.keys(filter).length > 0 ? filter : undefined });
+      onRefetch({
+        first: records.length + 20,
+        filter: Object.keys(filter).length > 0 ? filter : undefined,
+      });
     }
   };
 
