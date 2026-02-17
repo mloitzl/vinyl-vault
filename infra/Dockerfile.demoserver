@@ -25,6 +25,9 @@ COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=builder /app/packages/backend/package.json ./packages/backend/package.json
 COPY --from=builder /app/packages/backend/src/schema.graphql ./packages/backend/dist/schema.graphql
 
+# Copy scoring.json config for backend
+COPY --from=builder /app/packages/backend/config/scoring.json ./packages/backend/config/scoring.json
+
 COPY --from=builder /app/packages/bff/dist ./packages/bff/dist
 COPY --from=builder /app/packages/bff/package.json ./packages/bff/package.json
 COPY --from=builder /app/packages/bff/src/schema.graphql ./packages/bff/dist/schema.graphql
