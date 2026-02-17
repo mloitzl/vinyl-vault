@@ -28,6 +28,9 @@ function getConfig() {
       secret: process.env.SESSION_SECRET || 'dev-session-secret-change-in-production',
       cookieName: 'vinylvault.sid',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      // When set, the session cookie is scoped to this domain (e.g. '.vinylvault.example.com')
+      // so it is shared across subdomains (frontend on Vercel + API on Koyeb).
+      cookieDomain: process.env.COOKIE_DOMAIN || undefined,
     },
 
     // JWT (for BFF to Backend communication)

@@ -29,6 +29,9 @@ const bff = fork(BFF_PATH, {
     BFF_PORT: '3001',
     BACKEND_URL: 'http://localhost:4001/graphql',
     NODE_ENV: 'production',
+    // Forward COOKIE_DOMAIN so the BFF session cookie is scoped to the
+    // shared parent domain (e.g. '.vinylvault.example.com').
+    ...(process.env.COOKIE_DOMAIN ? { COOKIE_DOMAIN: process.env.COOKIE_DOMAIN } : {}),
   },
 });
 
