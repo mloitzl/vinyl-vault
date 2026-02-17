@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from './ui/Button';
+import { getEndpoint } from '../utils/apiUrl.js';
 
 interface AddOrgButtonProps {
   className?: string;
