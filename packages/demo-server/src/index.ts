@@ -15,6 +15,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_PATH = path.resolve(__dirname, '../../backend/dist/index.js');
 const BFF_PATH = path.resolve(__dirname, '../../bff/dist/index.js');
 
+const runtimeEnv = {
+  LOG_LEVEL: process.env.LOG_LEVEL ?? '(unset)',
+  NODE_ENV: process.env.NODE_ENV ?? '(unset)',
+  ENABLE_PRETTY_LOGS: process.env.ENABLE_PRETTY_LOGS ?? '(unset)',
+};
+
+console.log('[Demo-Orchestrator]: Runtime environment', runtimeEnv);
 console.log(`[Demo-Orchestrator]: Targeting Backend at ${BACKEND_PATH}`);
 console.log(`[Demo-Orchestrator]: Targeting BFF at ${BFF_PATH}`);
 
