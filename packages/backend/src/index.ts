@@ -30,6 +30,14 @@ dotenvConfig({ path: resolve(__dirname, '../../../.env'), debug: true });
 // Validate configuration after dotenv loads
 validateConfig();
 
+const runtimeEnv = {
+  LOG_LEVEL: process.env.LOG_LEVEL ?? '(unset)',
+  NODE_ENV: process.env.NODE_ENV ?? '(unset)',
+  ENABLE_PRETTY_LOGS: process.env.ENABLE_PRETTY_LOGS ?? '(unset)',
+};
+
+logger.info({ env: runtimeEnv }, 'Backend runtime environment');
+
 async function main() {
   const typeDefs = readFileSync(join(__dirname, './schema.graphql'), 'utf-8');
 
