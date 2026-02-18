@@ -6,6 +6,10 @@ import { executeGraphQLMutation } from '../utils/graphqlExecutor';
 import { RelayEnvironment } from '../relay/environment';
 import { getEndpoint } from '../utils/apiUrl.js';
 
+export interface FeatureFlags {
+  enableTenantFeatures: boolean;
+}
+
 export interface AvailableTenant {
   id: string;
   name: string;
@@ -20,12 +24,14 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
+  featureFlags?: FeatureFlags;
 }
 
 interface AuthContextType {
   user: User | null;
   activeTenant: AvailableTenant | null;
   availableTenants: AvailableTenant[];
+  featureFlags: FeatureFlags;
   isLoading: boolean;
   error: string | null;
   login: () => void;
@@ -44,6 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [activeTenant, setActiveTenant] = useState<AvailableTenant | null>(null);
   const [availableTenants, setAvailableTenants] = useState<AvailableTenant[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>({ enableTenantFeatures: true });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +71,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const data = await response.json();
       setUser(data.user || null);
 
+      // Extract feature flags from response
+      if (data.user?.featureFlags) {
+        setFeatureFlags(data.user.featureFlags);
+      }
+
       // Extract tenant info from response
       if (data.user && data.availableTenants) {
         setAvailableTenants(data.availableTenants);
@@ -80,6 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
       setActiveTenant(null);
       setAvailableTenants([]);
+      setFeatureFlags({ enableTenantFeatures: true });
     } finally {
       setIsLoading(false);
     }
@@ -191,6 +204,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     activeTenant,
     availableTenants,
+    featureFlags,
     isLoading,
     error,
     login,

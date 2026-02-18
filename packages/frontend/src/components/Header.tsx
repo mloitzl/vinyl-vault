@@ -7,7 +7,7 @@ import { AddOrgButton } from './AddOrgButton';
 import { Button } from './ui/Button';
 
 export function Header() {
-  const { user, activeTenant, isLoading, login, logout } = useAuth();
+  const { user, activeTenant, isLoading, login, logout, featureFlags } = useAuth();
 
   return (
     <header className="bg-white shadow-sm">
@@ -26,7 +26,12 @@ export function Header() {
                 <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
               </div>
             ) : user ? (
-              <UserMenu user={user} tenant={activeTenant} onLogout={logout} />
+              <UserMenu
+                user={user}
+                tenant={activeTenant}
+                onLogout={logout}
+                enableTenantFeatures={featureFlags.enableTenantFeatures}
+              />
             ) : (
               <LoginButton onClick={login} />
             )}
@@ -66,18 +71,19 @@ interface UserMenuProps {
   };
   tenant: { role: string } | null;
   onLogout: () => Promise<void>;
+  enableTenantFeatures: boolean;
 }
 
-function UserMenu({ user, tenant, onLogout }: UserMenuProps) {
+function UserMenu({ user, tenant, onLogout, enableTenantFeatures }: UserMenuProps) {
   const tenantRole = tenant?.role || 'VIEWER';
 
   return (
     <div className="flex items-center space-x-4">
-      {/* Add Organization button */}
-      <AddOrgButton />
+      {/* Add Organization button - hidden by feature flag */}
+      {enableTenantFeatures && <AddOrgButton />}
 
-      {/* Tenant switcher */}
-      <TenantSwitcher />
+      {/* Tenant switcher - hidden by feature flag */}
+      {enableTenantFeatures && <TenantSwitcher />}
 
       {/* User info */}
       <div className="flex items-center space-x-3">

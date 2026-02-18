@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { queryBackend } from '../services/backendClient.js';
 import { signJwt } from './jwt.js';
 import { handleSetup } from './setup.js';
+import { getFeatureFlags } from '../utils/featureFlags.js';
 import type { SessionUser, AvailableTenant } from '../types/session.js';
 import { setActiveTenant, setAvailableTenants } from '../types/session.js';
 
@@ -462,7 +463,10 @@ authRouter.get('/me', (req: Request, res: Response) => {
       : null;
 
     res.json({
-      user: req.session.user,
+      user: {
+        ...req.session.user,
+        featureFlags: getFeatureFlags(),
+      },
       availableTenants: mappedTenants,
       activeTenant: mappedActiveTenant,
       githubAppInstallationUrl: config.github.appInstallationUrl,
