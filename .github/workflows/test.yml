@@ -81,7 +81,7 @@ jobs:
             - name: Run backend tests
               env:
                   MONGODB_URI_BASE: mongodb://localhost:27018
-              run: pnpm --filter backend test --run
+              run: pnpm --filter backend test -- --run
 
             - name: Backend test status
               if: failure()
