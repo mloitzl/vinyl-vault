@@ -35,6 +35,7 @@ configMapGenerator:
       - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault-multiuser/installations/new
       - GITHUB_CALLBACK_URL=https://vinylvault.antisocializer.org/auth/github/callback
       - ENABLE_DISCOGS_INTEGRATION=true
+      - ENABLE_TENANT_FEATURES=false
 
 # Patches for staging environment
 patches:

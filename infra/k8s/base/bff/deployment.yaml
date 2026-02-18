@@ -94,6 +94,11 @@ spec:
               name: app-secrets
               key: DISCOGS_API_TOKEN
               optional: true
+        - name: ENABLE_TENANT_FEATURES
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: ENABLE_TENANT_FEATURES
         volumeMounts:
         - name: github-app-key
           mountPath: /secrets
