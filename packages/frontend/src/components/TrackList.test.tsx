@@ -97,6 +97,7 @@ describe('TrackList', () => {
     expect(container.firstChild).toBeNull();
   });
 
+
   it('truncates long song titles', () => {
     const tracks = [
       {
