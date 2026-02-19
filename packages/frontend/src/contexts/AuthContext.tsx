@@ -167,7 +167,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // previous database leak into the new database view.
       const source = RelayEnvironment.getStore().getSource() as RelayRecordSource;
       source.clear();
-      // RelayEnvironment.getStore().getSource().clear();
 
       // 3. Update React state with the new context
       setAvailableTenants(result.availableTenants || []);

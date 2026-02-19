@@ -23,27 +23,30 @@ interface ToastProviderProps {
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, type: Toast['type'], duration = 3000) => {
-    const id = `toast-${Date.now()}-${Math.random()}`;
-    const toast: Toast = { id, message, type, duration };
-
-    setToasts((prev) => [...prev, toast]);
-
-    // Auto-dismiss if duration is set
-    if (duration > 0) {
-      setTimeout(() => {
-        removeToast(id);
-      }, duration);
-
-      return id;
-    }
-
-    return id;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const addToast = useCallback(
+    (message: string, type: Toast['type'], duration = 3000) => {
+      const id = `toast-${Date.now()}-${Math.random()}`;
+      const toast: Toast = { id, message, type, duration };
+
+      setToasts((prev) => [...prev, toast]);
+
+      // Auto-dismiss if duration is set
+      if (duration > 0) {
+        setTimeout(() => {
+          removeToast(id);
+        }, duration);
+
+        return id;
+      }
+
+      return id;
+    },
+    [removeToast]
+  );
 
   const clearToasts = useCallback(() => {
     setToasts([]);

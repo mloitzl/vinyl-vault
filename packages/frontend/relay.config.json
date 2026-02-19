@@ -6,9 +6,7 @@
   "exclude": [
     "**/node_modules/**",
     "**/__mocks__/**",
-    "**/__generated__/**",
-    "**/relay/environment.ts",
-    "**/relay/hooks/**"
+    "**/__generated__/**"
   ]
 }
 
