@@ -72,9 +72,13 @@ async function fetchMusicBrainzReleases(barcode: string): Promise<{
             for (const media of details.media) {
               if (!Array.isArray(media.tracks)) continue;
               for (const t of media.tracks) {
+                const rawTitle = t.title;
+                if (!rawTitle || typeof rawTitle !== 'string') continue;
+                const title = rawTitle.trim();
+                if (title.length === 0) continue;
                 trackList.push({
                   position: t.position?.toString?.() ?? undefined,
-                  title: t.title,
+                  title,
                   duration: t.length ? msToDuration(t.length) : undefined,
                 });
               }
@@ -152,11 +156,15 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
             style = details.styles.map((s: any) => String(s));
           }
           if (Array.isArray(details.tracklist)) {
-            trackList = details.tracklist.map((t: any) => ({
-              position: t.position,
-              title: t.title,
-              duration: t.duration,
-            }));
+            trackList = details.tracklist.reduce((acc: Track[], t: any) => {
+              if (t.title && typeof t.title === 'string') {
+                const title = t.title.trim();
+                if (title.length > 0) {
+                  acc.push({ position: t.position, title, duration: t.duration });
+                }
+              }
+              return acc;
+            }, []);
           }
           // Extract catalog number from labels
           if (Array.isArray(details.labels) && details.labels[0]) {

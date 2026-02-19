@@ -73,6 +73,30 @@ describe('TrackList', () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it('filters out tracks with missing or empty titles', () => {
+    const tracks = [
+      { position: '1', title: 'Song 1', duration: '3:45' },
+      { position: '2', title: '', duration: '4:12' },
+      { position: '3', title: undefined as unknown as string },
+    ];
+
+    render(<TrackList tracks={tracks} />);
+
+    expect(screen.getByText(/tracks \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Song 1')).toBeInTheDocument();
+  });
+
+  it('returns null when all tracks have missing titles', () => {
+    const tracks = [
+      { title: '' },
+      { title: undefined as unknown as string },
+    ];
+
+    const { container } = render(<TrackList tracks={tracks} />);
+
+    expect(container.firstChild).toBeNull();
+  });
+
   it('truncates long song titles', () => {
     const tracks = [
       {
