@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:https": "sh ./scripts/dev-https.sh",
-    "prebuild": "relay-compiler",
+    "prebuild": "node -e \"require('fs').mkdirSync('./src/__generated__', {recursive: true})\" && relay-compiler",
     "build": "pnpm prebuild && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
