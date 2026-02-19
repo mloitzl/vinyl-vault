@@ -62,6 +62,7 @@ type User implements Node {
   avatarUrl: String
   availableTenants: [Tenant!]!
   activeTenant: Tenant
+  featureFlags: FeatureFlags!
   createdAt: String!
   updatedAt: String!
 }
@@ -78,6 +79,13 @@ enum TenantRole {
 }
 
 """
+Feature flags available to the frontend
+"""
+type FeatureFlags {
+  enableTenantFeatures: Boolean!
+}
+
+"""
 Represents a tenant available to the user (personal or organization).
 """
 type Tenant {
@@ -86,6 +94,7 @@ type Tenant {
   type: TenantType!
   role: TenantRole!
 }
+
 
 type Record implements Node {
   id: ID!

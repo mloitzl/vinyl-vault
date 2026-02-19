@@ -5,6 +5,7 @@ import type { GraphQLContext } from '../types/context.js';
 import { signJwt } from '../auth/jwt.js';
 import { queryBackend } from '../services/backendClient.js';
 import { getAvailableTenants, setActiveTenant } from '../types/session.js';
+import { getFeatureFlags } from '../utils/featureFlags.js';
 
 export const resolvers = {
   Query: {
@@ -43,6 +44,7 @@ export const resolvers = {
               role: activeTenant.role,
             }
           : null,
+        featureFlags: getFeatureFlags(),
         createdAt: context.user.createdAt,
         updatedAt: context.user.updatedAt,
       };

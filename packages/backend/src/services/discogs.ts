@@ -22,7 +22,7 @@ function getAuthHeader(): Record<string, string> {
   if (token) {
     return { Authorization: `Discogs token=${token}` };
   } else {
-    logger.debug('No Discogs API token found in environment variables');
+    logger.warn('No Discogs API token found in environment variables');
   }
   return {};
 }

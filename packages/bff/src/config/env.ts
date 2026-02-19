@@ -54,6 +54,11 @@ function getConfig() {
       url: process.env.FRONTEND_URL || 'http://localhost:3000',
     },
 
+    // Feature flags
+    features: {
+      enableTenantFeatures: process.env.ENABLE_TENANT_FEATURES !== 'false',
+    },
+
     // Check if in production
     isProduction: process.env.NODE_ENV === 'production',
   } as const;

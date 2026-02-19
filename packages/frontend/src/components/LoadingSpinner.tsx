@@ -2,6 +2,7 @@
 
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
+  color?: 'primary' | 'secondary' | 'danger' | 'white';
   className?: string;
 }
 
@@ -11,22 +12,26 @@ const sizeClasses = {
   lg: 'h-12 w-12',
 };
 
-export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
+const colorClasses = {
+  primary: 'text-emerald-600',
+  secondary: 'text-gray-500',
+  danger: 'text-red-600',
+  white: 'text-white',
+};
+
+export function LoadingSpinner({
+  size = 'md',
+  color = 'secondary',
+  className = '',
+}: LoadingSpinnerProps) {
   return (
     <svg
-      className={`animate-spin text-gray-500 ${sizeClasses[size]} ${className}`}
+      className={`animate-spin ${colorClasses[color]} ${sizeClasses[size]} ${className}`}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
     >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path
         className="opacity-75"
         fill="currentColor"

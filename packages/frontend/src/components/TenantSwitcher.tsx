@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleColors, getRoleLabel } from '../constants/roles';
+import { Button } from './ui/Button';
+import { Alert } from './ui/Alert';
 
 export function TenantSwitcher() {
   const { activeTenant, availableTenants, switchTenant } = useAuth();
@@ -40,13 +42,14 @@ export function TenantSwitcher() {
 
   return (
     <div className="tenant-switcher relative">
-      <button
+      <Button
+        variant="secondary"
         onClick={() => setIsOpen(!isOpen)}
-        className="tenant-button flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500 transition-colors text-gray-900 dark:text-gray-100"
+        className="flex items-center gap-2"
         title="Switch tenant"
       >
         <span className="text-sm font-medium">{activeTenant.name}</span>
-        <span className="text-xs text-gray-600 dark:text-gray-300">({activeTenant.type})</span>
+        <span className="text-xs opacity-70">({activeTenant.type})</span>
         <svg
           className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
@@ -60,13 +63,15 @@ export function TenantSwitcher() {
             d="M19 14l-7 7m0 0l-7-7m7 7V3"
           />
         </svg>
-      </button>
+      </Button>
 
       {isOpen && (
-        <div className="tenant-menu absolute top-full mt-2 left-0 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+        <div className="tenant-menu absolute top-full mt-2 left-0 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
           {error && (
-            <div className="px-4 py-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800">
-              {error}
+            <div className="px-4 py-2 border-b border-red-200 bg-red-50">
+              <Alert type="error" onDismiss={() => setError(null)}>
+                {error}
+              </Alert>
             </div>
           )}
 
@@ -76,21 +81,19 @@ export function TenantSwitcher() {
                 key={tenant.id}
                 onClick={() => handleSwitch(tenant.id)}
                 disabled={isLoading || tenant.id === activeTenant.id}
-                className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-colors ${
+                className={`w-full text-left px-4 py-3 border-b border-gray-100 last:border-b-0 transition-colors ${
                   tenant.id === activeTenant.id
-                    ? 'bg-blue-50 dark:bg-blue-900/30 cursor-default'
+                    ? 'bg-emerald-50 cursor-default'
                     : isLoading
                     ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer'
+                    : 'hover:bg-gray-50 cursor-pointer'
                 }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
-                      {tenant.name}
-                    </div>
+                    <div className="font-medium text-sm text-gray-900">{tenant.name}</div>
                     <div className="flex gap-2 mt-1">
-                      <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200">
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
                         {tenant.type}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded ${getRoleColors(tenant.role)}`}>
@@ -100,7 +103,7 @@ export function TenantSwitcher() {
                   </div>
                   {tenant.id === activeTenant.id && (
                     <svg
-                      className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0"
+                      className="w-4 h-4 text-emerald-600 flex-shrink-0"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >

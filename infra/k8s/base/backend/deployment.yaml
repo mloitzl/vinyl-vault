@@ -71,6 +71,11 @@ spec:
             secretKeyRef:
               name: github-secrets
               key: GITHUB_APP_WEBHOOK_SECRET
+        - name: ENABLE_TENANT_FEATURES
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: ENABLE_TENANT_FEATURES
         resources:
           requests:
             memory: "256Mi"

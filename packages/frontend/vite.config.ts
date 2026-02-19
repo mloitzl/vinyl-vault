@@ -1,9 +1,18 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [[
+          'babel-plugin-relay',
+          { artifactDirectory: './src/__generated__' }
+        ]],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -21,5 +30,13 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: true,
+    reporters: process.env.CI ? ['default', 'json'] : ['default'],
+    outputFile: process.env.CI ? { json: './test-results.json' } : undefined,
   },
 });

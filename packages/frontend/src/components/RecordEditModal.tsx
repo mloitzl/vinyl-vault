@@ -1,7 +1,11 @@
 // Record Edit Modal Component
-// Modal dialog for editing personal record attributes
+// Modal dialog for editing personal record attributes using composable UI components
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { Modal } from './ui/Modal';
+import { Input } from './ui/Input';
+import { Button } from './ui/Button';
+import { Alert } from './ui/Alert';
 import type { Record } from './RecordCard';
 
 interface RecordEditModalProps {
@@ -31,25 +35,6 @@ export function RecordEditModal({ record, onSave, onCancel }: RecordEditModalPro
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
-
-  // Handle ESC key to close modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSaving) {
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isSaving, onCancel]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -72,174 +57,136 @@ export function RecordEditModal({ record, onSave, onCancel }: RecordEditModalPro
     }
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !isSaving) {
-      onCancel();
-    }
-  };
+  const modalFooter = (
+    <div className="flex gap-3">
+      <Button variant="secondary" onClick={onCancel} disabled={isSaving} className="flex-1">
+        Cancel
+      </Button>
+      <Button
+        variant="primary"
+        type="submit"
+        disabled={isSaving}
+        className="flex-1"
+        form="record-edit-form"
+      >
+        {isSaving ? 'Saving...' : 'Save Changes'}
+      </Button>
+    </div>
+  );
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-      onClick={handleBackdropClick}
+    <Modal
+      isOpen={true}
+      title="Edit Record"
+      onClose={onCancel}
+      footer={modalFooter}
+      size="lg"
+      closeOnBackdropClick={!isSaving}
     >
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4 min-w-0 flex-1">
-            {record.release.coverImageUrl && (
-              <img
-                src={record.release.coverImageUrl}
-                alt=""
-                className="w-12 h-12 rounded object-cover flex-shrink-0"
-              />
-            )}
-            <div className="min-w-0">
-              <h2 className="text-lg font-semibold text-gray-900 truncate">Edit Record</h2>
-              <p className="text-sm text-gray-500 truncate">
-                {record.release.title} - {record.release.artist}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
+      {/* Album preview */}
+      <div className="mb-6 flex items-center gap-4">
+        {record.release.coverImageUrl && (
+          <img
+            src={record.release.coverImageUrl}
+            alt=""
+            className="w-12 h-12 rounded object-cover flex-shrink-0"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-gray-600">Editing</p>
+          <p className="font-medium text-gray-900 truncate">{record.release.title}</p>
+          <p className="text-sm text-gray-500 truncate">{record.release.artist}</p>
+        </div>
+      </div>
+
+      {/* Form */}
+      <form id="record-edit-form" onSubmit={handleSubmit} className="space-y-4">
+        {/* Error Display */}
+        {error && (
+          <Alert type="error" onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        {/* Condition Select */}
+        <div>
+          <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-1">
+            Condition
+          </label>
+          <select
+            id="condition"
+            value={formData.condition}
+            onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
             disabled={isSaving}
-            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-4"
-            aria-label="Close"
+            className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+            <option value="">Not specified</option>
+            {CONDITION_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Error Display */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
+        {/* Location Input */}
+        <Input
+          label="Location"
+          id="location"
+          value={formData.location}
+          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+          placeholder="e.g., Shelf A, Box 3"
+          disabled={isSaving}
+          fullWidth
+        />
 
-          {/* Condition */}
-          <div>
-            <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-1">
-              Condition
-            </label>
-            <select
-              id="condition"
-              value={formData.condition}
-              onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            >
-              <option value="">Not specified</option>
-              {CONDITION_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Price and Purchase Date Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="Price"
+            id="price"
+            type="number"
+            value={formData.price ?? ''}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                price: e.target.value ? parseFloat(e.target.value) : undefined,
+              })
+            }
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            disabled={isSaving}
+            fullWidth
+          />
 
-          {/* Location */}
-          <div>
-            <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
-              Location
-            </label>
-            <input
-              type="text"
-              id="location"
-              value={formData.location}
-              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              placeholder="e.g., Shelf A, Box 3"
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
-          </div>
+          <Input
+            label="Purchase Date"
+            id="purchaseDate"
+            type="date"
+            value={formData.purchaseDate}
+            onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+            disabled={isSaving}
+            fullWidth
+          />
+        </div>
 
-          {/* Price and Purchase Date Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Price */}
-            <div>
-              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                Price
-              </label>
-              <input
-                type="number"
-                id="price"
-                value={formData.price ?? ''}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    price: e.target.value ? parseFloat(e.target.value) : undefined,
-                  })
-                }
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Purchase Date */}
-            <div>
-              <label
-                htmlFor="purchaseDate"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Purchase Date
-              </label>
-              <input
-                type="date"
-                id="purchaseDate"
-                value={formData.purchaseDate}
-                onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
-            </label>
-            <textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={4}
-              placeholder="Add any personal notes about this record..."
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={isSaving}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Notes Textarea */}
+        <div>
+          <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+            Notes
+          </label>
+          <textarea
+            id="notes"
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            rows={4}
+            placeholder="Add any personal notes about this record..."
+            disabled={isSaving}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+          />
+        </div>
+      </form>
+    </Modal>
   );
 }
