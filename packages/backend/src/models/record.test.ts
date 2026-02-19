@@ -11,7 +11,9 @@ describe('RecordRepository', () => {
 
   beforeEach(async () => {
     // Use a test database
-    client = new MongoClient(process.env.MONGODB_URI_BASE || 'mongodb://localhost:27017');
+    client = new MongoClient(process.env.MONGODB_URI_BASE || 'mongodb://localhost:27017', {
+      maxPoolSize: 5, // Limit pool size for tests
+    });
     await client.connect();
     db = client.db(`vinylvault_test_${Date.now()}`);
     repository = new RecordRepository(db);

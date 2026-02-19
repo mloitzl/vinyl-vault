@@ -13,7 +13,11 @@ export async function getRegistryDb(): Promise<Db> {
     return registryDb;
   }
 
-  registryClient = new MongoClient(config.mongodb.registryUri);
+  registryClient = new MongoClient(config.mongodb.registryUri, {
+    maxPoolSize: 10, // Limit connection pool size
+    minPoolSize: 2,
+    maxIdleTimeMS: 60000, // Close idle connections after 1 minute
+  });
   await registryClient.connect();
   registryDb = registryClient.db();
 

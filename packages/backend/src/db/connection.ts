@@ -18,7 +18,11 @@ export async function connectToDatabase(): Promise<Db> {
     return db;
   }
 
-  client = new MongoClient(config.mongodb.uri);
+  client = new MongoClient(config.mongodb.uri, {
+    maxPoolSize: 10, // Limit connection pool size
+    minPoolSize: 2,
+    maxIdleTimeMS: 60000, // Close idle connections after 1 minute
+  });
   await client.connect();
   db = client.db();
 
@@ -64,7 +68,11 @@ export async function getTenantDb(tenantId: string): Promise<Db> {
 
   // Create new connection for this tenant
   const dbName = getTenantDbName(tenantId);
-  const tenantClient = new MongoClient(config.mongodb.uriBase);
+  const tenantClient = new MongoClient(config.mongodb.uriBase, {
+    maxPoolSize: 5, // Smaller pool per tenant to avoid exhausting total connections
+    minPoolSize: 1,
+    maxIdleTimeMS: 60000, // Close idle connections after 1 minute
+  });
 
   try {
     await tenantClient.connect();

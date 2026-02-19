@@ -12,7 +12,11 @@ export async function connectToDatabase(): Promise<Db> {
     return db;
   }
 
-  client = new MongoClient(config.mongodb.uri);
+  client = new MongoClient(config.mongodb.uri, {
+    maxPoolSize: 10, // Limit connection pool size
+    minPoolSize: 2,
+    maxIdleTimeMS: 60000, // Close idle connections after 1 minute
+  });
   await client.connect();
   db = client.db();
 
