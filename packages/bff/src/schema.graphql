@@ -121,18 +121,15 @@ type Release implements Node {
   coverImageUrl: String
   externalId: String
   source: ReleaseSource
+  genre: [String!]
+  style: [String!]
+  trackList: [Track!]
 }
 
 type Track {
   position: String
   title: String!
   duration: String
-}
-
-extend type Release {
-  genre: [String!]
-  style: [String!]
-  trackList: [Track!]
 }
 
 enum ReleaseSource {
