@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '../test/test-utils';
+import { render, screen, fireEvent, waitFor, act } from '../test/test-utils';
 
 // Mock Relay hooks with React state to emulate in-flight loading
 vi.mock('../hooks/relay', () => ({
@@ -59,43 +59,59 @@ describe('ScanBarcode Integration Tests', () => {
     });
   });
 
-  it('renders the barcode input section', () => {
+  it('renders the barcode input section', async () => {
     render(<ScanBarcode />);
 
-    expect(screen.getByPlaceholderText(/enter or scan barcode/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/enter or scan barcode/i)).toBeInTheDocument();
+    });
     expect(screen.getByText(/lookup/i)).toBeInTheDocument();
     expect(screen.getByText(/use camera/i)).toBeInTheDocument();
   });
 
-  it('renders video element for camera feed', () => {
+  it('renders video element for camera feed', async () => {
     const { container } = render(<ScanBarcode />);
 
-    const video = container.querySelector('video');
-    expect(video).toBeInTheDocument();
+    await waitFor(() => {
+      const video = container.querySelector('video');
+      expect(video).toBeInTheDocument();
+    });
   });
 
   it('displays loading state during barcode lookup', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        data: {
-          scanBarcode: {
-            albums: [],
-            timing: { totalMs: 100 },
-            errors: [],
+    (global.fetch as any).mockImplementationOnce(async () => {
+      // Add delay to allow loading state to be visible
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            scanBarcode: {
+              albums: [],
+              timing: { totalMs: 100 },
+              errors: [],
+            },
           },
-        },
-      }),
+        }),
+      };
     });
 
     render(<ScanBarcode />);
 
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/enter or scan barcode/i)).toBeInTheDocument();
+    });
+
     const input = screen.getByPlaceholderText(/enter or scan barcode/i);
-    fireEvent.change(input, { target: { value: '1234567890' } });
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '1234567890' } });
+    });
 
     const lookupButton = screen.getByText(/lookup/i);
-    fireEvent.click(lookupButton);
+    await act(async () => {
+      fireEvent.click(lookupButton);
+    });
 
     // While loading
     await waitFor(() => {
@@ -164,11 +180,19 @@ describe('ScanBarcode Integration Tests', () => {
 
     render(<ScanBarcode />);
 
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/enter or scan barcode/i)).toBeInTheDocument();
+    });
+
     const input = screen.getByPlaceholderText(/enter or scan barcode/i);
-    fireEvent.change(input, { target: { value: '5099902988313' } });
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '5099902988313' } });
+    });
 
     const lookupButton = screen.getByText(/lookup/i);
-    fireEvent.click(lookupButton);
+    await act(async () => {
+      fireEvent.click(lookupButton);
+    });
 
     // Wait for album to be displayed
     await waitFor(() => {
@@ -193,11 +217,19 @@ describe('ScanBarcode Integration Tests', () => {
 
     render(<ScanBarcode />);
 
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/enter or scan barcode/i)).toBeInTheDocument();
+    });
+
     const input = screen.getByPlaceholderText(/enter or scan barcode/i);
-    fireEvent.change(input, { target: { value: 'invalid' } });
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'invalid' } });
+    });
 
     const lookupButton = screen.getByText(/lookup/i);
-    fireEvent.click(lookupButton);
+    await act(async () => {
+      fireEvent.click(lookupButton);
+    });
 
     // Wait for error to be displayed
     await waitFor(() => {
