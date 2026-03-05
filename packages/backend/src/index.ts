@@ -16,7 +16,6 @@ import { config, validateConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import {
   closeTenantDbs,
-  disconnectFromDatabase,
   getTenantDb,
   initializeTenantIndexes,
 } from './db/connection.js';
@@ -123,7 +122,6 @@ async function main() {
     logger.info({ signal }, 'Shutting down backend...');
     try {
       await server.stop();
-      await disconnectFromDatabase();
       await closeTenantDbs();
       logger.info('Backend shutdown complete');
       process.exit(0);
