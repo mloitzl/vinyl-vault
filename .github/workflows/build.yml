@@ -82,8 +82,8 @@ jobs:
           tags: |
             ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
             ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache-${{ runner.name }}
+          cache-to: type=local,dest=/tmp/.buildx-cache-${{ runner.name }},mode=max
 
       - name: Image digest
         run: |
