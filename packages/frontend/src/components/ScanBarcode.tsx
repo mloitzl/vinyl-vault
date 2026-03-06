@@ -89,6 +89,7 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const [barcode, setBarcode] = useState('5099902988313');
   const [albums, setAlbums] = useState<Album[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [timing, setTiming] = useState<LookupTiming | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
 
@@ -105,6 +106,7 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const lookup = useCallback(
     async (bc: string) => {
       setErrors([]);
+      setWarnings([]);
       setAlbums([]);
       setTiming(null);
       setSelectedAlbumId(null);
@@ -118,7 +120,11 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
           setTiming(result.timing);
         }
         if (result.errors && result.errors.length > 0) {
-          setErrors(result.errors);
+          if (result.albums && result.albums.length > 0) {
+            setWarnings(result.errors);
+          } else {
+            setErrors(result.errors);
+          }
         }
       } catch (err: any) {
         setErrors([err?.message ?? String(err)]);
@@ -309,6 +315,22 @@ export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
               onDismiss={() => setErrors(errors.filter((_, i) => i !== index))}
             >
               {error}
+            </Alert>
+          ))}
+        </div>
+      )}
+
+      {/* Warning alerts for partial results */}
+      {warnings.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {warnings.map((warning, index) => (
+            <Alert
+              key={index}
+              type="warning"
+              title="Partial results"
+              onDismiss={() => setWarnings(warnings.filter((_, i) => i !== index))}
+            >
+              {warning}
             </Alert>
           ))}
         </div>

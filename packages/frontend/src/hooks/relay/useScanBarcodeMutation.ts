@@ -86,11 +86,17 @@ export function useScanBarcodeMutation() {
       commit({
         variables: { barcode },
         onCompleted: (response) => {
-          if (response.scanBarcode.errors && response.scanBarcode.errors.length > 0) {
-            reject(new Error(response.scanBarcode.errors[0]));
-          } else {
-            resolve(response.scanBarcode);
+          const payload = response.scanBarcode;
+          const hasErrors = Boolean(payload.errors && payload.errors.length > 0);
+          const hasAlbums = Boolean(payload.albums && payload.albums.length > 0);
+
+          // Source-level errors can be non-fatal when at least one provider returned albums.
+          if (hasErrors && !hasAlbums) {
+            reject(new Error(payload.errors?.[0] || 'Barcode lookup failed'));
+            return;
           }
+
+          resolve(payload);
         },
         onError: reject,
       });
