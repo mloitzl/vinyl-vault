@@ -14,7 +14,9 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import pino from 'pino';
@@ -37,6 +39,9 @@ const sdk = new NodeSDK({
     exporter: new OTLPMetricExporter(),
     exportIntervalMillis: 30_000,
   }),
+  // pino instrumentation (included in auto-instrumentations-node) bridges
+  // pino log calls → OTel LogRecords, which are then exported via OTLP.
+  logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
   instrumentations: [
     getNodeAutoInstrumentations({
       // fs instrumentation generates excessive noise without useful signal.
