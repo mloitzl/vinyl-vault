@@ -134,9 +134,8 @@ jobs:
             --image="${BACKEND_IMAGE}" \
             --restart=Never \
             --namespace=${{ env.KUBE_NAMESPACE }} \
-            --env-from=secret/mongodb-secrets \
-            --rm --attach \
-            -- node dist/scripts/migrate-users-to-registry.js
+            --overrides="{\"spec\":{\"containers\":[{\"name\":\"user-migration\",\"image\":\"${BACKEND_IMAGE}\",\"command\":[\"node\",\"dist/scripts/migrate-users-to-registry.js\"],\"envFrom\":[{\"secretRef\":{\"name\":\"mongodb-secrets\"}}]}]}}" \
+            --rm --attach
           echo "✓ User migration completed"
 
       - name: Apply manifests to staging
