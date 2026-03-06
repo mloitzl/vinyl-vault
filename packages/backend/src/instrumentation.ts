@@ -20,14 +20,11 @@ import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
-import pino from 'pino';
 
-// Minimal logger for the instrumentation bootstrap — avoids importing the
-// app logger (which loads dotenv, etc.) before the SDK is ready.
-const log = pino({
-  name: 'otel',
-  level: process.env.LOG_LEVEL ?? 'info',
-});
+// IMPORTANT: Do NOT import pino here. The pino OTel instrumentation patches
+// pino during sdk.start(). If pino is imported before start(), the ESM module
+// hook misses it and log records are never bridged to the LoggerProvider.
+// Use console for bootstrap logging only.
 
 // OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS are read
 // automatically from the environment by all exporters.
@@ -53,22 +50,23 @@ const sdk = new NodeSDK({
 
 try {
   sdk.start();
-  log.info(
-    {
-      service: process.env.OTEL_SERVICE_NAME ?? 'vv-backend',
-      endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '(not set!)',
-      headersSet: !!process.env.OTEL_EXPORTER_OTLP_HEADERS,
-    },
-    'OTel SDK started'
-  );
+  console.log(JSON.stringify({
+    level: 30,
+    time: Date.now(),
+    name: 'otel',
+    service: process.env.OTEL_SERVICE_NAME ?? 'vv-backend',
+    endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '(not set!)',
+    headersSet: !!process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    msg: 'OTel SDK started',
+  }));
 } catch (err) {
-  log.error({ err }, 'OTel SDK failed to start');
+  console.error('[OTel] SDK failed to start', err);
 }
 
 process.on('SIGTERM', () => {
   sdk
     .shutdown()
-    .then(() => log.info('OTel SDK shut down'))
-    .catch((err) => log.error({ err }, 'OTel SDK shutdown error'))
+    .then(() => console.log('[OTel] SDK shut down'))
+    .catch((err) => console.error('[OTel] SDK shutdown error', err))
     .finally(() => process.exit(0));
 });
