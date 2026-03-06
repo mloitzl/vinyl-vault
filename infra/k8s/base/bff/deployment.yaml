@@ -116,6 +116,7 @@ spec:
             configMapKeyRef:
               name: otel-config
               key: OTEL_RESOURCE_ATTRIBUTES
+        volumeMounts:
         - name: github-app-key
           mountPath: /secrets
           readOnly: true
