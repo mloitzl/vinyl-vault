@@ -127,17 +127,6 @@ jobs:
           echo "=== Staging Manifests Preview (tag: ${IMAGE_TAG}) ==="
           kubectl kustomize ${{ env.KUSTOMIZE_PATH }} | head -50
 
-      - name: Run user migration (vinylvault → vinylvault_registry)
-        run: |
-          BACKEND_IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-backend:${{ steps.commit-tag.outputs.image_tag }}"
-          kubectl run user-migration \
-            --image="${BACKEND_IMAGE}" \
-            --restart=Never \
-            --namespace=${{ env.KUBE_NAMESPACE }} \
-            --overrides="{\"spec\":{\"containers\":[{\"name\":\"user-migration\",\"image\":\"${BACKEND_IMAGE}\",\"command\":[\"node\",\"dist/scripts/migrate-users-to-registry.js\"],\"envFrom\":[{\"secretRef\":{\"name\":\"mongodb-secrets\"}}]}]}}" \
-            --rm --attach
-          echo "✓ User migration completed"
-
       - name: Apply manifests to staging
         run: |
           kubectl apply -k ${{ env.KUSTOMIZE_PATH }}

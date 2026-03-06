@@ -21,6 +21,25 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+sanitize_docker_tag() {
+  local raw_tag="$1"
+  local sanitized
+
+  sanitized=$(echo "$raw_tag" \
+    | sed -E 's#^refs/heads/##; s#[^A-Za-z0-9_.-]+#-#g; s#^[.-]+##; s#[.-]+$##; s#-+#-#g' \
+    | tr '[:upper:]' '[:lower:]')
+
+  # Docker tags are limited to 128 chars.
+  sanitized=$(echo "$sanitized" | cut -c1-128)
+
+  # Fallback to commit SHA if tag becomes empty after sanitization.
+  if [ -z "$sanitized" ]; then
+    sanitized=$(git rev-parse --short HEAD)
+  fi
+
+  echo "$sanitized"
+}
+
 # Parse arguments
 CUSTOM_TAG="${1}"
 if [ -n "$CUSTOM_TAG" ]; then
@@ -45,8 +64,12 @@ if [ -z "$CUSTOM_TAG" ]; then
   
   echo -e "${BLUE}📌 Auto-detected tag from branch '$BRANCH': ${TAG}${NC}"
 else
-  TAG="$CUSTOM_TAG"
-  echo -e "${BLUE}📌 Using custom tag: ${TAG}${NC}"
+  TAG=$(sanitize_docker_tag "$CUSTOM_TAG")
+  if [ "$TAG" != "$CUSTOM_TAG" ]; then
+    echo -e "${BLUE}📌 Custom tag normalized: ${CUSTOM_TAG} → ${TAG}${NC}"
+  else
+    echo -e "${BLUE}📌 Using custom tag: ${TAG}${NC}"
+  fi
 fi
 
 echo -e "${BLUE}🏗️  Building services: ${SERVICES[*]}${NC}"
