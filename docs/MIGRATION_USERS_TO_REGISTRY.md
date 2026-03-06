@@ -83,8 +83,7 @@ The script respects the standard backend env vars:
 
 | Variable               | Description                                                                       | Default                                         |
 |------------------------|-----------------------------------------------------------------------------------|-------------------------------------------------|
-| `MONGODB_BACKEND_URI`  | Backend DB where users were incorrectly stored (k8s, from `mongodb-secrets`)     | —                                               |
-| `MONGODB_URI`          | Fallback for local use (same role as `MONGODB_BACKEND_URI`)                      | `mongodb://localhost:27017/vinylvault`          |
+| `MONGODB_URI`          | Source DB for local use                                                           | `mongodb://localhost:27017/vinylvault`          |
 | `MONGODB_REGISTRY_URI` | Registry DB — correct home for users per the SDD                                 | `mongodb://localhost:27017/vinylvault_registry` |
 
 ```bash
