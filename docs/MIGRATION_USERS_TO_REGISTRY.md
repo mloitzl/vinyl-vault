@@ -4,7 +4,7 @@
 
 As part of fixing a MongoDB connection pooling anti-pattern
 ([`bugfix/mongodb-connection-pooling`](../packages/backend/src/scripts/migrate-users-to-registry.ts)),
-the `users` collection was moved from the legacy BFF database (`vinylvault`) to the
+the `users` collection was moved from the BFF database (`vinylvault`) to the
 central registry database (`vinylvault_registry`).
 
 **What changed:**
@@ -81,10 +81,10 @@ Done. inserted=0 skipped=3
 
 The script respects the standard backend env vars:
 
-| Variable               | Description                              | Default                                        |
-|------------------------|------------------------------------------|------------------------------------------------|
-| `MONGODB_URI`          | Legacy DB containing `users` collection  | `mongodb://localhost:27017/vinylvault`         |
-| `MONGODB_REGISTRY_URI` | Target registry DB                       | `mongodb://localhost:27017/vinylvault_registry`|
+| Variable               | Description                                              | Default                                        |
+|------------------------|----------------------------------------------------------|------------------------------------------------|
+| `MONGODB_URI`          | BFF DB where users were incorrectly stored               | `mongodb://localhost:27017/vinylvault`         |
+| `MONGODB_REGISTRY_URI` | Registry DB — correct home for users per the SDD        | `mongodb://localhost:27017/vinylvault_registry`|
 
 ```bash
 # From the repo root
