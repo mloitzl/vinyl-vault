@@ -22,9 +22,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Load .env for local use; no-op in containers where k8s injects env vars
 dotenvConfig({ path: resolve(__dirname, '../../../../.env') });
 
-// In k8s the BFF URI is injected as MONGODB_BFF_URI from mongodb-secrets.
+// In k8s the old backend URI is injected as MONGODB_BACKEND_URI from mongodb-secrets
+// (this is what the old connectToDatabase() used via the MONGODB_URI env mapping).
 // Locally MONGODB_URI is the equivalent (single Mongo instance).
-const LEGACY_URI = process.env.MONGODB_BFF_URI ?? process.env.MONGODB_URI ?? 'mongodb://localhost:27017/vinylvault';
+const LEGACY_URI = process.env.MONGODB_BACKEND_URI ?? process.env.MONGODB_URI ?? 'mongodb://localhost:27017/vinylvault';
 const REGISTRY_URI = process.env.MONGODB_REGISTRY_URI ?? 'mongodb://localhost:27017/vinylvault_registry';
 
 async function migrate() {
