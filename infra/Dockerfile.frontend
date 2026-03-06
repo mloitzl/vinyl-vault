@@ -25,8 +25,10 @@ RUN mkdir -p /app/packages/frontend/src/__generated__
 # come from runtime environment variables or k8s ConfigMaps.
 ARG VITE_NEW_RELIC_LICENSE_KEY=""
 ARG VITE_OTEL_ENVIRONMENT="staging"
+ARG VITE_OTEL_ENDPOINT="https://otlp.eu01.nr-data.net:4318"
 ENV VITE_NEW_RELIC_LICENSE_KEY=$VITE_NEW_RELIC_LICENSE_KEY
 ENV VITE_OTEL_ENVIRONMENT=$VITE_OTEL_ENVIRONMENT
+ENV VITE_OTEL_ENDPOINT=$VITE_OTEL_ENDPOINT
 
 # Build
 WORKDIR /app/packages/frontend

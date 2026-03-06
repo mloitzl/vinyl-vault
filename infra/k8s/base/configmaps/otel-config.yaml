@@ -3,9 +3,10 @@ kind: ConfigMap
 metadata:
   name: otel-config
 data:
-  # New Relic OTLP endpoint — same for all environments.
-  # deployment.environment is set per-overlay via OTEL_RESOURCE_ATTRIBUTES.
-  OTEL_EXPORTER_OTLP_ENDPOINT: "https://otlp.nr-data.net:4318"
+  # New Relic OTLP endpoint.
+  # US: https://otlp.nr-data.net:4318
+  # EU: https://otlp.eu01.nr-data.net:4318
+  OTEL_EXPORTER_OTLP_ENDPOINT: "https://otlp.eu01.nr-data.net:4318"
 
   # Override per overlay: deployment.environment=staging|demo
   OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=staging"

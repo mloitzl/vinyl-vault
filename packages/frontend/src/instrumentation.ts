@@ -13,6 +13,9 @@ import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 // Send traces directly to New Relic's OTLP HTTP endpoint.
 // VITE_NEW_RELIC_LICENSE_KEY must be a New Relic Ingest (License) key —
 // these are write-only and safe to embed in client-side bundles.
+// Endpoint differs by region:
+//   US: https://otlp.nr-data.net:4318
+//   EU: https://otlp.eu01.nr-data.net:4318
 const provider = new WebTracerProvider({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'vv-frontend',
@@ -21,7 +24,7 @@ const provider = new WebTracerProvider({
   spanProcessors: [
     new BatchSpanProcessor(
       new OTLPTraceExporter({
-        url: 'https://otlp.nr-data.net:4318/v1/traces',
+        url: `${import.meta.env.VITE_OTEL_ENDPOINT ?? 'https://otlp.nr-data.net:4318'}/v1/traces`,
         headers: {
           'api-key': import.meta.env.VITE_NEW_RELIC_LICENSE_KEY ?? '',
         },

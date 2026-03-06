@@ -92,6 +92,7 @@ jobs:
           build-args: |
             ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_LICENSE_KEY={0}', secrets.NR_LICENSE_KEY) || '' }}
             ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENVIRONMENT={0}', steps.image-tag.outputs.otel-env) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENDPOINT={0}', secrets.NR_OTLP_ENDPOINT) || '' }}
           cache-from: type=local,src=/tmp/.buildx-cache-${{ runner.name }}
           cache-to: type=local,dest=/tmp/.buildx-cache-${{ runner.name }},mode=max
 
