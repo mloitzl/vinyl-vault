@@ -2,7 +2,8 @@
 // any application modules, so auto-patches (express, apollo, mongodb, http, …)
 // are applied on the very first import of those libraries.
 
-// Must load .env before the SDK reads OTEL_EXPORTER_OTLP_* env vars.
+// Load .env for local development. In k8s, env vars come from the pod spec
+// (ConfigMap/Secret) so this is a no-op (dotenv silently skips missing files).
 import { config as dotenvConfig } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';

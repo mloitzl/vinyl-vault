@@ -36,4 +36,4 @@ RUN pnpm install --prod
 
 EXPOSE 3001
 
-CMD ["node", "--import", "dist/instrumentation.js", "dist/index.js"]
+CMD ["node", "--import", "./dist/instrumentation.js", "dist/index.js"]
