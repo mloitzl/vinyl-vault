@@ -1,6 +1,6 @@
 // Backend client for proxying requests from BFF
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000/graphql';
+import { config } from '../config/index.js';
 
 export interface BackendClientOptions {
   jwt?: string;
@@ -48,7 +48,7 @@ export async function queryBackend<T>(
     headers['Authorization'] = `Bearer ${options.jwt}`;
   }
 
-  const response = await fetch(BACKEND_URL, {
+  const response = await fetch(config.backend.url, {
     method: 'POST',
     headers,
     body: JSON.stringify({ query, variables }),

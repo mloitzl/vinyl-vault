@@ -17,7 +17,6 @@ function getConfig() {
 
     // MongoDB
     mongodb: {
-      uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vinylvault',
       uriBase: process.env.MONGODB_URI_BASE || 'mongodb://localhost:27017',
       registryUri:
         process.env.MONGODB_REGISTRY_URI || 'mongodb://localhost:27017/vinylvault_registry',

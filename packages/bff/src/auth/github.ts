@@ -38,10 +38,8 @@ interface GitHubUser {
 // Redirects user to GitHub for authentication
 // Initiate GitHub OAuth flow
 // Optional query params:
-// - callback: one of the registered BFF callback URLs (must be allowed by GITHUB_CALLBACK_URLS or configured callback)
 // - return_to: frontend URL to redirect to after successful login
 authRouter.get('/github', (req: Request, res: Response) => {
-  const candidateCallback = typeof req.query.callback === 'string' ? req.query.callback : undefined;
   const returnTo = typeof req.query.return_to === 'string' ? req.query.return_to : undefined;
 
   // If already authenticated, skip OAuth and redirect to return_to or home.
@@ -57,20 +55,10 @@ authRouter.get('/github', (req: Request, res: Response) => {
 
   logger.debug({ query: req.query }, 'Query string parameters');
   logger.debug('GitHub OAuth initiation requested');
-  logger.debug({ candidateCallback }, 'Candidate callback URL:');
   logger.debug({ returnTo }, 'Return to URL:');
-  // Build allowed callbacks list from env or config
-  const allowed = (process.env.GITHUB_CALLBACK_URLS || config.github.callbackUrl)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  logger.debug({ allowed }, 'Allowed GitHub callback URLs:');
-
-  const redirectUri =
-    candidateCallback && allowed.includes(candidateCallback)
-      ? candidateCallback
-      : config.github.callbackUrl;
+  // GitHub App supports multiple registered callback URLs on the GitHub side,
+  // so we always use the configured callback URL.
+  const redirectUri = config.github.callbackUrl;
 
   logger.debug({ redirectUri }, 'Using redirect URI for OAuth:');
 
