@@ -1,6 +1,15 @@
 // OpenTelemetry SDK initialisation — loaded via Node's --import flag BEFORE
 // any application modules, so auto-patches (express, apollo, mongodb, http, …)
 // are applied on the very first import of those libraries.
+
+// Must load .env before the SDK reads OTEL_EXPORTER_OTLP_* env vars.
+import { config as dotenvConfig } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenvConfig({ path: resolve(__dirname, '../../../.env') });
+
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -39,7 +48,11 @@ const sdk = new NodeSDK({
 try {
   sdk.start();
   log.info(
-    { service: process.env.OTEL_SERVICE_NAME ?? 'vv-backend' },
+    {
+      service: process.env.OTEL_SERVICE_NAME ?? 'vv-backend',
+      endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '(not set!)',
+      headersSet: !!process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    },
     'OTel SDK started'
   );
 } catch (err) {
