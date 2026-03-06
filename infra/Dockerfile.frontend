@@ -21,6 +21,13 @@ RUN pnpm install --frozen-lockfile
 # Create __generated__ directory for relay-compiler
 RUN mkdir -p /app/packages/frontend/src/__generated__
 
+# VITE_* vars are resolved statically by Vite at build time — they cannot
+# come from runtime environment variables or k8s ConfigMaps.
+ARG VITE_NEW_RELIC_LICENSE_KEY=""
+ARG VITE_OTEL_ENVIRONMENT="staging"
+ENV VITE_NEW_RELIC_LICENSE_KEY=$VITE_NEW_RELIC_LICENSE_KEY
+ENV VITE_OTEL_ENVIRONMENT=$VITE_OTEL_ENVIRONMENT
+
 # Build
 WORKDIR /app/packages/frontend
 RUN pnpm build

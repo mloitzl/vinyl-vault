@@ -60,18 +60,23 @@ jobs:
 
           if [ "$BRANCH" = "main" ]; then
             TAG="latest-production"
+            OTEL_ENV="demo"
           elif [ "$BRANCH" = "develop" ]; then
             TAG="latest-staging"
+            OTEL_ENV="staging"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             TAG="pr-${{ github.event.pull_request.number }}"
+            OTEL_ENV="staging"
           else
             TAG="$COMMIT_SHA"
+            OTEL_ENV="dev"
           fi
 
           IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository_owner }}/vinylvault-${{ matrix.service }}"
           echo "image=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "commit-tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "otel-env=${OTEL_ENV}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -82,6 +87,11 @@ jobs:
           tags: |
             ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
             ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}
+          # VITE_* vars must be baked into the frontend bundle at build time
+          # (Vite resolves them statically; they cannot come from k8s ConfigMaps).
+          build-args: |
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_LICENSE_KEY={0}', secrets.NR_LICENSE_KEY) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENVIRONMENT={0}', steps.image-tag.outputs.otel-env) || '' }}
           cache-from: type=local,src=/tmp/.buildx-cache-${{ runner.name }}
           cache-to: type=local,dest=/tmp/.buildx-cache-${{ runner.name }},mode=max
 

@@ -36,6 +36,10 @@ configMapGenerator:
       - GITHUB_CALLBACK_URL=https://vinylvault.antisocializer.org/auth/github/callback
       - ENABLE_DISCOGS_INTEGRATION=true
       - ENABLE_TENANT_FEATURES=true
+  - name: otel-config
+    behavior: merge
+    literals:
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=staging
 
 # Patches for staging environment
 patches:

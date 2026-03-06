@@ -34,6 +34,10 @@ configMapGenerator:
       - BACKEND_URL=http://backend.vinylvault-production.svc.cluster.local:4000/graphql
       - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault/installations/new
       - ENABLE_DISCOGS_INTEGRATION=true
+  - name: otel-config
+    behavior: merge
+    literals:
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=demo
 
 # Patches for production environment
 patches:

@@ -70,6 +70,13 @@ jobs:
                     exit 1
                   fi
 
+                  if kubectl get secret otel-secrets -n ${{ env.NAMESPACE }} 2>/dev/null; then
+                    echo "✓ otel-secrets exists"
+                  else
+                    echo "✗ otel-secrets missing - create with: echo -n 'api-key=YOUR_NR_LICENSE_KEY' | base64, then kubectl create secret generic otel-secrets --from-literal=OTEL_EXPORTER_OTLP_HEADERS='api-key=YOUR_NR_LICENSE_KEY' -n ${{ env.NAMESPACE }}"
+                    exit 1
+                  fi
+
             - name: Preview Kustomize manifests
               run: |
                   IMAGE_TAG=${{ steps.image-tag.outputs.commit }}

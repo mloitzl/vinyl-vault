@@ -99,7 +99,23 @@ spec:
             configMapKeyRef:
               name: app-config
               key: ENABLE_TENANT_FEATURES
-        volumeMounts:
+        - name: OTEL_SERVICE_NAME
+          value: "vv-bff"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: otel-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: otel-secrets
+              key: OTEL_EXPORTER_OTLP_HEADERS
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          valueFrom:
+            configMapKeyRef:
+              name: otel-config
+              key: OTEL_RESOURCE_ATTRIBUTES
         - name: github-app-key
           mountPath: /secrets
           readOnly: true

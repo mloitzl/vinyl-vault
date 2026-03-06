@@ -11,9 +11,13 @@ const PORT = process.env.PORT || 8080;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Paths relative to packages/demo-server/dist/index.js
-// We go up three levels: dist -> src -> packages -> root
+// We go up two levels: dist -> packages -> root
 const BACKEND_PATH = path.resolve(__dirname, '../../backend/dist/index.js');
 const BFF_PATH = path.resolve(__dirname, '../../bff/dist/index.js');
+
+// Instrumentation modules loaded via --import so OTel patches fire before app code.
+const BACKEND_OTEL = path.resolve(__dirname, '../../backend/dist/instrumentation.js');
+const BFF_OTEL = path.resolve(__dirname, '../../bff/dist/instrumentation.js');
 
 const runtimeEnv = {
   LOG_LEVEL: process.env.LOG_LEVEL ?? '(unset)',
@@ -27,7 +31,8 @@ console.log(`[Demo-Orchestrator]: Targeting BFF at ${BFF_PATH}`);
 
 // 1. Launch Services
 const backend = fork(BACKEND_PATH, {
-  env: { ...process.env, BACKEND_PORT: '4001', NODE_ENV: 'production' },
+  env: { ...process.env, BACKEND_PORT: '4001', NODE_ENV: 'production', OTEL_SERVICE_NAME: 'vv-backend' },
+  execArgv: ['--import', BACKEND_OTEL],
 });
 
 const bff = fork(BFF_PATH, {
@@ -39,7 +44,9 @@ const bff = fork(BFF_PATH, {
     // Forward COOKIE_DOMAIN so the BFF session cookie is scoped to the
     // shared parent domain (e.g. '.vinylvault.example.com').
     ...(process.env.COOKIE_DOMAIN ? { COOKIE_DOMAIN: process.env.COOKIE_DOMAIN } : {}),
+    OTEL_SERVICE_NAME: 'vv-bff',
   },
+  execArgv: ['--import', BFF_OTEL],
 });
 
 // 2. Gateway Routes
