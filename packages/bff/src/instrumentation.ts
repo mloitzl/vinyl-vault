@@ -33,10 +33,10 @@ const sdk = new NodeSDK({
     [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? 'vv-bff',
   }),
   traceExporter: new OTLPTraceExporter(),
-  metricReader: new PeriodicExportingMetricReader({
+  metricReaders: [new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter(),
     exportIntervalMillis: 30_000,
-  }),
+  })],
   // pino instrumentation (included in auto-instrumentations-node) bridges
   // pino log calls → OTel LogRecords, which are then exported via OTLP.
   logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
