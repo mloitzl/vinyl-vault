@@ -91,6 +91,9 @@ jobs:
           # (Vite resolves them statically; they cannot come from k8s ConfigMaps).
           build-args: |
             ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_LICENSE_KEY={0}', secrets.NR_LICENSE_KEY) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_ACCOUNT_ID={0}', secrets.NR_BROWSER_ACCOUNT_ID) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_AGENT_ID={0}', secrets.NR_BROWSER_AGENT_ID) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_APPLICATION_ID={0}', secrets.NR_BROWSER_APPLICATION_ID) || '' }}
             ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENVIRONMENT={0}', steps.image-tag.outputs.otel-env) || '' }}
             ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENDPOINT={0}', secrets.NR_OTLP_ENDPOINT) || '' }}
           cache-from: type=local,src=/tmp/.buildx-cache-${{ runner.name }}
