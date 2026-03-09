@@ -17,6 +17,7 @@ import {
   createPersonalTenant,
   createOrganizationTenant,
   addUserToTenant,
+  ensureUserInTenant,
   getUserTenants,
 } from '../services/tenants.js';
 import {
@@ -512,8 +513,8 @@ export const resolvers = {
         installation.account_login
       );
 
-      // 5. Add user as ADMIN to the new org tenant
-      await addUserToTenant(userObjId, existingTenant.tenantId, 'ADMIN');
+      // 5. Ensure user is ADMIN in the org tenant (handles re-additions gracefully)
+      await ensureUserInTenant(userObjId, existingTenant.tenantId, 'ADMIN');
 
       logger.info({ tenantId: existingTenant.tenantId }, 'Created org tenant');
 
@@ -523,7 +524,7 @@ export const resolvers = {
         tenantName: existingTenant.name,
         message: `Organization ${tenantName} added successfully`,
       };
-    },
+    };,
     createTenant: async (
       _parent: unknown,
       _args: {

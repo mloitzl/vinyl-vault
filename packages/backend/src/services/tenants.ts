@@ -193,6 +193,67 @@ export async function removeUserFromTenant(userId: ObjectId, tenantId: string): 
   return removed;
 }
 
+// Ensure a user is in a tenant with a specific role
+// If the user already has a role in this tenant, update it to the new role
+// If not, add the user to the tenant with the specified role
+// This is useful for re-adding GitHub App installations
+export async function ensureUserInTenant(
+  userId: ObjectId,
+  tenantId: string,
+  role: TenantRole
+): Promise<UserTenantRoleDocument> {
+  const registryDb = await getRegistryDb();
+
+  // For organization tenants, check if this is the first user
+  let effectiveRole = role;
+  if (tenantId.startsWith('org_') && role === 'VIEWER') {
+    const existingUsers = await registryDb
+      .collection('user_tenant_roles')
+      .countDocuments({ tenantId });
+
+    if (existingUsers === 0) {
+      // First user in org gets ADMIN role
+      effectiveRole = 'ADMIN';
+      logger.info(
+        { userId: userId.toString(), tenantId },
+        'First user in org tenant, assigning ADMIN role'
+      );
+    }
+  }
+
+  const now = new Date();
+  
+  // Use updateOne with upsert to either insert or update
+  const result = await registryDb.collection('user_tenant_roles').findOneAndUpdate(
+    { userId, tenantId },
+    {
+      $set: {
+        role: effectiveRole,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        _id: new ObjectId(),
+        createdAt: now,
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
+    }
+  );
+
+  const userTenantRole = result?.value as UserTenantRoleDocument;
+  
+  if (userTenantRole) {
+    logger.info(
+      { userId: userId.toString(), tenantId, role: effectiveRole },
+      'Ensured user in tenant (upserted)'
+    );
+  }
+
+  return userTenantRole;
+}
+
 // Update a user's role in a tenant
 export async function updateUserTenantRole(
   userId: ObjectId,
