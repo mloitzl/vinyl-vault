@@ -52,32 +52,38 @@ export async function createOrganizationTenant(
   const databaseName = getTenantDbName(tenantId);
 
   const now = new Date();
-  const tenant: TenantDocument = {
-    _id: new ObjectId(),
-    tenantId,
-    tenantType: 'ORGANIZATION',
-    name: orgName,
-    githubOrgName,
-    databaseName,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    const result = await registryDb.collection('tenants').insertOne(tenant);
-    logger.info({ tenantId, insertedId: result.insertedId }, 'Created organization tenant');
-    return tenant;
-  } catch (err: any) {
-    if (err.code === 11000) {
-      // Tenant already exists, return the existing one
-      const existing = await registryDb.collection('tenants').findOne({ tenantId });
-      if (existing) {
-        logger.info({ tenantId }, 'Organization tenant already exists');
-        return existing as TenantDocument;
-      }
+  const result = await registryDb.collection('tenants').findOneAndUpdate(
+    { tenantId },
+    {
+      $setOnInsert: {
+        _id: new ObjectId(),
+        tenantId,
+        tenantType: 'ORGANIZATION',
+        name: orgName,
+        githubOrgName,
+        databaseName,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
     }
-    throw err;
+  );
+
+  const tenant = result?.value as TenantDocument | null;
+  if (!tenant) {
+    throw new Error(`Failed to create or load organization tenant ${tenantId}`);
   }
+
+  if (tenant.createdAt.getTime() === now.getTime()) {
+    logger.info({ tenantId, insertedId: tenant._id }, 'Created organization tenant');
+  } else {
+    logger.info({ tenantId }, 'Organization tenant already exists');
+  }
+
+  return tenant;
 }
 
 // Get all tenants for a user (including role information)
