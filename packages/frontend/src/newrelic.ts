@@ -31,7 +31,6 @@ if (accountID && licenseKey) {
         mask_all_inputs: true,
         collect_fonts: true,
         inline_images: false,
-        inline_stylesheet: true,
         fix_stylesheets: true,
         preload: false,
         mask_input_options: {},
@@ -51,7 +50,7 @@ if (accountID && licenseKey) {
       performance: { capture_measures: true },
       browser_consent_mode: { enabled: false },
       privacy: { cookies_enabled: true },
-      ajax: { deny_list: ['bam.eu01.nr-data.net'], capture_payloads: 'none' },
+      ajax: { deny_list: ['bam.eu01.nr-data.net'] },
     },
     info: {
       beacon: 'bam.eu01.nr-data.net',
