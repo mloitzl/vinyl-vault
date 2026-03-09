@@ -11,15 +11,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenvConfig({ path: resolve(__dirname, '../../../.env') });
 
+import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { BatchLogRecordProcessor, ConsoleLogRecordExporter, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
+
+// In non-production, emit OTel SDK warnings/errors to the console so that
+// export failures (e.g. 403 from New Relic when OTEL_EXPORTER_OTLP_HEADERS
+// is missing) are visible rather than silently dropped.
+if (process.env.NODE_ENV !== 'production') {
+  diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.WARN);
+}
 
 // IMPORTANT: Do NOT import pino here. The pino OTel instrumentation patches
 // pino during sdk.start(). If pino is imported before start(), the ESM module
@@ -39,7 +47,13 @@ const sdk = new NodeSDK({
   }),
   // pino instrumentation (included in auto-instrumentations-node) bridges
   // pino log calls → OTel LogRecords, which are then exported via OTLP.
-  logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
+  // In dev, also print records to console to confirm the bridge is working.
+  logRecordProcessors: [
+    new BatchLogRecordProcessor(new OTLPLogExporter()),
+    ...(process.env.NODE_ENV !== 'production'
+      ? [new SimpleLogRecordProcessor(new ConsoleLogRecordExporter())]
+      : []),
+  ],
   instrumentations: [
     getNodeAutoInstrumentations({
       // fs instrumentation generates excessive noise without useful signal.
@@ -50,15 +64,20 @@ const sdk = new NodeSDK({
 
 try {
   sdk.start();
+  const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '(not set!)';
+  const headersSet = !!process.env.OTEL_EXPORTER_OTLP_HEADERS;
   console.log(JSON.stringify({
     level: 30,
     time: Date.now(),
     name: 'otel',
     service: process.env.OTEL_SERVICE_NAME ?? 'vv-backend',
-    endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '(not set!)',
-    headersSet: !!process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    endpoint,
+    headersSet,
     msg: 'OTel SDK started',
   }));
+  if (!headersSet) {
+    console.warn('[OTel] OTEL_EXPORTER_OTLP_HEADERS is not set — traces/metrics/logs will be rejected by New Relic (403). Add api-key=<license-key> to your .env.');
+  }
 } catch (err) {
   console.error('[OTel] SDK failed to start', err);
 }
