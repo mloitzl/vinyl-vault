@@ -27,6 +27,7 @@ jobs:
     # Run for PRs, or for direct pushes to main/develop only
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     runs-on: self-hosted
+    environment: staging
     permissions:
       contents: read
       packages: write
@@ -90,12 +91,12 @@ jobs:
           # VITE_* vars must be baked into the frontend bundle at build time
           # (Vite resolves them statically; they cannot come from k8s ConfigMaps).
           build-args: |
-            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_LICENSE_KEY={0}', secrets.NR_LICENSE_KEY) || '' }}
-            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_ACCOUNT_ID={0}', secrets.NR_BROWSER_ACCOUNT_ID) || '' }}
-            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_AGENT_ID={0}', secrets.NR_BROWSER_AGENT_ID) || '' }}
-            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_APPLICATION_ID={0}', secrets.NR_BROWSER_APPLICATION_ID) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_LICENSE_KEY={0}', secrets.VITE_NEW_RELIC_LICENSE_KEY) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_ACCOUNT_ID={0}', secrets.VITE_NEW_RELIC_ACCOUNT_ID) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_AGENT_ID={0}', secrets.VITE_NEW_RELIC_AGENT_ID) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_NEW_RELIC_APPLICATION_ID={0}', secrets.VITE_NEW_RELIC_APPLICATION_ID) || '' }}
             ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENVIRONMENT={0}', steps.image-tag.outputs.otel-env) || '' }}
-            ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENDPOINT={0}', secrets.NR_OTLP_ENDPOINT) || '' }}
+            ${{ matrix.service == 'frontend' && format('VITE_OTEL_ENDPOINT={0}', secrets.VITE_OTEL_ENDPOINT) || '' }}
           cache-from: type=local,src=/tmp/.buildx-cache-${{ runner.name }}
           cache-to: type=local,dest=/tmp/.buildx-cache-${{ runner.name }},mode=max
 
