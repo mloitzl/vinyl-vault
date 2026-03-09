@@ -524,7 +524,7 @@ export const resolvers = {
         tenantName: existingTenant.name,
         message: `Organization ${tenantName} added successfully`,
       };
-    };,
+    },
     createTenant: async (
       _parent: unknown,
       _args: {
