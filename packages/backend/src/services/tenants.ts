@@ -11,6 +11,20 @@ import type { UserTenantRoleDocument } from '../models/userTenantRole.js';
 export type TenantType = 'USER' | 'ORGANIZATION';
 export type TenantRole = 'ADMIN' | 'MEMBER' | 'VIEWER';
 
+function extractFindOneAndUpdateDoc<T>(result: unknown): T | null {
+  if (!result) {
+    return null;
+  }
+
+  // MongoDB driver v6 can return the document directly.
+  if (typeof result === 'object' && result !== null && 'value' in result) {
+    return (result as { value: T | null }).value;
+  }
+
+  // MongoDB driver v5-style with includeResultMetadata: false semantics.
+  return result as T;
+}
+
 // Create a personal USER tenant for a user
 // tenantId = user_{userId}
 // databaseName = vinylvault_user_{userId}
@@ -72,16 +86,12 @@ export async function createOrganizationTenant(
     }
   );
 
-  const tenant = result?.value as TenantDocument | null;
+  const tenant = extractFindOneAndUpdateDoc<TenantDocument>(result);
   if (!tenant) {
     throw new Error(`Failed to create or load organization tenant ${tenantId}`);
   }
 
-  if (tenant.createdAt.getTime() === now.getTime()) {
-    logger.info({ tenantId, insertedId: tenant._id }, 'Created organization tenant');
-  } else {
-    logger.info({ tenantId }, 'Organization tenant already exists');
-  }
+  logger.info({ tenantId }, 'Ensured organization tenant exists');
 
   return tenant;
 }
@@ -248,7 +258,11 @@ export async function ensureUserInTenant(
     }
   );
 
-  const userTenantRole = result?.value as UserTenantRoleDocument;
+  const userTenantRole = extractFindOneAndUpdateDoc<UserTenantRoleDocument>(result);
+
+  if (!userTenantRole) {
+    throw new Error(`Failed to ensure user role for tenant ${tenantId}`);
+  }
   
   if (userTenantRole) {
     logger.info(
@@ -280,7 +294,7 @@ export async function updateUserTenantRole(
     { returnDocument: 'after' }
   );
 
-  const value = updateResult?.value as UserTenantRoleDocument | null;
+  const value = extractFindOneAndUpdateDoc<UserTenantRoleDocument>(updateResult);
   if (value) {
     logger.info({ userId: userId.toString(), tenantId, newRole }, 'Updated user role in tenant');
   }
