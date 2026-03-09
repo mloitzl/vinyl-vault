@@ -20,36 +20,55 @@ const licenseKey = import.meta.env.VITE_NEW_RELIC_LICENSE_KEY;
 // Skip initialisation in environments where credentials are absent
 // (e.g. CI builds, unit tests, or local dev without NR configured).
 if (accountID && licenseKey) {
-  new BrowserAgent({
+  const agent = new BrowserAgent({
     init: {
+      session_replay: {
+        enabled: true,
+        block_selector: '',
+        mask_text_selector: '*',
+        sampling_rate: 10.0,
+        error_sampling_rate: 100.0,
+        mask_all_inputs: true,
+        collect_fonts: true,
+        inline_images: false,
+        inline_stylesheet: true,
+        fix_stylesheets: true,
+        preload: false,
+        mask_input_options: {},
+      },
       distributed_tracing: {
         // Emit W3C traceparent headers — compatible with the OTel traces
         // already flowing through the BFF and Backend.
         enabled: true,
-        cors_use_newrelic_header: false,
+        cors_use_newrelic_header: true,
         cors_use_tracecontext_headers: true,
         allowed_origins: [
           'localhost',
           'vinylvault.antisocializer.org',
-          'vinylvault.loitzl.com',
+          'vinyl-vault-demo.loitzl.com',
         ],
       },
-      privacy:  { cookies_enabled: true },
-      ajax:     { deny_list: ['bam.nr-data.net', 'bam-cell.nr-data.net'] },
+      performance: { capture_measures: true },
+      browser_consent_mode: { enabled: false },
+      privacy: { cookies_enabled: true },
+      ajax: { deny_list: ['bam.eu01.nr-data.net'], capture_payloads: 'none' },
     },
     info: {
-      beacon:       'bam.nr-data.net',
-      errorBeacon:  'bam.nr-data.net',
+      beacon: 'bam.eu01.nr-data.net',
+      errorBeacon: 'bam.eu01.nr-data.net',
       licenseKey,
       applicationID: appID,
       sa: 1,
     },
     loader_config: {
       accountID,
-      trustKey:      accountID,
+      trustKey: accountID,
       agentID,
       licenseKey,
       applicationID: appID,
     },
   });
+
+  agent.setCustomAttribute('environment', import.meta.env.VITE_OTEL_ENVIRONMENT ?? 'dev');
 }
+

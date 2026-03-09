@@ -1,5 +1,4 @@
-import './newrelic.js';
-import './instrumentation.js';
+import './newrelic';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
