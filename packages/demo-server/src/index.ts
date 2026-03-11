@@ -15,9 +15,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_PATH = path.resolve(__dirname, '../../backend/dist/index.js');
 const BFF_PATH = path.resolve(__dirname, '../../bff/dist/index.js');
 
-// Instrumentation modules loaded via --import so OTel patches fire before app code.
-const BACKEND_OTEL = path.resolve(__dirname, '../../backend/dist/instrumentation.js');
-const BFF_OTEL = path.resolve(__dirname, '../../bff/dist/instrumentation.js');
+// Both register.mjs (ESM module hook) and instrumentation.js must be loaded in
+// the child process — this mirrors the CMD in Dockerfile.backend / Dockerfile.bff:
+//   node --import ./dist/register.mjs --import ./dist/instrumentation.js dist/index.js
+// Without register.mjs the @opentelemetry/instrumentation ESM hook is never
+// installed, so pino cannot be patched and log records never reach the
+// OTel LoggerProvider (traces still work because HTTP patching is CJS-style).
+const BACKEND_REGISTER = path.resolve(__dirname, '../../backend/dist/register.mjs');
+const BACKEND_OTEL     = path.resolve(__dirname, '../../backend/dist/instrumentation.js');
+const BFF_REGISTER     = path.resolve(__dirname, '../../bff/dist/register.mjs');
+const BFF_OTEL         = path.resolve(__dirname, '../../bff/dist/instrumentation.js');
 
 const runtimeEnv = {
   LOG_LEVEL: process.env.LOG_LEVEL ?? '(unset)',
@@ -32,7 +39,7 @@ console.log(`[Demo-Orchestrator]: Targeting BFF at ${BFF_PATH}`);
 // 1. Launch Services
 const backend = fork(BACKEND_PATH, {
   env: { ...process.env, BACKEND_PORT: '4001', NODE_ENV: 'production', OTEL_SERVICE_NAME: 'vv-backend' },
-  execArgv: ['--import', BACKEND_OTEL],
+  execArgv: ['--import', BACKEND_REGISTER, '--import', BACKEND_OTEL],
 });
 
 const bff = fork(BFF_PATH, {
@@ -46,7 +53,7 @@ const bff = fork(BFF_PATH, {
     ...(process.env.COOKIE_DOMAIN ? { COOKIE_DOMAIN: process.env.COOKIE_DOMAIN } : {}),
     OTEL_SERVICE_NAME: 'vv-bff',
   },
-  execArgv: ['--import', BFF_OTEL],
+  execArgv: ['--import', BFF_REGISTER, '--import', BFF_OTEL],
 });
 
 // 2. Gateway Routes
