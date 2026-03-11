@@ -23,7 +23,7 @@ const transport = enablePretty
     })
   : undefined;
 
-// Adds active OTel trace/span IDs to every log line so New Relic can
+// Adds active OTel trace/span IDs to every log line so Betterstack can
 // correlate log entries with the distributed trace they belong to.
 const mixin = () => {
   const span = trace.getActiveSpan();
