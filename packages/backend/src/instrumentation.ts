@@ -76,7 +76,7 @@ try {
     msg: 'OTel SDK started',
   }));
   if (!headersSet) {
-    console.warn('[OTel] OTEL_EXPORTER_OTLP_HEADERS is not set — traces/metrics/logs will be rejected by New Relic (403). Add api-key=<license-key> to your .env.');
+    console.warn('[OTel] OTEL_EXPORTER_OTLP_HEADERS is not set — traces/metrics/logs will be rejected by Betterstack (401). Add Authorization=Bearer <source-token> to your .env.');
   }
 } catch (err) {
   console.error('[OTel] SDK failed to start', err);
