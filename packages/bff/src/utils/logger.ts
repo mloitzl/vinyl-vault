@@ -1,5 +1,6 @@
 import pino from 'pino';
 import pinoHttp from 'pino-http';
+import { trace } from '@opentelemetry/api';
 import { config as dotenvConfig } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -23,8 +24,21 @@ const transport = enablePretty
     })
   : undefined;
 
+// Adds active OTel trace/span IDs to every log line so New Relic can
+// correlate log entries with the distributed trace they belong to.
+const mixin = () => {
+  const span = trace.getActiveSpan();
+  if (!span) return {};
+  const ctx = span.spanContext();
+  return {
+    trace_id: ctx.traceId,
+    span_id: ctx.spanId,
+  };
+};
+
 const baseOptions = {
   level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  mixin,
 };
 
 export const logger = transport ? pino(baseOptions, transport) : pino(baseOptions);

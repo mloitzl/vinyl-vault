@@ -1,50 +1,12 @@
 // MongoDB connection and client
-// TODO: Implement MongoDB connection
 
 import { MongoClient, Db } from 'mongodb';
 import { createHash } from 'crypto';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
-let client: MongoClient | null = null;
-let db: Db | null = null;
-
-// Tenant database connection pool (cache connections by tenantId)
-const tenantClients = new Map<string, MongoClient>();
-const tenantDbs = new Map<string, Db>();
-
-export async function connectToDatabase(): Promise<Db> {
-  if (db) {
-    return db;
-  }
-
-  client = new MongoClient(config.mongodb.uri, {
-    maxPoolSize: 10, // Limit connection pool size
-    minPoolSize: 2,
-    maxIdleTimeMS: 60000, // Close idle connections after 1 minute
-  });
-  await client.connect();
-  db = client.db();
-
-  logger.info('Connected to MongoDB');
-  return db;
-}
-
-export async function disconnectFromDatabase(): Promise<void> {
-  if (client) {
-    await client.close();
-    client = null;
-    db = null;
-    logger.info('Disconnected from MongoDB');
-  }
-}
-
-export function getDatabase(): Db {
-  if (!db) {
-    throw new Error('Database not connected. Call connectToDatabase first.');
-  }
-  return db;
-}
+// Single shared client for all tenant databases
+let tenantBaseClient: MongoClient | null = null;
 
 // Derive a tenant database name from a tenantId (user_{id} or org_{id}).
 // MongoDB has a 38-byte limit for database names, so we use a hash of the tenantId
@@ -54,62 +16,39 @@ export function getTenantDbName(tenantId: string): string {
   return `vv_${hash}`;
 }
 
-// Get or create a tenant database connection (cached by tenantId).
-// Uses MONGODB_URI_BASE from config to dynamically connect to tenant-specific databases.
+// Get a tenant Db instance using the shared connection pool.
+// The shared MongoClient is initialised once; subsequent calls reuse the same pool.
 export async function getTenantDb(tenantId: string): Promise<Db> {
   if (!tenantId) {
     throw new Error('tenantId is required to get tenant database');
   }
 
-  // Check if we already have a cached connection for this tenant
-  if (tenantDbs.has(tenantId)) {
-    return tenantDbs.get(tenantId)!;
+  if (!tenantBaseClient) {
+    tenantBaseClient = new MongoClient(config.mongodb.uriBase, {
+      maxPoolSize: 100,     // Shared across all tenants
+      minPoolSize: 5,       // Keep a few connections warm
+      maxIdleTimeMS: 60000, // Close idle connections after 1 minute
+    });
+    await tenantBaseClient.connect();
+    logger.info('Connected shared base client for all tenant databases');
   }
 
-  // Create new connection for this tenant
   const dbName = getTenantDbName(tenantId);
-  const tenantClient = new MongoClient(config.mongodb.uriBase, {
-    maxPoolSize: 5, // Smaller pool per tenant to avoid exhausting total connections
-    minPoolSize: 1,
-    maxIdleTimeMS: 60000, // Close idle connections after 1 minute
-  });
-
-  try {
-    await tenantClient.connect();
-    const tenantDb = tenantClient.db(dbName);
-
-    // Cache the connection and client for reuse
-    tenantClients.set(tenantId, tenantClient);
-    tenantDbs.set(tenantId, tenantDb);
-
-    logger.info({ tenantId, dbName }, 'Connected to tenant database');
-    return tenantDb;
-  } catch (error) {
-    tenantClient.close().catch(() => {});
-    throw new Error(
-      `Failed to connect to tenant database ${dbName}: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-  }
+  return tenantBaseClient.db(dbName);
 }
 
-// Close all tenant database connections
+// Close the shared tenant client
 export async function closeTenantDbs(): Promise<void> {
-  const closePromises = Array.from(tenantClients.entries()).map(
-    async ([tenantId, tenantClient]) => {
-      try {
-        await tenantClient.close();
-        logger.info({ tenantId }, 'Disconnected from tenant database');
-      } catch (error) {
-        logger.error({ tenantId, err: error }, 'Error closing tenant database');
-      }
+  if (tenantBaseClient) {
+    try {
+      await tenantBaseClient.close();
+      logger.info('Disconnected shared tenant base client');
+    } catch (error) {
+      logger.error({ err: error }, 'Error closing tenant base client');
+    } finally {
+      tenantBaseClient = null;
     }
-  );
-
-  await Promise.all(closePromises);
-  tenantClients.clear();
-  tenantDbs.clear();
+  }
 }
 
 // Track which tenant databases have been initialized

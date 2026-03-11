@@ -76,6 +76,9 @@ async function main() {
     cors({
       origin: config.isProduction ? config.frontend.url : true,
       credentials: true,
+      // Allow W3C Trace Context headers so the browser can propagate the
+      // distributed trace ID from the frontend to the BFF.
+      allowedHeaders: ['Content-Type', 'Authorization', 'traceparent', 'tracestate'],
     })
   );
 

@@ -21,6 +21,7 @@ jobs:
               uses: pnpm/action-setup@v2
               with:
                   version: 10
+                  dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -63,6 +64,7 @@ jobs:
               uses: pnpm/action-setup@v2
               with:
                   version: 10
+                  dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -107,6 +109,7 @@ jobs:
               uses: pnpm/action-setup@v2
               with:
                   version: 10
+                  dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
             - name: Setup Node.js
               uses: actions/setup-node@v4

@@ -22,6 +22,7 @@ resources:
   
   # ConfigMaps only (Secrets must be created manually via kubectl)
   - configmaps/app-config.yaml
+  - configmaps/otel-config.yaml
 
 labels:
   - pairs:

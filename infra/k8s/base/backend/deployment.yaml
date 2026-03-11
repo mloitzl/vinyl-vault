@@ -51,11 +51,6 @@ spec:
             secretKeyRef:
               name: mongodb-secrets
               key: MONGODB_REGISTRY_URI
-        - name: MONGODB_URI
-          valueFrom:
-            secretKeyRef:
-              name: mongodb-secrets
-              key: MONGODB_BACKEND_URI
         - name: MONGODB_URI_BASE
           valueFrom:
             secretKeyRef:
@@ -76,6 +71,23 @@ spec:
             configMapKeyRef:
               name: app-config
               key: ENABLE_TENANT_FEATURES
+        - name: OTEL_SERVICE_NAME
+          value: "vv-backend"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: otel-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: otel-secrets
+              key: OTEL_EXPORTER_OTLP_HEADERS
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          valueFrom:
+            configMapKeyRef:
+              name: otel-config
+              key: OTEL_RESOURCE_ATTRIBUTES
         resources:
           requests:
             memory: "256Mi"

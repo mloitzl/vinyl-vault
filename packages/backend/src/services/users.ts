@@ -1,7 +1,7 @@
 // User service for database operations
 
 import { ObjectId } from 'mongodb';
-import { connectToDatabase } from '../db/connection.js';
+import { getRegistryDb } from '../db/registry.js';
 import { COLLECTIONS } from '../db/collections.js';
 
 export interface UserDocument {
@@ -48,7 +48,7 @@ function documentToUser(doc: UserDocument): User {
 }
 
 export async function findUserById(id: string): Promise<User | null> {
-  const db = await connectToDatabase();
+  const db = await getRegistryDb();
   const collection = db.collection<UserDocument>(COLLECTIONS.USERS);
   
   let objectId: ObjectId;
@@ -63,14 +63,14 @@ export async function findUserById(id: string): Promise<User | null> {
 }
 
 export async function findUserByGithubId(githubId: string): Promise<User | null> {
-  const db = await connectToDatabase();
+  const db = await getRegistryDb();
   const collection = db.collection<UserDocument>(COLLECTIONS.USERS);
   const doc = await collection.findOne({ githubId });
   return doc ? documentToUser(doc) : null;
 }
 
 export async function upsertUser(input: UpsertUserInput): Promise<User> {
-  const db = await connectToDatabase();
+  const db = await getRegistryDb();
   const collection = db.collection<UserDocument>(COLLECTIONS.USERS);
   
   const now = new Date();

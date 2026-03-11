@@ -30,10 +30,11 @@ RUN npm install -g pnpm
 COPY --from=builder /app/packages/bff/dist ./dist
 COPY --from=builder /app/packages/bff/package.json ./
 COPY --from=builder /app/packages/bff/src/schema.graphql ./dist/
+COPY --from=builder /app/packages/bff/src/register.mjs ./dist/register.mjs
 
 # Install production dependencies only
 RUN pnpm install --prod
 
 EXPOSE 3001
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--import", "./dist/register.mjs", "--import", "./dist/instrumentation.js", "dist/index.js"]

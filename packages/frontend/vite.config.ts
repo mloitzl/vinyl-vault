@@ -3,13 +3,11 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  envDir: '../../',
   plugins: [
     react({
       babel: {
-        plugins: [[
-          'babel-plugin-relay',
-          { artifactDirectory: './src/__generated__' }
-        ]],
+        plugins: [['babel-plugin-relay', { artifactDirectory: './src/__generated__' }]],
       },
     }),
   ],

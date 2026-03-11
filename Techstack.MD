@@ -275,11 +275,12 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `pnpm dev` for development (runs all services in parallel).
 
 **Logging:**
-- Application logs to stdout.
-- System logs via journalctl, rotated regularly.
+- Application logs to stdout via **pino** (structured JSON, trace/span IDs injected via OTel mixin).
+- Forwarded to **Betterstack Logs** via OpenTelemetry OTLP exporter.
 
-**Monitoring (optional):**
-- Lightweight tools (e.g., Prometheus node exporter + Grafana if desired).
+**Monitoring:**
+- **Betterstack Logs** — distributed traces, metrics, and structured log aggregation for BFF and Backend (via OTel OTLP).
+- **LogRocket** — frontend session replay, JS error capture, and network request logging.
 
 ## 8. Development Environment
 

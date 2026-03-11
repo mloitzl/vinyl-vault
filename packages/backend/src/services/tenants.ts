@@ -11,6 +11,20 @@ import type { UserTenantRoleDocument } from '../models/userTenantRole.js';
 export type TenantType = 'USER' | 'ORGANIZATION';
 export type TenantRole = 'ADMIN' | 'MEMBER' | 'VIEWER';
 
+function extractFindOneAndUpdateDoc<T>(result: unknown): T | null {
+  if (!result) {
+    return null;
+  }
+
+  // MongoDB driver v6 can return the document directly.
+  if (typeof result === 'object' && result !== null && 'value' in result) {
+    return (result as { value: T | null }).value;
+  }
+
+  // MongoDB driver v5-style with includeResultMetadata: false semantics.
+  return result as T;
+}
+
 // Create a personal USER tenant for a user
 // tenantId = user_{userId}
 // databaseName = vinylvault_user_{userId}
@@ -52,32 +66,34 @@ export async function createOrganizationTenant(
   const databaseName = getTenantDbName(tenantId);
 
   const now = new Date();
-  const tenant: TenantDocument = {
-    _id: new ObjectId(),
-    tenantId,
-    tenantType: 'ORGANIZATION',
-    name: orgName,
-    githubOrgName,
-    databaseName,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    const result = await registryDb.collection('tenants').insertOne(tenant);
-    logger.info({ tenantId, insertedId: result.insertedId }, 'Created organization tenant');
-    return tenant;
-  } catch (err: any) {
-    if (err.code === 11000) {
-      // Tenant already exists, return the existing one
-      const existing = await registryDb.collection('tenants').findOne({ tenantId });
-      if (existing) {
-        logger.info({ tenantId }, 'Organization tenant already exists');
-        return existing as TenantDocument;
-      }
+  const result = await registryDb.collection('tenants').findOneAndUpdate(
+    { tenantId },
+    {
+      $setOnInsert: {
+        _id: new ObjectId(),
+        tenantId,
+        tenantType: 'ORGANIZATION',
+        name: orgName,
+        githubOrgName,
+        databaseName,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
     }
-    throw err;
+  );
+
+  const tenant = extractFindOneAndUpdateDoc<TenantDocument>(result);
+  if (!tenant) {
+    throw new Error(`Failed to create or load organization tenant ${tenantId}`);
   }
+
+  logger.info({ tenantId }, 'Ensured organization tenant exists');
+
+  return tenant;
 }
 
 // Get all tenants for a user (including role information)
@@ -193,6 +209,71 @@ export async function removeUserFromTenant(userId: ObjectId, tenantId: string): 
   return removed;
 }
 
+// Ensure a user is in a tenant with a specific role
+// If the user already has a role in this tenant, update it to the new role
+// If not, add the user to the tenant with the specified role
+// This is useful for re-adding GitHub App installations
+export async function ensureUserInTenant(
+  userId: ObjectId,
+  tenantId: string,
+  role: TenantRole
+): Promise<UserTenantRoleDocument> {
+  const registryDb = await getRegistryDb();
+
+  // For organization tenants, check if this is the first user
+  let effectiveRole = role;
+  if (tenantId.startsWith('org_') && role === 'VIEWER') {
+    const existingUsers = await registryDb
+      .collection('user_tenant_roles')
+      .countDocuments({ tenantId });
+
+    if (existingUsers === 0) {
+      // First user in org gets ADMIN role
+      effectiveRole = 'ADMIN';
+      logger.info(
+        { userId: userId.toString(), tenantId },
+        'First user in org tenant, assigning ADMIN role'
+      );
+    }
+  }
+
+  const now = new Date();
+  
+  // Use updateOne with upsert to either insert or update
+  const result = await registryDb.collection('user_tenant_roles').findOneAndUpdate(
+    { userId, tenantId },
+    {
+      $set: {
+        role: effectiveRole,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        _id: new ObjectId(),
+        createdAt: now,
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
+    }
+  );
+
+  const userTenantRole = extractFindOneAndUpdateDoc<UserTenantRoleDocument>(result);
+
+  if (!userTenantRole) {
+    throw new Error(`Failed to ensure user role for tenant ${tenantId}`);
+  }
+  
+  if (userTenantRole) {
+    logger.info(
+      { userId: userId.toString(), tenantId, role: effectiveRole },
+      'Ensured user in tenant (upserted)'
+    );
+  }
+
+  return userTenantRole;
+}
+
 // Update a user's role in a tenant
 export async function updateUserTenantRole(
   userId: ObjectId,
@@ -213,7 +294,7 @@ export async function updateUserTenantRole(
     { returnDocument: 'after' }
   );
 
-  const value = updateResult?.value as UserTenantRoleDocument | null;
+  const value = extractFindOneAndUpdateDoc<UserTenantRoleDocument>(updateResult);
   if (value) {
     logger.info({ userId: userId.toString(), tenantId, newRole }, 'Updated user role in tenant');
   }
