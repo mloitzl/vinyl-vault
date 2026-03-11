@@ -22,9 +22,9 @@ const BFF_PATH = path.resolve(__dirname, '../../bff/dist/index.js');
 // installed, so pino cannot be patched and log records never reach the
 // OTel LoggerProvider (traces still work because HTTP patching is CJS-style).
 const BACKEND_REGISTER = path.resolve(__dirname, '../../backend/dist/register.mjs');
-const BACKEND_OTEL     = path.resolve(__dirname, '../../backend/dist/instrumentation.js');
-const BFF_REGISTER     = path.resolve(__dirname, '../../bff/dist/register.mjs');
-const BFF_OTEL         = path.resolve(__dirname, '../../bff/dist/instrumentation.js');
+const BACKEND_OTEL = path.resolve(__dirname, '../../backend/dist/instrumentation.js');
+const BFF_REGISTER = path.resolve(__dirname, '../../bff/dist/register.mjs');
+const BFF_OTEL = path.resolve(__dirname, '../../bff/dist/instrumentation.js');
 
 const runtimeEnv = {
   LOG_LEVEL: process.env.LOG_LEVEL ?? '(unset)',
@@ -38,7 +38,12 @@ console.log(`[Demo-Orchestrator]: Targeting BFF at ${BFF_PATH}`);
 
 // 1. Launch Services
 const backend = fork(BACKEND_PATH, {
-  env: { ...process.env, BACKEND_PORT: '4001', NODE_ENV: 'production', OTEL_SERVICE_NAME: 'vv-backend' },
+  env: {
+    ...process.env,
+    BACKEND_PORT: '4001',
+    NODE_ENV: 'production',
+    OTEL_SERVICE_NAME: 'vv-backend',
+  },
   execArgv: ['--import', BACKEND_REGISTER, '--import', BACKEND_OTEL],
 });
 
