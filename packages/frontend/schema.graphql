@@ -1,13 +1,296 @@
-"""Exposes a URL that specifies the behavior of this scalar."""
-directive @specifiedBy(
-  """The URL that specifies the behavior of this scalar."""
-  url: String!
-) on SCALAR
+"""
+Relay-compatible Node interface. All persisted domain types implement this.
+"""
+interface Node {
+  id: ID!
+}
+
+type Query {
+  """Get a user by ID."""
+  user(id: ID!): User
+
+  """Get a record by ID."""
+  record(id: ID!): Record
+
+  """Get a release by ID."""
+  release(id: ID!): Release
+
+  """Search releases by barcode."""
+  releasesByBarcode(barcode: String!): [Release!]!
+
+  """
+  List records with cursor-based pagination and filtering.
+  The active user and tenant are resolved from the JWT — no userId parameter needed.
+  """
+  records(first: Int, after: String, last: Int, before: String, filter: RecordFilter): RecordConnection!
+
+  """Browse records grouped by artist."""
+  artists(first: Int, after: String, filter: ArtistFilter): ArtistConnection!
+
+  """Browse records grouped by release (album title + artist)."""
+  albums(first: Int, after: String, filter: AlbumBrowseFilter): AlbumBrowseConnection!
+
+  """All genres present in the current tenant's collection."""
+  genres: [GenreView!]!
+
+  """Get all tenants for a user (including their role in each tenant)."""
+  userTenants(userId: ID!): [UserTenantRole!]!
+
+  """The currently authenticated user, or null if not logged in."""
+  viewer: User
+}
+
+type Mutation {
+  """Look up a barcode and return matching releases with scoring."""
+  scanBarcode(barcode: String!): ScanBarcodePayload!
+
+  """Create a new record."""
+  createRecord(input: CreateRecordInput!): CreateRecordPayload!
+
+  """Update a record."""
+  updateRecord(input: UpdateRecordInput!): UpdateRecordPayload!
+
+  """Delete a record."""
+  deleteRecord(input: DeleteRecordInput!): DeleteRecordPayload!
+
+  """Create or update a user from GitHub data."""
+  upsertUser(input: UpsertUserInput!): User!
+
+  """Create a new tenant (personal or organization)."""
+  createTenant(input: CreateTenantInput!): Tenant!
+
+  """Add a user to a tenant with a specific role."""
+  addUserToTenant(userId: ID!, tenantId: String!, role: TenantRole!): UserTenantRole!
+
+  """
+  Handle GitHub installation webhook payloads forwarded by the BFF.
+  Validates the signature and stores installation metadata in the registry database.
+  """
+  handleGitHubInstallationWebhook(input: GitHubInstallationWebhookInput!): GitHubInstallationWebhookResult!
+
+  """
+  Complete GitHub App installation setup: link user to installation and create org tenant.
+  Called after user is redirected from GitHub post-installation.
+  Requires authenticated user (BFF validates session).
+  """
+  completeInstallationSetup(input: CompleteInstallationSetupInput!): CompleteInstallationSetupResult!
+
+  """
+  Switch the active tenant for the current user.
+  Updates the session and returns the user with the new active tenant context.
+  """
+  switchTenant(tenantId: String!): User!
+}
+
+type User implements Node {
+  id: ID!
+  githubId: String!
+  githubLogin: String!
+  displayName: String!
+  avatarUrl: String
+  email: String
+  role: UserRole!
+  createdAt: String!
+  updatedAt: String!
+  availableTenants: [Tenant!]!
+  activeTenant: Tenant
+  featureFlags: FeatureFlags!
+}
 
 """
-Indicates exactly one field must be supplied and this field must not be `null`.
+User role in the application.
+- ADMIN: Full control over the application and all tenants
+- MEMBER: Can create and manage their own content
+- VIEWER: Read-only access
 """
-directive @oneOf on INPUT_OBJECT
+enum UserRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+type Record implements Node {
+  id: ID!
+  release: Release!
+  owner: User!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Release implements Node {
+  id: ID!
+  barcode: String!
+  artist: String!
+  title: String!
+  year: Int
+  format: String
+  genre: [String!]
+  style: [String!]
+  label: String
+  country: String
+  coverImageUrl: String
+  trackList: [Track!]
+  externalId: String
+  source: ReleaseSource!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Track {
+  position: String
+  title: String!
+  duration: String
+}
+
+enum ReleaseSource {
+  DISCOGS
+  MUSICBRAINZ
+  MANUAL
+}
+
+"""A user's role in a specific tenant."""
+type UserTenantRole {
+  """User ID (MongoDB ObjectId as string)."""
+  userId: ID!
+
+  """Tenant identifier."""
+  tenantId: String!
+
+  """User's role in this tenant: ADMIN, MEMBER, or VIEWER."""
+  role: TenantRole!
+
+  """Tenant type: USER or ORGANIZATION."""
+  tenantType: TenantType!
+
+  """Tenant display name."""
+  name: String!
+
+  """Tenant database name."""
+  databaseName: String!
+
+  """When the role was created."""
+  createdAt: String!
+}
+
+"""Input for creating a new tenant."""
+input CreateTenantInput {
+  """Type of tenant to create: USER or ORGANIZATION."""
+  tenantType: TenantType!
+
+  """Display name for the tenant."""
+  name: String!
+
+  """GitHub organization ID (for ORGANIZATION tenants only)."""
+  githubOrgId: String
+
+  """GitHub organization name (for ORGANIZATION tenants only)."""
+  githubOrgName: String
+}
+
+type RecordConnection {
+  edges: [RecordEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RecordEdge {
+  cursor: String!
+  node: Record!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+input RecordFilter {
+  artist: String
+  title: String
+  year: Int
+  format: String
+  location: String
+  search: String
+}
+
+input CreateRecordInput {
+  releaseId: ID!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+}
+
+input UpdateRecordInput {
+  id: ID!
+  purchaseDate: String
+  price: Float
+  condition: String
+  location: String
+  notes: String
+}
+
+input DeleteRecordInput {
+  id: ID!
+}
+
+type CreateRecordPayload {
+  record: Record
+  errors: [String!]
+}
+
+type UpdateRecordPayload {
+  record: Record
+  errors: [String!]
+}
+
+type DeleteRecordPayload {
+  deletedRecordId: ID
+  errors: [String!]
+}
+
+input UpsertUserInput {
+  githubId: String!
+  githubLogin: String!
+  displayName: String!
+  avatarUrl: String
+  email: String
+}
+
+"""Result of a barcode lookup using the blended scoring approach."""
+type ScanBarcodePayload {
+  """
+  Aggregated albums derived from releases across all sources.
+  Each album represents a unique normalized artist+title combination.
+  Albums are sorted by the score of their primary release (highest first).
+  """
+  albums: [Album!]!
+
+  """
+  Legacy field: flat list of releases for backward compatibility.
+  @deprecated Use albums instead for the full scoring and grouping benefits.
+  """
+  releases: [Release!]! @deprecated(reason: "Use albums instead")
+
+  """Whether the result was served from cache."""
+  fromCache: Boolean!
+
+  """Timing information for performance analysis."""
+  timing: LookupTiming
+
+  """
+  Errors encountered during lookup (non-fatal).
+  The lookup may still return partial results.
+  """
+  errors: [String!]
+}
 
 """
 An aggregated album combining data from multiple release sources.
@@ -60,355 +343,16 @@ type Album {
   score: Int!
 }
 
-type AlbumBrowseConnection {
-  edges: [AlbumBrowseEdge!]!
-  pageInfo: PageInfo!
-  totalCount: Int!
-}
+"""A release with its scoring information."""
+type ScoredRelease {
+  """Original release data."""
+  release: Release!
 
-type AlbumBrowseEdge {
-  cursor: String!
-  node: AlbumBrowseView!
-}
-
-input AlbumBrowseFilter {
-  search: String
-  artist: String
-}
-
-"""An album (release group) as seen in the current tenant's collection."""
-type AlbumBrowseView implements Node {
-  id: ID!
-  title: String!
-  artist: String!
-  year: Int
-  coverImageUrl: String
-  format: String
-  recordCount: Int!
-  genres: [String!]!
-}
-
-"""An alternative release for an album (simplified view)."""
-type AlternativeRelease {
-  """External ID from the source."""
-  externalId: String!
-
-  """Source of this release."""
-  source: ReleaseSource!
-
-  """Country of release."""
-  country: String
-
-  """Year of release."""
-  year: Int
-
-  """Format/media type."""
-  format: String
-
-  """Label name."""
-  label: String
-
-  """Score for this release."""
+  """Total score calculated by the scoring algorithm."""
   score: Int!
 
-  """Edition notes if any."""
-  editionNote: String
-}
-
-type ArtistConnection {
-  edges: [ArtistEdge!]!
-  pageInfo: PageInfo!
-  totalCount: Int!
-}
-
-type ArtistEdge {
-  cursor: String!
-  node: ArtistView!
-}
-
-input ArtistFilter {
-  search: String
-}
-
-"""An artist as seen in the current tenant's collection."""
-type ArtistView implements Node {
-  id: ID!
-  name: String!
-  recordCount: Int!
-  coverImageUrl: String
-  genres: [String!]!
-}
-
-input CompleteInstallationSetupInput {
-  """User ID (from BFF session, already authenticated)."""
-  userId: String!
-
-  """Installation ID from GitHub."""
-  installationId: Int!
-
-  """Setup action (e.g., 'install')."""
-  setupAction: String
-}
-
-type CompleteInstallationSetupResult {
-  ok: Boolean!
-  tenantId: String!
-  tenantName: String!
-  message: String
-}
-
-input CreateRecordInput {
-  releaseId: ID!
-  purchaseDate: String
-  price: Float
-  condition: String
-  location: String
-  notes: String
-}
-
-type CreateRecordPayload {
-  record: Record
-  errors: [String!]
-}
-
-"""Input for creating a new tenant."""
-input CreateTenantInput {
-  """Display name for the tenant."""
-  name: String!
-
-  """GitHub organization ID (for ORGANIZATION tenants only)."""
-  githubOrgId: String
-
-  """GitHub organization name (for ORGANIZATION tenants only)."""
-  githubOrgName: String
-}
-
-input DeleteRecordInput {
-  id: ID!
-}
-
-type DeleteRecordPayload {
-  deletedRecordId: ID
-  errors: [String!]
-}
-
-"""External IDs from various sources."""
-type ExternalIds {
-  discogs: [String!]!
-  musicbrainz: [String!]!
-}
-
-"""Feature flags surfaced to the frontend."""
-type FeatureFlags {
-  enableTenantFeatures: Boolean!
-}
-
-"""A genre present in the current tenant's collection."""
-type GenreView {
-  name: String!
-  recordCount: Int!
-}
-
-input GitHubInstallationWebhookInput {
-  """Base64-encoded raw webhook payload to preserve signature integrity."""
-  payloadBase64: String!
-
-  """X-Hub-Signature-256 header value from GitHub."""
-  signature: String!
-}
-
-type GitHubInstallationWebhookResult {
-  ok: Boolean!
-  message: String
-}
-
-"""Timing information for performance analysis."""
-type LookupTiming {
-  """Time spent fetching from Discogs (ms)."""
-  discogsMs: Int!
-
-  """Time spent fetching from MusicBrainz (ms)."""
-  musicbrainzMs: Int!
-
-  """Time spent on scoring and aggregation (ms)."""
-  scoringMs: Int!
-
-  """Total lookup time (ms)."""
-  totalMs: Int!
-}
-
-type Mutation {
-  """Look up a barcode and return matching releases with scoring."""
-  scanBarcode(barcode: String!): ScanBarcodePayload!
-
-  """Create a new record."""
-  createRecord(input: CreateRecordInput!): CreateRecordPayload!
-
-  """Update a record."""
-  updateRecord(input: UpdateRecordInput!): UpdateRecordPayload!
-
-  """Delete a record."""
-  deleteRecord(input: DeleteRecordInput!): DeleteRecordPayload!
-
-  """Create or update a user from GitHub data."""
-  upsertUser(input: UpsertUserInput!): User!
-
-  """Add a user to a tenant with a specific role."""
-  addUserToTenant(userId: ID!, tenantId: String!): UserTenantRole!
-
-  """
-  Handle GitHub installation webhook payloads forwarded by the BFF.
-  Validates the signature and stores installation metadata in the registry database.
-  """
-  handleGitHubInstallationWebhook(input: GitHubInstallationWebhookInput!): GitHubInstallationWebhookResult!
-
-  """
-  Complete GitHub App installation setup: link user to installation and create org tenant.
-  Called after user is redirected from GitHub post-installation.
-  Requires authenticated user (BFF validates session).
-  """
-  completeInstallationSetup(input: CompleteInstallationSetupInput!): CompleteInstallationSetupResult!
-
-  """
-  Switch the active tenant for the current user.
-  Updates the session and returns the user with the new active tenant context.
-  """
-  switchTenant(tenantId: String!): User!
-}
-
-"""
-Relay-compatible Node interface. All persisted domain types implement this.
-"""
-interface Node {
-  id: ID!
-}
-
-type PageInfo {
-  hasNextPage: Boolean!
-  hasPreviousPage: Boolean!
-  startCursor: String
-  endCursor: String
-}
-
-type Query {
-  """Get a user by ID."""
-  user(id: ID!): User
-
-  """Get a record by ID."""
-  record(id: ID!): Record
-
-  """Get a release by ID."""
-  release(id: ID!): Release
-
-  """Search releases by barcode."""
-  releasesByBarcode(barcode: String!): [Release!]!
-
-  """
-  List records with cursor-based pagination and filtering.
-  The active user and tenant are resolved from the JWT — no userId parameter needed.
-  """
-  records(first: Int, after: String, last: Int, before: String, filter: RecordFilter): RecordConnection!
-
-  """Browse records grouped by artist."""
-  artists(first: Int, after: String, filter: ArtistFilter): ArtistConnection!
-
-  """Browse records grouped by release (album title + artist)."""
-  albums(first: Int, after: String, filter: AlbumBrowseFilter): AlbumBrowseConnection!
-
-  """All genres present in the current tenant's collection."""
-  genres: [GenreView!]!
-
-  """Get all tenants for a user (including their role in each tenant)."""
-  userTenants(userId: ID!): [UserTenantRole!]!
-
-  """The currently authenticated user, or null if not logged in."""
-  viewer: User
-}
-
-type Record implements Node {
-  id: ID!
-  release: Release!
-  owner: User!
-  purchaseDate: String
-  price: Float
-  condition: String
-  location: String
-  notes: String
-  createdAt: String!
-  updatedAt: String!
-}
-
-type RecordConnection {
-  edges: [RecordEdge!]!
-  pageInfo: PageInfo!
-  totalCount: Int!
-}
-
-type RecordEdge {
-  cursor: String!
-  node: Record!
-}
-
-input RecordFilter {
-  artist: String
-  title: String
-  year: Int
-  format: String
-  location: String
-  search: String
-}
-
-type Release implements Node {
-  id: ID!
-  barcode: String!
-  artist: String!
-  title: String!
-  year: Int
-  format: String
-  genre: [String!]
-  style: [String!]
-  label: String
-  country: String
-  coverImageUrl: String
-  trackList: [Track!]
-  externalId: String
-  source: ReleaseSource!
-  createdAt: String!
-  updatedAt: String!
-}
-
-enum ReleaseSource {
-  DISCOGS
-  MUSICBRAINZ
-  MANUAL
-}
-
-"""Result of a barcode lookup using the blended scoring approach."""
-type ScanBarcodePayload {
-  """
-  Aggregated albums derived from releases across all sources.
-  Each album represents a unique normalized artist+title combination.
-  Albums are sorted by the score of their primary release (highest first).
-  """
-  albums: [Album!]!
-
-  """
-  Legacy field: flat list of releases for backward compatibility.
-  @deprecated Use albums instead for the full scoring and grouping benefits.
-  """
-  releases: [Release!]! @deprecated(reason: "Use albums instead")
-
-  """Whether the result was served from cache."""
-  fromCache: Boolean!
-
-  """Timing information for performance analysis."""
-  timing: LookupTiming
-
-  """
-  Errors encountered during lookup (non-fatal).
-  The lookup may still return partial results.
-  """
-  errors: [String!]
+  """Detailed breakdown of how the score was calculated."""
+  scoreBreakdown: ScoreBreakdown!
 }
 
 """
@@ -441,16 +385,157 @@ type ScoreBreakdown {
   sourceBonus: Int!
 }
 
-"""A release with its scoring information."""
-type ScoredRelease {
-  """Original release data."""
-  release: Release!
+"""An alternative release for an album (simplified view)."""
+type AlternativeRelease {
+  """External ID from the source."""
+  externalId: String!
 
-  """Total score calculated by the scoring algorithm."""
+  """Source of this release."""
+  source: ReleaseSource!
+
+  """Country of release."""
+  country: String
+
+  """Year of release."""
+  year: Int
+
+  """Format/media type."""
+  format: String
+
+  """Label name."""
+  label: String
+
+  """Score for this release."""
   score: Int!
 
-  """Detailed breakdown of how the score was calculated."""
-  scoreBreakdown: ScoreBreakdown!
+  """Edition notes if any."""
+  editionNote: String
+}
+
+"""External IDs from various sources."""
+type ExternalIds {
+  discogs: [String!]!
+  musicbrainz: [String!]!
+}
+
+"""Timing information for performance analysis."""
+type LookupTiming {
+  """Time spent fetching from Discogs (ms)."""
+  discogsMs: Int!
+
+  """Time spent fetching from MusicBrainz (ms)."""
+  musicbrainzMs: Int!
+
+  """Time spent on scoring and aggregation (ms)."""
+  scoringMs: Int!
+
+  """Total lookup time (ms)."""
+  totalMs: Int!
+}
+
+input GitHubInstallationWebhookInput {
+  """Base64-encoded raw webhook payload to preserve signature integrity."""
+  payloadBase64: String!
+
+  """X-Hub-Signature-256 header value from GitHub."""
+  signature: String!
+}
+
+type GitHubInstallationWebhookResult {
+  ok: Boolean!
+  message: String
+}
+
+input CompleteInstallationSetupInput {
+  """User ID (from BFF session, already authenticated)."""
+  userId: String!
+
+  """Installation ID from GitHub."""
+  installationId: Int!
+
+  """Setup action (e.g., 'install')."""
+  setupAction: String
+}
+
+type CompleteInstallationSetupResult {
+  ok: Boolean!
+  tenantId: String!
+  tenantName: String!
+  message: String
+}
+
+"""An artist as seen in the current tenant's collection."""
+type ArtistView implements Node {
+  id: ID!
+  name: String!
+  recordCount: Int!
+  coverImageUrl: String
+  genres: [String!]!
+}
+
+type ArtistConnection {
+  edges: [ArtistEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ArtistEdge {
+  cursor: String!
+  node: ArtistView!
+}
+
+input ArtistFilter {
+  search: String
+}
+
+"""An album (release group) as seen in the current tenant's collection."""
+type AlbumBrowseView implements Node {
+  id: ID!
+  title: String!
+  artist: String!
+  year: Int
+  coverImageUrl: String
+  format: String
+  recordCount: Int!
+  genres: [String!]!
+}
+
+type AlbumBrowseConnection {
+  edges: [AlbumBrowseEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type AlbumBrowseEdge {
+  cursor: String!
+  node: AlbumBrowseView!
+}
+
+input AlbumBrowseFilter {
+  search: String
+  artist: String
+}
+
+"""A genre present in the current tenant's collection."""
+type GenreView {
+  name: String!
+  recordCount: Int!
+}
+
+enum TenantType {
+  USER
+  ORGANIZATION
+}
+
+enum TenantRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+"""Feature flags surfaced to the frontend."""
+type FeatureFlags {
+  enableTenantFeatures: Boolean!
 }
 
 """
@@ -462,88 +547,3 @@ type Tenant {
   type: TenantType!
   role: TenantRole!
 }
-
-enum TenantRole {
-  ADMIN
-  MEMBER
-  VIEWER
-}
-
-enum TenantType {
-  USER
-  ORGANIZATION
-}
-
-type Track {
-  position: String
-  title: String!
-  duration: String
-}
-
-input UpdateRecordInput {
-  id: ID!
-  purchaseDate: String
-  price: Float
-  condition: String
-  location: String
-  notes: String
-}
-
-type UpdateRecordPayload {
-  record: Record
-  errors: [String!]
-}
-
-input UpsertUserInput {
-  githubId: String!
-  githubLogin: String!
-  displayName: String!
-  avatarUrl: String
-  email: String
-}
-
-type User implements Node {
-  id: ID!
-  githubId: String!
-  githubLogin: String!
-  displayName: String!
-  avatarUrl: String
-  email: String
-  role: UserRole!
-  createdAt: String!
-  updatedAt: String!
-  availableTenants: [Tenant!]!
-  activeTenant: Tenant
-  featureFlags: FeatureFlags!
-}
-
-"""
-User role in the application.
-- ADMIN: Full control over the application and all tenants
-- MEMBER: Can create and manage their own content
-- VIEWER: Read-only access
-"""
-enum UserRole {
-  ADMIN
-  MEMBER
-  VIEWER
-}
-
-"""A user's role in a specific tenant."""
-type UserTenantRole {
-  """User ID (MongoDB ObjectId as string)."""
-  userId: ID!
-
-  """Tenant identifier."""
-  tenantId: String!
-
-  """Tenant display name."""
-  name: String!
-
-  """Tenant database name."""
-  databaseName: String!
-
-  """When the role was created."""
-  createdAt: String!
-}
-
