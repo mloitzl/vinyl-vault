@@ -10,7 +10,6 @@ import {
   findRecords,
   updateRecord,
   deleteRecord,
-  findRecordsByUserId,
 } from '../services/records.js';
 import { ReleaseRepository } from '../models/release.js';
 import {
@@ -143,7 +142,7 @@ export const resolvers = {
     },
     records: async (
       _parent: unknown,
-      _args: { userId?: string; first?: number; after?: string; filter?: any },
+      _args: { first?: number; after?: string; last?: number; before?: string; filter?: any },
       context: GraphQLContext
     ) => {
       // Verify user has read access
@@ -156,12 +155,7 @@ export const resolvers = {
       }
 
       const filter = _args.filter || {};
-      const pagination = { first: _args.first, after: _args.after };
-
-      // If userId is provided, add it to filter
-      if (_args.userId) {
-        filter.userId = _args.userId;
-      }
+      const pagination = { first: _args.first, after: _args.after, last: _args.last, before: _args.before };
 
       const result = await findRecords(context.db, filter, pagination);
 
@@ -209,9 +203,186 @@ export const resolvers = {
         createdAt: tenant.createdAt.toISOString(),
       }));
     },
+
+    artists: async (
+      _parent: unknown,
+      _args: { first?: number; after?: string; filter?: { search?: string } },
+      context: GraphQLContext
+    ) => {
+      if (!canRead(context)) throw new Error('Unauthorized: user not authenticated');
+      if (!context.db) throw new Error('Tenant database connection not available');
+
+      const limit = Math.min(_args.first || 20, 100);
+      const search = _args.filter?.search;
+
+      // Aggregate: join records → releases, group by artist
+      const matchStage: Record<string, unknown> = {};
+      if (search) {
+        matchStage['release.artist'] = { $regex: search, $options: 'i' };
+      }
+      if (_args.after) {
+        matchStage['_id'] = { $gt: _args.after };
+      }
+
+      const pipeline: object[] = [
+        {
+          $lookup: {
+            from: 'releases',
+            localField: 'releaseId',
+            foreignField: '_id',
+            as: 'release',
+          },
+        },
+        { $unwind: '$release' },
+        ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+        {
+          $group: {
+            _id: '$release.artist',
+            recordCount: { $sum: 1 },
+            coverImageUrl: { $first: '$release.coverImageUrl' },
+            genres: { $addToSet: '$release.genre' },
+          },
+        },
+        { $sort: { _id: 1 } },
+        { $limit: limit + 1 },
+      ];
+
+      const rows = await context.db.collection('records').aggregate(pipeline).toArray();
+      const hasNextPage = rows.length > limit;
+      const items = hasNextPage ? rows.slice(0, limit) : rows;
+
+      const edges = items.map((row) => {
+        const genres = [...new Set((row.genres as string[][]).flat().filter(Boolean))];
+        const id = Buffer.from(`artist:${row._id}`).toString('base64');
+        return {
+          cursor: id,
+          node: { id, name: row._id as string, recordCount: row.recordCount as number, coverImageUrl: row.coverImageUrl || null, genres },
+        };
+      });
+
+      return {
+        edges,
+        pageInfo: {
+          hasNextPage,
+          hasPreviousPage: !!_args.after,
+          startCursor: edges[0]?.cursor ?? null,
+          endCursor: edges[edges.length - 1]?.cursor ?? null,
+        },
+        totalCount: edges.length,
+      };
+    },
+
+    albums: async (
+      _parent: unknown,
+      _args: { first?: number; after?: string; filter?: { search?: string; artist?: string } },
+      context: GraphQLContext
+    ) => {
+      if (!canRead(context)) throw new Error('Unauthorized: user not authenticated');
+      if (!context.db) throw new Error('Tenant database connection not available');
+
+      const limit = Math.min(_args.first || 20, 100);
+
+      const lookupMatch: Record<string, unknown> = {};
+      if (_args.filter?.artist) {
+        lookupMatch['release.artist'] = { $regex: _args.filter.artist, $options: 'i' };
+      }
+      if (_args.filter?.search) {
+        lookupMatch['$or'] = [
+          { 'release.title': { $regex: _args.filter.search, $options: 'i' } },
+          { 'release.artist': { $regex: _args.filter.search, $options: 'i' } },
+        ];
+      }
+
+      const pipeline: object[] = [
+        {
+          $lookup: {
+            from: 'releases',
+            localField: 'releaseId',
+            foreignField: '_id',
+            as: 'release',
+          },
+        },
+        { $unwind: '$release' },
+        ...(Object.keys(lookupMatch).length ? [{ $match: lookupMatch }] : []),
+        {
+          $group: {
+            _id: { artist: '$release.artist', title: '$release.title' },
+            recordCount: { $sum: 1 },
+            year: { $first: '$release.year' },
+            coverImageUrl: { $first: '$release.coverImageUrl' },
+            format: { $first: '$release.format' },
+            genres: { $addToSet: '$release.genre' },
+          },
+        },
+        { $sort: { '_id.artist': 1, '_id.title': 1 } },
+        { $limit: limit + 1 },
+      ];
+
+      const rows = await context.db.collection('records').aggregate(pipeline).toArray();
+      const hasNextPage = rows.length > limit;
+      const items = hasNextPage ? rows.slice(0, limit) : rows;
+
+      const edges = items.map((row) => {
+        const genres = [...new Set((row.genres as string[][]).flat().filter(Boolean))];
+        const id = Buffer.from(`album:${row._id.artist}|${row._id.title}`).toString('base64');
+        return {
+          cursor: id,
+          node: {
+            id,
+            title: row._id.title as string,
+            artist: row._id.artist as string,
+            year: row.year || null,
+            coverImageUrl: row.coverImageUrl || null,
+            format: row.format || null,
+            recordCount: row.recordCount as number,
+            genres,
+          },
+        };
+      });
+
+      return {
+        edges,
+        pageInfo: {
+          hasNextPage,
+          hasPreviousPage: !!_args.after,
+          startCursor: edges[0]?.cursor ?? null,
+          endCursor: edges[edges.length - 1]?.cursor ?? null,
+        },
+        totalCount: edges.length,
+      };
+    },
+
+    genres: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!canRead(context)) throw new Error('Unauthorized: user not authenticated');
+      if (!context.db) throw new Error('Tenant database connection not available');
+
+      const pipeline: object[] = [
+        {
+          $lookup: {
+            from: 'releases',
+            localField: 'releaseId',
+            foreignField: '_id',
+            as: 'release',
+          },
+        },
+        { $unwind: '$release' },
+        { $unwind: '$release.genre' },
+        { $match: { 'release.genre': { $exists: true, $nin: [null, ''] } } },
+        {
+          $group: {
+            _id: '$release.genre',
+            recordCount: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ];
+
+      const rows = await context.db.collection('records').aggregate(pipeline).toArray();
+      return rows.map((row) => ({ name: row._id as string, recordCount: row.recordCount as number }));
+    },
   },
   Mutation: {
-    lookupBarcode: async (
+    scanBarcode: async (
       _parent: unknown,
       _args: { barcode: string },
       context: GraphQLContext
@@ -348,34 +519,38 @@ export const resolvers = {
       },
       context: GraphQLContext
     ) => {
-      // Require MEMBER or ADMIN role to create records
       requireMember(context);
 
       if (!context.db) {
-        throw new Error('Tenant database connection not available');
+        return { record: null, errors: ['Tenant database connection not available'] };
       }
-
       if (!context.userId) {
-        throw new Error('User ID not found in context');
+        return { record: null, errors: ['User ID not found in context'] };
       }
 
-      const record = await createRecord(context.db, {
-        ...(_args.input as any),
-        userId: context.userId,
-      });
-
-      return {
-        id: record._id.toString(),
-        releaseId: record.releaseId.toString(),
-        userId: record.userId.toString(),
-        purchaseDate: record.purchaseDate?.toISOString(),
-        price: record.price,
-        condition: record.condition,
-        location: record.location,
-        notes: record.notes,
-        createdAt: record.createdAt.toISOString(),
-        updatedAt: record.updatedAt.toISOString(),
-      };
+      try {
+        const record = await createRecord(context.db, {
+          ...(_args.input as any),
+          userId: context.userId,
+        });
+        return {
+          record: {
+            id: record._id.toString(),
+            releaseId: record.releaseId.toString(),
+            userId: record.userId.toString(),
+            purchaseDate: record.purchaseDate?.toISOString(),
+            price: record.price,
+            condition: record.condition,
+            location: record.location,
+            notes: record.notes,
+            createdAt: record.createdAt.toISOString(),
+            updatedAt: record.updatedAt.toISOString(),
+          },
+          errors: [],
+        };
+      } catch (err: any) {
+        return { record: null, errors: [err.message || 'Failed to create record'] };
+      }
     },
     updateRecord: async (
       _parent: unknown,
@@ -391,46 +566,59 @@ export const resolvers = {
       },
       context: GraphQLContext
     ) => {
-      // Require MEMBER or ADMIN role to update records
       requireMember(context);
 
       if (!context.db) {
-        throw new Error('Tenant database connection not available');
+        return { record: null, errors: ['Tenant database connection not available'] };
       }
 
-      const record = await updateRecord(context.db, _args.input as any);
-
-      if (!record) {
-        throw new Error(`Record with ID ${_args.input.id} not found`);
+      try {
+        const record = await updateRecord(context.db, _args.input as any);
+        if (!record) {
+          return { record: null, errors: [`Record with ID ${_args.input.id} not found`] };
+        }
+        return {
+          record: {
+            id: record._id.toString(),
+            releaseId: record.releaseId.toString(),
+            userId: record.userId.toString(),
+            purchaseDate: record.purchaseDate?.toISOString(),
+            price: record.price,
+            condition: record.condition,
+            location: record.location,
+            notes: record.notes,
+            createdAt: record.createdAt.toISOString(),
+            updatedAt: record.updatedAt.toISOString(),
+          },
+          errors: [],
+        };
+      } catch (err: any) {
+        return { record: null, errors: [err.message || 'Failed to update record'] };
       }
-
-      return {
-        id: record._id.toString(),
-        releaseId: record.releaseId.toString(),
-        userId: record.userId.toString(),
-        purchaseDate: record.purchaseDate?.toISOString(),
-        price: record.price,
-        condition: record.condition,
-        location: record.location,
-        notes: record.notes,
-        createdAt: record.createdAt.toISOString(),
-        updatedAt: record.updatedAt.toISOString(),
-      };
     },
-    deleteRecord: async (_parent: unknown, _args: { id: string }, context: GraphQLContext) => {
-      // Require MEMBER or ADMIN role to delete records
+    deleteRecord: async (
+      _parent: unknown,
+      _args: { input: { id: string } },
+      context: GraphQLContext
+    ) => {
       requireMember(context);
 
       if (!context.db) {
-        throw new Error('Tenant database connection not available');
+        return { deletedRecordId: null, errors: ['Tenant database connection not available'] };
       }
-
       if (!context.userId) {
-        throw new Error('User ID not found in context');
+        return { deletedRecordId: null, errors: ['User ID not found in context'] };
       }
 
-      const success = await deleteRecord(context.db, _args.id, context.userId);
-      return success;
+      try {
+        const success = await deleteRecord(context.db, _args.input.id, context.userId);
+        if (success) {
+          return { deletedRecordId: _args.input.id, errors: [] };
+        }
+        return { deletedRecordId: null, errors: ['Record not found or not owned by user'] };
+      } catch (err: any) {
+        return { deletedRecordId: null, errors: [err.message || 'Failed to delete record'] };
+      }
     },
     upsertUser: async (
       _parent: unknown,
@@ -612,28 +800,6 @@ export const resolvers = {
         role: userTenantRole.role,
         createdAt: userTenantRole.createdAt.toISOString(),
       };
-    },
-  },
-  User: {
-    records: async (_parent: { id: string }, _args: unknown, context: GraphQLContext) => {
-      if (!context.db) {
-        return [];
-      }
-
-      const records = await findRecordsByUserId(context.db, _parent.id);
-
-      return records.map((record) => ({
-        id: record._id.toString(),
-        releaseId: record.releaseId.toString(),
-        userId: record.userId.toString(),
-        purchaseDate: record.purchaseDate?.toISOString(),
-        price: record.price,
-        condition: record.condition,
-        location: record.location,
-        notes: record.notes,
-        createdAt: record.createdAt.toISOString(),
-        updatedAt: record.updatedAt.toISOString(),
-      }));
     },
   },
   Record: {

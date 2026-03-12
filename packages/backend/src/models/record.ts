@@ -50,6 +50,8 @@ export interface RecordFilter {
 export interface PaginationOptions {
   first?: number;
   after?: string;
+  last?: number;
+  before?: string;
 }
 
 export interface RecordConnection {
@@ -123,7 +125,13 @@ export class RecordRepository {
     pagination: PaginationOptions = {}
   ): Promise<RecordConnection> {
     const collection = this.db.collection<RecordDocument>('records');
-    const limit = Math.min(pagination.first || 20, 100);
+
+    // Determine direction: backward pagination takes priority if `last`/`before` are set
+    const isBackward = !!pagination.last && !pagination.first;
+    const limit = Math.min(
+      isBackward ? (pagination.last || 20) : (pagination.first || 20),
+      100
+    );
 
     // Build MongoDB query
     const query: any = {};
@@ -135,18 +143,15 @@ export class RecordRepository {
 
     if (filter.location) {
       query.location = { $regex: filter.location, $options: 'i' };
-      isRegexLocation = true; // Mark as regex for counter fallback
+      isRegexLocation = true;
     }
 
-    // For artist, title, year, format - we need to join with releases
-    // For now, we'll implement basic text search on notes/condition
-    // Full filtering will be enhanced with aggregation pipeline
     if (filter.search) {
       query.$text = { $search: filter.search };
     }
 
-    // Handle cursor-based pagination
-    if (pagination.after) {
+    // Forward pagination: records after cursor
+    if (!isBackward && pagination.after) {
       try {
         const cursorId = new ObjectId(pagination.after);
         query._id = { $gt: cursorId };
@@ -155,12 +160,24 @@ export class RecordRepository {
       }
     }
 
-    // Fetch records with limit + 1 to determine hasNextPage
+    // Backward pagination: records before cursor
+    if (isBackward && pagination.before) {
+      try {
+        const cursorId = new ObjectId(pagination.before);
+        query._id = { $lt: cursorId };
+      } catch {
+        // Invalid cursor, ignore
+      }
+    }
+
+    const sortDir = isBackward ? -1 : 1;
+
+    // Fetch limit + 1 to determine has{Next,Previous}Page
     let records: RecordDocument[] = [];
     try {
       records = await collection
         .find(query)
-        .sort({ _id: 1 })
+        .sort({ _id: sortDir })
         .limit(limit + 1)
         .toArray();
     } catch (error: any) {
@@ -170,7 +187,7 @@ export class RecordRepository {
         delete query.$text;
         records = await collection
           .find(query)
-          .sort({ _id: 1 })
+          .sort({ _id: sortDir })
           .limit(limit + 1)
           .toArray();
       } else {
@@ -178,11 +195,21 @@ export class RecordRepository {
       }
     }
 
-    const hasNextPage = records.length > limit;
-    const edges = records.slice(0, limit).map((record) => ({
+    const hasExtraPage = records.length > limit;
+    const pageItems = records.slice(0, limit);
+
+    // Backward pagination returns items in reverse order — restore natural order
+    if (isBackward) {
+      pageItems.reverse();
+    }
+
+    const edges = pageItems.map((record) => ({
       cursor: record._id.toString(),
       node: record,
     }));
+
+    const hasPreviousPage = isBackward ? hasExtraPage : !!pagination.after;
+    const hasNextPage = isBackward ? !!pagination.before : hasExtraPage;
 
     // Try to use cached counters, fallback to countDocuments for complex queries
     let totalCount: number;
@@ -193,10 +220,8 @@ export class RecordRepository {
     });
 
     if (cachedCount !== null) {
-      // Use cached counter
       totalCount = cachedCount;
     } else {
-      // Fallback: use countDocuments for regex or other complex filters
       totalCount = await collection.countDocuments(query);
     }
 
@@ -204,7 +229,7 @@ export class RecordRepository {
       edges,
       pageInfo: {
         hasNextPage,
-        hasPreviousPage: !!pagination.after,
+        hasPreviousPage,
         startCursor: edges[0]?.cursor,
         endCursor: edges[edges.length - 1]?.cursor,
       },

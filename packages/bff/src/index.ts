@@ -29,11 +29,11 @@ import MongoStore from 'connect-mongo';
 import { config, validateConfig } from './config/env.js';
 import { connectToDatabase, disconnectFromDatabase } from './db/connection.js';
 import { authRouter } from './auth/index.js';
-import { typeDefs } from './graphql/typeDefs.js';
-import { resolvers } from './graphql/resolvers.js';
+import { createStitchedSchema } from './graphql/schema.js';
 import type { GraphQLContext } from './types/context.js';
 import './types/session.js'; // Import session types
-import { getActiveTenant } from './types/session.js';
+import { getActiveTenant, getAvailableTenants } from './types/session.js';
+import { signJwt } from './auth/jwt.js';
 import { verifyWebhookSignature, forwardWebhookToBackend } from './auth/webhook.js';
 import { logger, httpLogger } from './utils/logger.js';
 
@@ -157,9 +157,9 @@ async function main() {
   });
 
   // Initialize Apollo Server
+  const schema = await createStitchedSchema();
   const apolloServer = new ApolloServer<GraphQLContext>({
-    typeDefs,
-    resolvers,
+    schema,
     introspection: !config.isProduction,
     plugins: config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : [],
   });
@@ -171,13 +171,26 @@ async function main() {
     '/graphql',
     graphqlLimiter,
     expressMiddleware(apolloServer, {
-      context: async ({ req, res }): Promise<GraphQLContext> => ({
-        req: req as any,
-        res,
-        user: req.session.user || null,
-        session: req.session,
-        activeTenantId: getActiveTenant(req.session) ?? null,
-      }),
+      context: async ({ req, res }): Promise<GraphQLContext> => {
+        const session = req.session;
+        const user = session.user || null;
+        const activeTenantId = getActiveTenant(session) ?? null;
+        let jwt: string | undefined;
+        if (user) {
+          const availableTenants = getAvailableTenants(session) || [];
+          const activeTenant =
+            availableTenants.find((t) => t.tenantId === activeTenantId) || availableTenants[0];
+          jwt = signJwt({
+            sub: user.id,
+            username: user.displayName || user.githubLogin,
+            avatarUrl: user.avatarUrl,
+            tenantId: activeTenant?.tenantId || `user_${user.id}`,
+            tenantRole: activeTenant?.role || 'VIEWER',
+            githubLogin: user.githubLogin,
+          });
+        }
+        return { req: req as any, res, user, session, activeTenantId, jwt };
+      },
     })
   );
 

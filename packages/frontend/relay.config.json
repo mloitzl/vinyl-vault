@@ -1,6 +1,6 @@
 {
   "language": "typescript",
-  "schema": "../bff/src/schema.graphql",
+  "schema": "./schema.graphql",
   "src": "./src",
   "artifactDirectory": "./src/__generated__",
   "exclude": [

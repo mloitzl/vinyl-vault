@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "dev:https": "sh ./scripts/dev-https.sh",
-    "prebuild": "node -e \"require('fs').mkdirSync('./src/__generated__', {recursive: true})\" && relay-compiler",
+    "update-schema": "get-graphql-schema http://localhost:3001/graphql > schema.graphql",
+    "relay": "pnpm update-schema && relay-compiler",
+    "prebuild": "node -e \"require('fs').mkdirSync('./src/__generated__', {recursive: true})\" && pnpm relay",
     "build": "pnpm prebuild && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest",
-    "relay": "relay-compiler",
     "clean": "rimraf dist"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.0",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "get-graphql-schema": "^2.1.2",
     "jsdom": "^27.4.0",
     "postcss": "^8.4.0",
     "relay-compiler": "^16.1.0",
