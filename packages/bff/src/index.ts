@@ -228,4 +228,5 @@ async function main() {
 
 main().catch((err) => {
   logger.error({ err }, 'BFF failed to start');
+  process.exit(1);
 });
