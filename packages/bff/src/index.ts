@@ -151,12 +151,36 @@ async function main() {
   // Auth routes
   app.use('/auth', authLimiter, authRouter);
 
-  // Health check endpoint
+  // Bind early so the health/readiness probe responds during schema stitching.
+  // The /graphql route is wired up after stitching completes.
+  let graphqlReady = false;
+  const host = '0.0.0.0';
+  const httpServer = app.listen(config.port, host, () => {
+    logger.info(
+      {
+        port: config.port,
+        graphqlEndpoint: `/graphql`,
+        authEndpoint: `/auth/github`,
+      },
+      'BFF server running'
+    );
+  });
+
+  // Health check — always responds so k8s liveness probe never times out.
+  // Readiness check — returns 503 until the stitched schema is ready,
+  // preventing traffic from being routed to the pod before GraphQL is available.
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+  app.get('/ready', (_req, res) => {
+    if (graphqlReady) {
+      res.json({ status: 'ok' });
+    } else {
+      res.status(503).json({ status: 'starting' });
+    }
+  });
 
-  // Initialize Apollo Server
+  // Initialize Apollo Server (may retry if backend is temporarily unreachable)
   const schema = await createStitchedSchema();
   const apolloServer = new ApolloServer<GraphQLContext>({
     schema,
@@ -194,18 +218,8 @@ async function main() {
     })
   );
 
-  // Bind to all interfaces so the BFF is reachable from other devices on the LAN when running in dev.
-  const host = '0.0.0.0';
-  const httpServer = app.listen(config.port, host, () => {
-    logger.info(
-      {
-        port: config.port,
-        graphqlEndpoint: `/graphql`,
-        authEndpoint: `/auth/github`,
-      },
-      'BFF server running'
-    );
-  });
+  // GraphQL is now fully wired — signal readiness probe
+  graphqlReady = true;
 
   // Graceful shutdown
   const shutdown = async (signal: NodeJS.Signals) => {
