@@ -84,9 +84,20 @@ type LookupTiming = {
   totalMs: number;
 };
 
+const SAMPLE_BARCODES = [
+  '889853367511', '5099902988313', '042282852212', '042284647311',
+  '050087374495', '075992534215', '077779411115', '077779588718',
+  '081227965785', '082839475310', '090204707805', '094638246817',
+  '190758305813', '194111005143', '194398190815', '196587081119',
+  '196588016912', '4006751103232', '4006751468171', '4007192102631',
+  '4015698015010',
+];
+
 export function ScanBarcode({ onRecordAdded }: { onRecordAdded?: () => void }) {
   const { addToast } = useToast();
-  const [barcode, setBarcode] = useState('5099902988313');
+  const [barcode, setBarcode] = useState(
+    () => SAMPLE_BARCODES[Math.floor(Math.random() * SAMPLE_BARCODES.length)]
+  );
   const [albums, setAlbums] = useState<Album[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
