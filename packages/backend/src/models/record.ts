@@ -127,7 +127,7 @@ export class RecordRepository {
     const collection = this.db.collection<RecordDocument>('records');
 
     // Determine direction: backward pagination takes priority if `last`/`before` are set
-    const isBackward = !!pagination.last && !pagination.first;
+    const isBackward = !!pagination.last || !!pagination.before;
     const limit = Math.min(
       isBackward ? (pagination.last || 20) : (pagination.first || 20),
       100
