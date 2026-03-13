@@ -260,20 +260,29 @@ export const resolvers = {
           },
         },
         { $sort: { _id: 1 } },
-        ...(Object.keys(postGroupMatch).length ? [{ $match: postGroupMatch }] : []),
-        { $limit: limit + 1 },
+        {
+          $facet: {
+            data: [
+              ...(Object.keys(postGroupMatch).length ? [{ $match: postGroupMatch }] : []),
+              { $limit: limit + 1 },
+            ],
+            totalCount: [{ $count: 'count' }],
+          },
+        },
       ];
 
-      const rows = await context.db.collection('records').aggregate(pipeline).toArray();
+      const [result] = await context.db.collection('records').aggregate(pipeline).toArray();
+      const rows = result.data as Record<string, unknown>[];
+      const totalCount = (result.totalCount as { count: number }[])[0]?.count ?? 0;
       const hasNextPage = rows.length > limit;
       const items = hasNextPage ? rows.slice(0, limit) : rows;
 
       const edges = items.map((row) => {
         const genres = [...new Set((row.genres as string[][]).flat().filter(Boolean))];
-        const id = Buffer.from(`artist:${row._id}`).toString('base64');
+        const id = Buffer.from(`artist:${row._id as string}`).toString('base64');
         return {
           cursor: id,
-          node: { id, name: row._id as string, recordCount: row.recordCount as number, coverImageUrl: row.coverImageUrl || null, genres },
+          node: { id, name: row._id as string, recordCount: row.recordCount as number, coverImageUrl: (row.coverImageUrl as string | null) || null, genres },
         };
       });
 
@@ -285,7 +294,7 @@ export const resolvers = {
           startCursor: edges[0]?.cursor ?? null,
           endCursor: edges[edges.length - 1]?.cursor ?? null,
         },
-        totalCount: edges.length,
+        totalCount,
       };
     },
 
@@ -354,26 +363,36 @@ export const resolvers = {
           },
         },
         { $sort: { '_id.artist': 1, '_id.title': 1 } },
-        ...(cursorFilter ? [{ $match: cursorFilter }] : []),
-        { $limit: limit + 1 },
+        {
+          $facet: {
+            data: [
+              ...(cursorFilter ? [{ $match: cursorFilter }] : []),
+              { $limit: limit + 1 },
+            ],
+            totalCount: [{ $count: 'count' }],
+          },
+        },
       ];
 
-      const rows = await context.db.collection('records').aggregate(pipeline).toArray();
+      const [result] = await context.db.collection('records').aggregate(pipeline).toArray();
+      const rows = result.data as Record<string, unknown>[];
+      const totalCount = (result.totalCount as { count: number }[])[0]?.count ?? 0;
       const hasNextPage = rows.length > limit;
       const items = hasNextPage ? rows.slice(0, limit) : rows;
 
       const edges = items.map((row) => {
         const genres = [...new Set((row.genres as string[][]).flat().filter(Boolean))];
-        const id = Buffer.from(`album:${row._id.artist}|${row._id.title}`).toString('base64');
+        const albumId = row._id as { artist: string; title: string };
+        const id = Buffer.from(`album:${albumId.artist}|${albumId.title}`).toString('base64');
         return {
           cursor: id,
           node: {
             id,
-            title: row._id.title as string,
-            artist: row._id.artist as string,
-            year: row.year || null,
-            coverImageUrl: row.coverImageUrl || null,
-            format: row.format || null,
+            title: albumId.title,
+            artist: albumId.artist,
+            year: (row.year as string | null) || null,
+            coverImageUrl: (row.coverImageUrl as string | null) || null,
+            format: (row.format as string | null) || null,
             recordCount: row.recordCount as number,
             genres,
           },
@@ -388,7 +407,7 @@ export const resolvers = {
           startCursor: edges[0]?.cursor ?? null,
           endCursor: edges[edges.length - 1]?.cursor ?? null,
         },
-        totalCount: edges.length,
+        totalCount,
       };
     },
 
