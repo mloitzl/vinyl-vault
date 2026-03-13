@@ -215,16 +215,13 @@ export const resolvers = {
       const limit = Math.min(_args.first || 20, 100);
       const search = _args.filter?.search;
 
-      // Aggregate: join records → releases, group by artist
-      const matchStage: Record<string, unknown> = {};
+      // Base pipeline: join records → releases, filter by search, group by artist
+      const searchMatchStage: Record<string, unknown> = {};
       if (search) {
-        matchStage['release.artist'] = { $regex: search, $options: 'i' };
-      }
-      if (_args.after) {
-        matchStage['_id'] = { $gt: _args.after };
+        searchMatchStage['release.artist'] = { $regex: search, $options: 'i' };
       }
 
-      const pipeline: object[] = [
+      const basePipeline: object[] = [
         {
           $lookup: {
             from: 'releases',
@@ -234,7 +231,7 @@ export const resolvers = {
           },
         },
         { $unwind: '$release' },
-        ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+        ...(Object.keys(searchMatchStage).length ? [{ $match: searchMatchStage }] : []),
         {
           $group: {
             _id: '$release.artist',
@@ -243,20 +240,50 @@ export const resolvers = {
             genres: { $addToSet: '$release.genre' },
           },
         },
-        { $sort: { _id: 1 } },
-        { $limit: limit + 1 },
       ];
 
-      const rows = await context.db.collection('records').aggregate(pipeline).toArray();
+      // Cursor-based pagination applied after $group, decoded from base64
+      const paginatedStages: object[] = [{ $sort: { _id: 1 } }];
+      if (_args.after) {
+        let afterName: string;
+        try {
+          afterName = Buffer.from(_args.after, 'base64').toString('utf8').replace(/^artist:/, '');
+        } catch {
+          throw new Error('Invalid cursor: after');
+        }
+        paginatedStages.push({ $match: { _id: { $gt: afterName } } });
+      }
+      paginatedStages.push({ $limit: limit + 1 });
+
+      // Use $facet to get paginated results and total count in one query
+      const facetResults = await context.db
+        .collection('records')
+        .aggregate([
+          ...basePipeline,
+          {
+            $facet: {
+              paginatedResults: paginatedStages,
+              totalCount: [{ $count: 'count' }],
+            },
+          },
+        ])
+        .toArray();
+
+      const facet = facetResults[0] as
+        | { paginatedResults: { _id: string; recordCount: number; coverImageUrl?: string; genres: string[][] }[]; totalCount: { count: number }[] }
+        | undefined;
+      const rows = facet?.paginatedResults ?? [];
+      const total: number = facet?.totalCount?.[0]?.count ?? 0;
+
       const hasNextPage = rows.length > limit;
       const items = hasNextPage ? rows.slice(0, limit) : rows;
 
       const edges = items.map((row) => {
-        const genres = [...new Set((row.genres as string[][]).flat().filter(Boolean))];
+        const genres = [...new Set(row.genres.flat().filter(Boolean))];
         const id = Buffer.from(`artist:${row._id}`).toString('base64');
         return {
           cursor: id,
-          node: { id, name: row._id as string, recordCount: row.recordCount as number, coverImageUrl: row.coverImageUrl || null, genres },
+          node: { id, name: row._id, recordCount: row.recordCount, coverImageUrl: row.coverImageUrl || null, genres },
         };
       });
 
@@ -268,7 +295,7 @@ export const resolvers = {
           startCursor: edges[0]?.cursor ?? null,
           endCursor: edges[edges.length - 1]?.cursor ?? null,
         },
-        totalCount: edges.length,
+        totalCount: total,
       };
     },
 
