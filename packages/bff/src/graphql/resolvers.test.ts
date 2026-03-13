@@ -144,16 +144,16 @@ vi.mock('../auth/jwt.js', () => ({
   signJwt: vi.fn(() => 'mock-jwt-token'),
 }));
 
-// Mock session helpers
-vi.mock('../types/session.js', () => ({
-  getAvailableTenants: vi.fn(() => [
-    {
-      tenantId: 'user_123',
-      name: 'Test User',
-      tenantType: 'USER',
-      role: 'ADMIN',
-    },
-  ]),
-  setActiveTenant: vi.fn(),
-}));
+
+
+
+
+
+
+
+
+
+
+
+
 
