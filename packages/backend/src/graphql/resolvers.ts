@@ -215,13 +215,29 @@ export const resolvers = {
       const limit = Math.min(_args.first || 20, 100);
       const search = _args.filter?.search;
 
-      // Aggregate: join records → releases, group by artist
-      const matchStage: Record<string, unknown> = {};
-      if (search) {
-        matchStage['release.artist'] = { $regex: search, $options: 'i' };
-      }
+      // Decode cursor: cursors are base64("artist:<name>")
+      let afterArtist: string | undefined;
       if (_args.after) {
-        matchStage['_id'] = { $gt: _args.after };
+        const decoded = Buffer.from(_args.after, 'base64').toString('utf8');
+        if (!decoded.startsWith('artist:')) {
+          throw new Error('Invalid artist cursor format');
+        }
+        const name = decoded.slice('artist:'.length);
+        if (name) {
+          afterArtist = name;
+        }
+      }
+
+      // Aggregate: join records → releases, group by artist
+      const preGroupMatch: Record<string, unknown> = {};
+      if (search) {
+        preGroupMatch['release.artist'] = { $regex: search, $options: 'i' };
+      }
+
+      // Post-group match for cursor-based pagination (applied after $group where _id is the artist name)
+      const postGroupMatch: Record<string, unknown> = {};
+      if (afterArtist !== undefined) {
+        postGroupMatch['_id'] = { $gt: afterArtist };
       }
 
       const pipeline: object[] = [
@@ -234,7 +250,7 @@ export const resolvers = {
           },
         },
         { $unwind: '$release' },
-        ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+        ...(Object.keys(preGroupMatch).length ? [{ $match: preGroupMatch }] : []),
         {
           $group: {
             _id: '$release.artist',
@@ -244,6 +260,7 @@ export const resolvers = {
           },
         },
         { $sort: { _id: 1 } },
+        ...(Object.keys(postGroupMatch).length ? [{ $match: postGroupMatch }] : []),
         { $limit: limit + 1 },
       ];
 
