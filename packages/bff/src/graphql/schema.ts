@@ -1,5 +1,5 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
-import { FilterTypes, wrapSchema } from '@graphql-tools/wrap';
+import { RenameTypes, wrapSchema } from '@graphql-tools/wrap';
 import { buildASTSchema, parse } from 'graphql';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -7,14 +7,8 @@ import { dirname, join } from 'path';
 import { typeDefs } from './typeDefs.js';
 import { resolvers } from './resolvers.js';
 import { backendExecutor } from './executor.js';
-import type { GraphQLContext } from '../types/context.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Types owned exclusively by the BFF. The backend has its own internal versions
-// (e.g. Tenant has tenantId/databaseName; BFF Tenant has id/type/role for the
-// frontend), so we strip the backend copies to avoid field conflicts at stitch time.
-const BFF_OWNED_TYPES = new Set(['Tenant', 'TenantType', 'TenantRole', 'FeatureFlags']);
 
 function resolveBackendSchemaPath(): string {
   // __dirname differs between environments:
@@ -38,25 +32,29 @@ export async function createStitchedSchema() {
   // This avoids a runtime introspection HTTP call, which fails in production
   // because the backend disables GraphQL introspection (introspection: false).
   const backendSDL = readFileSync(resolveBackendSchemaPath(), 'utf-8');
-  const backendDoc = parse(backendSDL);
-  const filteredDoc = {
-    ...backendDoc,
-    definitions: backendDoc.definitions.filter(
-      (def) => !('name' in def && def.name && BFF_OWNED_TYPES.has(def.name.value))
-    ),
-  };
-  const backendSchema = buildASTSchema(filteredDoc, { assumeValidSDL: true });
 
-  // Wrap the static schema with the HTTP executor so queries are proxied to the
-  // real backend at runtime, while the schema shape is known statically at startup.
+  // Build the full, valid backend schema — no SDL stripping needed.
+  // Stripping types from the SDL before buildASTSchema creates dangling references
+  // (e.g. createTenant: Tenant! with no Tenant in the type map) which causes
+  // stitchSchemas to crash when it walks the mutation type's fields.
+  const backendSchema = buildASTSchema(parse(backendSDL));
+
+  // Rename the backend's Tenant type to avoid a shape conflict with the BFF's Tenant.
+  // Backend Tenant: { tenantId, tenantType, databaseName, ... }  (internal model)
+  // BFF Tenant:     { id, name, type, role }                     (client-facing model)
+  // TenantType and TenantRole have identical values in both schemas; stitchSchemas
+  // merges identical enums cleanly so no renaming is needed for those.
   const remoteSchema = wrapSchema({
     schema: backendSchema,
     executor: backendExecutor,
-    transforms: [new FilterTypes<GraphQLContext>((type) => !BFF_OWNED_TYPES.has(type.name))],
+    transforms: [new RenameTypes((name) => (name === 'Tenant' ? 'BackendTenant' : name))],
   });
 
   // The BFF extensions (viewer, switchTenant, User session fields, Tenant/FeatureFlags
   // types) are added as top-level typeDefs/resolvers on the stitched schema.
+  // Because BackendTenant is now the only backend-side Tenant, the BFF's `type Tenant`
+  // in typeDefs is unambiguous and `extend type User { availableTenants: [Tenant!]! }`
+  // resolves cleanly.
   return stitchSchemas({
     subschemas: [remoteSchema],
     typeDefs,

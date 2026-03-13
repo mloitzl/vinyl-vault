@@ -23,16 +23,8 @@ extend type User {
   featureFlags: FeatureFlags!
 }
 
-enum TenantType {
-  USER
-  ORGANIZATION
-}
-
-enum TenantRole {
-  ADMIN
-  MEMBER
-  VIEWER
-}
+# TenantType and TenantRole are defined in the backend schema with identical values.
+# They arrive in the stitched schema from the remote subschema — no redefinition needed.
 
 """
 Feature flags surfaced to the frontend.

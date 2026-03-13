@@ -25,10 +25,12 @@ const backendSDL = readFileSync(join(root, 'packages/backend/src/schema.graphql'
 const bffSDL = readFileSync(join(root, 'packages/bff/src/schema.graphql'), 'utf-8');
 const out = join(root, 'packages/frontend/schema.graphql');
 
-// These types are redefined by the BFF with a different shape for the frontend
-// (e.g. BFF Tenant: { id, name, type, role } vs backend Tenant: { tenantId, ... }).
-// Strip them from the backend schema so the BFF definitions win.
-const BFF_OWNED = new Set(['Tenant', 'TenantType', 'TenantRole', 'FeatureFlags']);
+// Tenant has a different shape in the BFF (id/name/type/role for the frontend) vs
+// the backend (tenantId/databaseName/...). Strip the backend version so the BFF
+// definition wins. TenantType/TenantRole are identical in both schemas and come
+// from the backend SDL now (they were removed from the BFF SDL to avoid duplication).
+// FeatureFlags is BFF-only.
+const BFF_OWNED = new Set(['Tenant', 'FeatureFlags']);
 
 const backendDoc = parse(backendSDL);
 const bffDoc = parse(bffSDL);
