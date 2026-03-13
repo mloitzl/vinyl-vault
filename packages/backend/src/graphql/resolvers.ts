@@ -293,6 +293,28 @@ export const resolvers = {
         ];
       }
 
+      let cursorFilter: Record<string, unknown> | null = null;
+      if (_args.after) {
+        try {
+          const decoded = Buffer.from(_args.after, 'base64').toString('utf8');
+          // Format: "album:${artist}|${title}"
+          if (!decoded.startsWith('album:')) throw new Error('Invalid cursor format');
+          const withoutPrefix = decoded.slice('album:'.length);
+          const pipeIndex = withoutPrefix.indexOf('|');
+          if (pipeIndex === -1) throw new Error('Invalid cursor format');
+          const cursorArtist = withoutPrefix.substring(0, pipeIndex);
+          const cursorTitle = withoutPrefix.substring(pipeIndex + 1);
+          cursorFilter = {
+            $or: [
+              { '_id.artist': { $gt: cursorArtist } },
+              { '_id.artist': cursorArtist, '_id.title': { $gt: cursorTitle } },
+            ],
+          };
+        } catch {
+          throw new Error('Invalid pagination cursor');
+        }
+      }
+
       const pipeline: object[] = [
         {
           $lookup: {
@@ -315,6 +337,7 @@ export const resolvers = {
           },
         },
         { $sort: { '_id.artist': 1, '_id.title': 1 } },
+        ...(cursorFilter ? [{ $match: cursorFilter }] : []),
         { $limit: limit + 1 },
       ];
 
