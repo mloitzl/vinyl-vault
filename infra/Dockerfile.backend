@@ -1,30 +1,33 @@
 # Backend Dockerfile
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
+# Use the repository-pinned pnpm version via corepack.
+RUN corepack enable
 
-# Copy workspace files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json ./
-COPY packages/backend ./packages/backend
+# Copy the full workspace so pnpm creates the same layout as the working demo build.
+COPY . .
 
-# Install dependencies
+# Install workspace dependencies.
 RUN pnpm install --frozen-lockfile
 
-# Build
-WORKDIR /app/packages/backend
-RUN pnpm build
+# Build the workspace using the same path as the working demo image.
+RUN pnpm -r build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-slim
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
+# Use the repository-pinned pnpm version via corepack.
+RUN corepack enable
 
 # Copy built files
 COPY --from=builder /app/packages/backend/dist ./dist

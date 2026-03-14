@@ -1,34 +1,33 @@
 # BFF Dockerfile
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
+# Use the repository-pinned pnpm version via corepack.
+RUN corepack enable
 
-# Copy workspace files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json ./
-COPY packages/bff ./packages/bff
+# Copy the full workspace so pnpm creates the same layout as the working demo build.
+COPY . .
 
-# Backend schema is read statically at startup (avoids runtime introspection,
-# which is disabled in production). Must be present before tsc resolves paths.
-COPY packages/backend/src/schema.graphql ./packages/backend/src/schema.graphql
-
-# Install dependencies
+# Install workspace dependencies.
 RUN pnpm install --frozen-lockfile
 
-# Build
-WORKDIR /app/packages/bff
-RUN pnpm build
+# Build the workspace using the same path as the working demo image.
+RUN pnpm -r build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-slim
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
+# Use the repository-pinned pnpm version via corepack.
+RUN corepack enable
 
 # Copy built files
 COPY --from=builder /app/packages/bff/dist ./dist

@@ -18,8 +18,8 @@ function GenreRecordList({
 }: {
   fragmentRef: any;
   genre: string;
-  onEdit: (record: Record) => void;
-  onDelete: (record: Record) => void;
+  onEdit?: (record: Record) => void;
+  onDelete?: (record: Record) => void;
 }) {
   const { data, loadNext, hasNext, isLoadingNext } = useRecordListPagination(fragmentRef);
   const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
@@ -68,8 +68,8 @@ function GenreRecordListWrapper({
 }: {
   queryRef: any;
   genre: string;
-  onEdit: (record: Record) => void;
-  onDelete: (record: Record) => void;
+  onEdit?: (record: Record) => void;
+  onDelete?: (record: Record) => void;
 }) {
   const fragmentRef = useRecordsQueryPreloaded(queryRef);
   return <GenreRecordList fragmentRef={fragmentRef} genre={genre} onEdit={onEdit} onDelete={onDelete} />;
