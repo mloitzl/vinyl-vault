@@ -323,17 +323,17 @@ export const resolvers = {
       if (_args.after) {
         try {
           const decoded = Buffer.from(_args.after, 'base64').toString('utf8');
-          // Format: "album:${artist}|${title}"
+          // Format: "album:${title}|${artist}"
           if (!decoded.startsWith('album:')) throw new Error('Invalid cursor format');
           const withoutPrefix = decoded.slice('album:'.length);
           const pipeIndex = withoutPrefix.indexOf('|');
           if (pipeIndex === -1) throw new Error('Invalid cursor format');
-          const cursorArtist = withoutPrefix.substring(0, pipeIndex);
-          const cursorTitle = withoutPrefix.substring(pipeIndex + 1);
+          const cursorTitle = withoutPrefix.substring(0, pipeIndex);
+          const cursorArtist = withoutPrefix.substring(pipeIndex + 1);
           cursorFilter = {
             $or: [
-              { '_id.artist': { $gt: cursorArtist } },
-              { '_id.artist': cursorArtist, '_id.title': { $gt: cursorTitle } },
+              { '_id.title': { $gt: cursorTitle } },
+              { '_id.title': cursorTitle, '_id.artist': { $gt: cursorArtist } },
             ],
           };
         } catch {
@@ -362,7 +362,7 @@ export const resolvers = {
             genres: { $addToSet: '$release.genre' },
           },
         },
-        { $sort: { '_id.artist': 1, '_id.title': 1 } },
+        { $sort: { '_id.title': 1, '_id.artist': 1 } },
         {
           $facet: {
             data: [
@@ -383,7 +383,7 @@ export const resolvers = {
       const edges = items.map((row) => {
         const genres = [...new Set((row.genres as string[][]).flat().filter(Boolean))];
         const albumId = row._id as { artist: string; title: string };
-        const id = Buffer.from(`album:${albumId.artist}|${albumId.title}`).toString('base64');
+        const id = Buffer.from(`album:${albumId.title}|${albumId.artist}`).toString('base64');
         return {
           cursor: id,
           node: {
