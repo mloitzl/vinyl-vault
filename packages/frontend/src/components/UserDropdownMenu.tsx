@@ -21,7 +21,12 @@ export function UserDropdownMenu() {
   useEffect(() => {
     if (!isOpen || !featureFlags.enableTenantFeatures || installUrl !== null) return;
     fetch(getEndpoint('/auth/me'), { credentials: 'include' })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error(`Failed to fetch auth info: ${r.status}`);
+        }
+        return r.json();
+      })
       .then((data) =>
         setInstallUrl(
           data.githubAppInstallationUrl || 'https://github.com/apps/vinyl-vault/installations/new'
