@@ -238,8 +238,8 @@ export function UserDropdownMenu() {
             {/* ── Section 3: Invite (coming soon) ── */}
             <div className="py-1 border-b border-gray-100">
               <button
-                disabled
-                className="w-full text-left px-4 py-2 flex items-center gap-3 text-sm text-gray-300 cursor-not-allowed"
+                onClick={() => openModal(() => setShowInvite(true))}
+                className="w-full text-left px-4 py-2 flex items-center gap-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 title="Coming soon"
               >
                 <svg
@@ -256,7 +256,7 @@ export function UserDropdownMenu() {
                   />
                 </svg>
                 Invite to Collection
-                <span className="ml-auto text-xs text-gray-300">soon</span>
+                <span className="ml-auto text-xs text-gray-400">soon</span>
               </button>
             </div>
 
