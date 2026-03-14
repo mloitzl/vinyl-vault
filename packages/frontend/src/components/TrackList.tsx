@@ -22,7 +22,7 @@ export function TrackList({ tracks, artist }: TrackListProps) {
       </h4>
       <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
         {validTracks.map((track, index) => (
-          <div key={index} className="px-3 py-1.5 flex items-center text-sm">
+          <div key={index} className="px-3 py-1.5 flex flex-wrap items-center text-sm">
             {artist && <SpotifyPreviewButton track={track.title} artist={artist} />}
             <span className="w-8 text-gray-400 text-xs flex-shrink-0">
               {track.position ?? index + 1}

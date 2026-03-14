@@ -11,7 +11,7 @@ interface PreviewResult {
   spotifyUrl: string | null;
 }
 
-type State = 'idle' | 'loading' | 'playing' | 'paused' | 'no-preview' | 'unavailable';
+type State = 'idle' | 'loading' | 'playing' | 'paused' | 'embed' | 'unavailable';
 
 // Module-level: only one track plays at a time across all instances
 let currentStop: (() => void) | null = null;
@@ -21,6 +21,7 @@ const previewCache = new Map<string, PreviewResult>();
 
 export function SpotifyPreviewButton({ track, artist }: SpotifyPreviewButtonProps) {
   const [state, setState] = useState<State>('idle');
+  const [embedTrackId, setEmbedTrackId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cacheKey = `${artist}||${track}`;
 
@@ -86,10 +87,13 @@ export function SpotifyPreviewButton({ track, artist }: SpotifyPreviewButtonProp
     }
 
     if (!result.previewUrl) {
-      setState('no-preview');
-      // Open Spotify if we have a URL for it
       if (result.spotifyUrl) {
-        window.open(result.spotifyUrl, '_blank', 'noopener,noreferrer');
+        // Extract track ID for the Spotify embed player
+        const trackId = result.spotifyUrl.replace('https://open.spotify.com/track/', '').split('?')[0];
+        setEmbedTrackId(trackId);
+        setState(prev => prev === 'embed' ? 'idle' : 'embed');
+      } else {
+        setState('unavailable');
       }
       return;
     }
@@ -113,51 +117,63 @@ export function SpotifyPreviewButton({ track, artist }: SpotifyPreviewButtonProp
 
   if (state === 'unavailable') return null;
 
-  // Spotify icon link (opens in Spotify) — shown when no 30s preview is available
-  if (state === 'no-preview') {
-    return (
-      <span
-        className="w-6 flex-shrink-0 flex items-center justify-center"
-        title="No preview available — opened in Spotify"
-      >
-        <SpotifyIcon className="w-3.5 h-3.5 text-gray-300" />
-      </span>
-    );
-  }
-
   const isPlaying = state === 'playing';
   const isLoading = state === 'loading';
   const isPaused = state === 'paused';
+  const isEmbed = state === 'embed';
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={isLoading}
-      title={isPlaying ? 'Stop preview' : isPaused ? 'Resume preview' : 'Play 30s preview on Spotify'}
-      className={`w-6 flex-shrink-0 flex items-center justify-center rounded transition-colors ${
-        isPlaying || isPaused
-          ? 'text-[#1DB954] hover:text-[#1aa34a]'
-          : 'text-gray-300 hover:text-[#1DB954]'
-      }`}
-    >
-      {isLoading ? (
-        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-        </svg>
-      ) : isPlaying ? (
-        // Stop square
-        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-        </svg>
-      ) : (
-        // Play triangle
-        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M8 5v14l11-7z" />
-        </svg>
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isLoading}
+        title={
+          isPlaying ? 'Stop preview'
+          : isPaused ? 'Resume preview'
+          : isEmbed ? 'Close Spotify player'
+          : 'Play on Spotify'
+        }
+        className={`w-6 flex-shrink-0 flex items-center justify-center rounded transition-colors ${
+          isPlaying || isPaused || isEmbed
+            ? 'text-[#1DB954] hover:text-[#1aa34a]'
+            : 'text-gray-300 hover:text-[#1DB954]'
+        }`}
+      >
+        {isLoading ? (
+          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+        ) : isPlaying ? (
+          // Stop square
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+        ) : isEmbed ? (
+          // Spotify icon (green = active)
+          <SpotifyIcon className="w-3.5 h-3.5" />
+        ) : (
+          // Play triangle
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+      {isEmbed && embedTrackId && (
+        <div className="w-full mt-1 rounded overflow-hidden">
+          <iframe
+            title={`Spotify player: ${track}`}
+            src={`https://open.spotify.com/embed/track/${embedTrackId}?utm_source=generator&theme=0`}
+            width="100%"
+            height="80"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            loading="lazy"
+            style={{ border: 'none' }}
+          />
+        </div>
       )}
-    </button>
+    </>
   );
 }
 
