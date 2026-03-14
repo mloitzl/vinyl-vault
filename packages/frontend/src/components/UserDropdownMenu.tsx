@@ -21,7 +21,12 @@ export function UserDropdownMenu() {
   useEffect(() => {
     if (!isOpen || !featureFlags.enableTenantFeatures || installUrl !== null) return;
     fetch(getEndpoint('/auth/me'), { credentials: 'include' })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error(`Failed to fetch auth info: ${r.status}`);
+        }
+        return r.json();
+      })
       .then((data) =>
         setInstallUrl(
           data.githubAppInstallationUrl || 'https://github.com/apps/vinyl-vault/installations/new'
@@ -78,9 +83,7 @@ export function UserDropdownMenu() {
 
   const tenantRole = activeTenant?.role ?? 'VIEWER';
   const isAdmin = tenantRole === 'ADMIN';
-  const showTenantSection =
-    featureFlags.enableTenantFeatures &&
-    (availableTenants.length > 1 || isAdmin);
+  const showTenantSection = featureFlags.enableTenantFeatures;
 
   return (
     <>
@@ -235,8 +238,8 @@ export function UserDropdownMenu() {
             {/* ── Section 3: Invite (coming soon) ── */}
             <div className="py-1 border-b border-gray-100">
               <button
-                disabled
-                className="w-full text-left px-4 py-2 flex items-center gap-3 text-sm text-gray-300 cursor-not-allowed"
+                onClick={() => openModal(() => setShowInvite(true))}
+                className="w-full text-left px-4 py-2 flex items-center gap-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 title="Coming soon"
               >
                 <svg
@@ -253,7 +256,7 @@ export function UserDropdownMenu() {
                   />
                 </svg>
                 Invite to Collection
-                <span className="ml-auto text-xs text-gray-300">soon</span>
+                <span className="ml-auto text-xs text-gray-400">soon</span>
               </button>
             </div>
 
