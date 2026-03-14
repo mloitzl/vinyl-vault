@@ -132,28 +132,3 @@ describe('BFF Resolvers', () => {
     });
   });
 });
-
-
-// Mock the backend client
-vi.mock('../services/backendClient.js', () => ({
-  queryBackend: vi.fn(),
-}));
-
-// Mock the JWT signing
-vi.mock('../auth/jwt.js', () => ({
-  signJwt: vi.fn(() => 'mock-jwt-token'),
-}));
-
-
-
-
-
-
-
-
-
-
-
-
-
-
