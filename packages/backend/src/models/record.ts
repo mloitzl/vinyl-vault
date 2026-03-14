@@ -150,6 +150,21 @@ export class RecordRepository {
       query.$text = { $search: filter.search };
     }
 
+    // Release-level filters (artist, title, year, format) require a join.
+    // Fetch matching release IDs first, then constrain records.releaseId.
+    if (filter.artist || filter.title || filter.year || filter.format) {
+      const releaseQuery: any = {};
+      if (filter.artist) releaseQuery.artist = { $regex: filter.artist, $options: 'i' };
+      if (filter.title) releaseQuery.title = { $regex: filter.title, $options: 'i' };
+      if (filter.year) releaseQuery.year = filter.year;
+      if (filter.format) releaseQuery.format = filter.format;
+      const matchingReleases = await this.db
+        .collection('releases')
+        .find(releaseQuery, { projection: { _id: 1 } })
+        .toArray();
+      query.releaseId = { $in: matchingReleases.map((r) => r._id) };
+    }
+
     // Forward pagination: records after cursor
     let afterCursorApplied = false;
     if (!isBackward && pagination.after) {
