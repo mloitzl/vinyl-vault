@@ -1,7 +1,9 @@
 import { useEffect, Suspense } from 'react';
 import { useRecordsQueryPreloaded } from '../../hooks/relay';
 import { useRecordsQueryLoader } from '../../hooks/relay/useRecordsQueryLoader';
+import { useRecordActions } from '../../hooks/useRecordActions';
 import { RecordCard, type Record } from '../RecordCard';
+import { RecordEditModal } from '../RecordEditModal';
 import { LoadingSpinner } from '../LoadingSpinner';
 import { Button } from '../ui/Button';
 import type { useRecordsQuery$data } from '../../__generated__/useRecordsQuery.graphql';
@@ -12,10 +14,14 @@ function GenreRecordList({
   queryRef,
   genre,
   onLoadMore,
+  onEdit,
+  onDelete,
 }: {
   queryRef: any;
   genre: string;
   onLoadMore: (cursor: string) => void;
+  onEdit: (record: Record) => void;
+  onDelete: (record: Record) => void;
 }) {
   const recordsData = useRecordsQueryPreloaded(queryRef);
   const records = recordsData.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
@@ -35,7 +41,7 @@ function GenreRecordList({
       </p>
       <div className="space-y-4">
         {records.map((record: Record) => (
-          <RecordCard key={record.id} record={record} />
+          <RecordCard key={record.id} record={record} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </div>
       {recordsData.pageInfo.hasNextPage && recordsData.pageInfo.endCursor && (
@@ -59,6 +65,10 @@ export function GenreRecordsView({ genre, onBack }: { genre: string; onBack: () 
   const handleLoadMore = (cursor: string) => {
     refetch({ first: 20, after: cursor, filter: { genre } });
   };
+
+  const doRefetch = () => refetch({ first: 20, filter: { genre } });
+  const { editingRecord, handleEdit, handleDelete, handleSaveEdit, handleCancelEdit } =
+    useRecordActions(doRefetch);
 
   return (
     <div>
@@ -87,8 +97,22 @@ export function GenreRecordsView({ genre, onBack }: { genre: string; onBack: () 
         </div>
       ) : (
         <Suspense fallback={<div className="flex justify-center py-16"><LoadingSpinner size="lg" color="primary" /></div>}>
-          <GenreRecordList queryRef={queryRef} genre={genre} onLoadMore={handleLoadMore} />
+          <GenreRecordList
+            queryRef={queryRef}
+            genre={genre}
+            onLoadMore={handleLoadMore}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
         </Suspense>
+      )}
+
+      {editingRecord && (
+        <RecordEditModal
+          record={editingRecord}
+          onSave={handleSaveEdit}
+          onCancel={handleCancelEdit}
+        />
       )}
     </div>
   );

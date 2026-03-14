@@ -1,15 +1,27 @@
 import { useEffect, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
+import { RecordEditModal } from '../components/RecordEditModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { Button } from '../components/ui/Button';
 import { useRecordsQueryPreloaded } from '../hooks/relay';
 import { useRecordsQueryLoader } from '../hooks/relay/useRecordsQueryLoader';
+import { useRecordActions } from '../hooks/useRecordActions';
 import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
 
 type RecordEdge = useRecordsQuery$data['records']['edges'][number];
 
-function ArtistRecords({ queryRef, artistName }: { queryRef: any; artistName: string }) {
+function ArtistRecords({
+  queryRef,
+  artistName,
+  onEdit,
+  onDelete,
+}: {
+  queryRef: any;
+  artistName: string;
+  onEdit: (record: Record) => void;
+  onDelete: (record: Record) => void;
+}) {
   const navigate = useNavigate();
   const recordsData = useRecordsQueryPreloaded(queryRef);
   const records = recordsData.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
@@ -78,7 +90,7 @@ function ArtistRecords({ queryRef, artistName }: { queryRef: any; artistName: st
       {/* Records list */}
       <div className="space-y-4">
         {records.map((record: Record) => (
-          <RecordCard key={record.id} record={record} />
+          <RecordCard key={record.id} record={record} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </div>
 
@@ -102,13 +114,17 @@ function ArtistDetailPageLoading() {
 export function ArtistDetailPage() {
   const { name } = useParams<{ name: string }>();
   const artistName = name ? decodeURIComponent(name) : '';
-  const { queryRef, loadQuery } = useRecordsQueryLoader();
+  const { queryRef, loadQuery, refetch } = useRecordsQueryLoader();
 
   useEffect(() => {
     if (artistName) {
       loadQuery({ first: 50, filter: { artist: artistName } });
     }
   }, [artistName, loadQuery]);
+
+  const doRefetch = () => refetch({ first: 50, filter: { artist: artistName } });
+  const { editingRecord, handleEdit, handleDelete, handleSaveEdit, handleCancelEdit } =
+    useRecordActions(doRefetch);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -130,9 +146,22 @@ export function ArtistDetailPage() {
       ) : (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
           <Suspense fallback={<ArtistDetailPageLoading />}>
-            <ArtistRecords queryRef={queryRef} artistName={artistName} />
+            <ArtistRecords
+              queryRef={queryRef}
+              artistName={artistName}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           </Suspense>
         </div>
+      )}
+
+      {editingRecord && (
+        <RecordEditModal
+          record={editingRecord}
+          onSave={handleSaveEdit}
+          onCancel={handleCancelEdit}
+        />
       )}
     </div>
   );
