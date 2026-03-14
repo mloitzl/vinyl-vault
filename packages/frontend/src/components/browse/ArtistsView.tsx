@@ -94,7 +94,7 @@ export function ArtistsView() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    loadQuery({ first: 24 });
+    loadQuery({ first: 24 }, { fetchPolicy: 'network-only' });
   }, [loadQuery]);
 
   const handleSearch = (e: React.FormEvent) => {

@@ -91,7 +91,7 @@ export function AlbumsView() {
   const [artistFilter, setArtistFilter] = useState('');
 
   useEffect(() => {
-    loadQuery({ first: 24 });
+    loadQuery({ first: 24 }, { fetchPolicy: 'network-only' });
   }, [loadQuery]);
 
   const buildFilter = () => {

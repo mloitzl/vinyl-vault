@@ -11,6 +11,6 @@ export const GenresQuery = graphql`
 `;
 
 export function useGenresQuery() {
-  const data = useLazyLoadQuery<UseGenresQueryType>(GenresQuery, {});
+  const data = useLazyLoadQuery<UseGenresQueryType>(GenresQuery, {}, { fetchPolicy: 'network-only' });
   return data.genres;
 }
