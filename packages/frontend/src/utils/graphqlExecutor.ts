@@ -3,6 +3,8 @@
  * Used in contexts where hooks cannot be used (like AuthContext)
  */
 
+import { getEndpoint } from './apiUrl.js';
+
 interface GraphQLResponse {
   data?: Record<string, any> | null;
   errors?: Array<{ message: string }>;
@@ -16,7 +18,7 @@ export async function executeGraphQLMutation(
   query: string,
   variables: Record<string, any>
 ): Promise<any> {
-  const response = await fetch('/graphql', {
+  const response = await fetch(getEndpoint('/graphql'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
