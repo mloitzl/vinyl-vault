@@ -3,8 +3,11 @@ kind: ConfigMap
 metadata:
   name: otel-config
 data:
-  # Betterstack Logs OTLP ingestion endpoint.
-  OTEL_EXPORTER_OTLP_ENDPOINT: "https://in.logs.betterstack.com"
+  # OTLP HTTP receiver endpoint.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://werkstatt:4318"
+
+  # Explicitly use OTLP over HTTP/protobuf for the collector/APM pipeline.
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
 
   # Override per overlay: deployment.environment=staging|demo
   OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=staging"

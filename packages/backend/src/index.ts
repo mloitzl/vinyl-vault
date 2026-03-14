@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve, join } from 'path';
 
 import { resolvers } from './graphql/resolvers.js';
+import { createGraphqlTelemetryPlugin } from './graphql/telemetry.js';
 import { extractTokenFromHeader, extractTenantContext } from './services/auth.js';
 import { config, validateConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
@@ -47,7 +48,10 @@ async function main() {
     typeDefs,
     resolvers,
     introspection: !config.isProduction,
-    plugins: config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : [],
+    plugins: [
+      createGraphqlTelemetryPlugin(),
+      ...(config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : []),
+    ],
   });
 
   // Start Apollo server

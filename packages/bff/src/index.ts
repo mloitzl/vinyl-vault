@@ -30,6 +30,7 @@ import { config, validateConfig } from './config/env.js';
 import { connectToDatabase, disconnectFromDatabase } from './db/connection.js';
 import { authRouter } from './auth/index.js';
 import { createStitchedSchema } from './graphql/schema.js';
+import { createGraphqlTelemetryPlugin } from './graphql/telemetry.js';
 import type { GraphQLContext } from './types/context.js';
 import './types/session.js'; // Import session types
 import { getActiveTenant, getAvailableTenants } from './types/session.js';
@@ -185,7 +186,10 @@ async function main() {
   const apolloServer = new ApolloServer<GraphQLContext>({
     schema,
     introspection: !config.isProduction,
-    plugins: config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : [],
+    plugins: [
+      createGraphqlTelemetryPlugin(),
+      ...(config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : []),
+    ],
   });
 
   await apolloServer.start();
