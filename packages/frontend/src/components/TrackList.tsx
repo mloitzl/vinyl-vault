@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SpotifyPreviewButton } from './SpotifyPreviewButton';
 
 interface Track {
@@ -14,6 +14,30 @@ interface TrackListProps {
 
 export function TrackList({ tracks, artist }: TrackListProps) {
   const [activeEmbed, setActiveEmbed] = useState<{ index: number; trackId: string } | null>(null);
+
+  // Listen for Spotify embed postMessage events to detect end of playback
+  useEffect(() => {
+    if (!activeEmbed) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://open.spotify.com') return;
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data?.type === 'playback_update') {
+          const { isPaused, position, duration } = (data.payload ?? {}) as Record<string, number>;
+          // Detect end: paused at ≥95% through the track (covers both ms and s units)
+          if (isPaused && duration > 0 && position > 0 && position / duration >= 0.95) {
+            setActiveEmbed(null);
+          }
+        }
+      } catch {
+        // ignore unparseable messages
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [activeEmbed]);
 
   const validTracks = tracks ? tracks.filter((t) => t && t.title && t.title.trim().length > 0) : [];
   if (validTracks.length === 0) return null;
