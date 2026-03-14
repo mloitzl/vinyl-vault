@@ -31,7 +31,7 @@ export function TrackList({ tracks, artist }: TrackListProps) {
               <div key={index} className="relative flex items-center">
                 <iframe
                   title={track.title}
-                  src={`https://open.spotify.com/embed/track/${activeEmbed.trackId}?utm_source=generator&theme=0`}
+                  src={`https://open.spotify.com/embed/track/${activeEmbed.trackId}?utm_source=generator&theme=0&autoplay=1`}
                   width="100%"
                   height="80"
                   allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
