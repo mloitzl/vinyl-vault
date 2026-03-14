@@ -19,8 +19,8 @@ function ArtistRecords({
 }: {
   fragmentRef: any;
   artistName: string;
-  onEdit: (record: Record) => void;
-  onDelete: (record: Record) => void;
+  onEdit?: (record: Record) => void;
+  onDelete?: (record: Record) => void;
 }) {
   const navigate = useNavigate();
   const { data, loadNext, hasNext, isLoadingNext } = useRecordListPagination(fragmentRef);
@@ -125,8 +125,8 @@ function ArtistRecordsWrapper({
 }: {
   queryRef: any;
   artistName: string;
-  onEdit: (record: Record) => void;
-  onDelete: (record: Record) => void;
+  onEdit?: (record: Record) => void;
+  onDelete?: (record: Record) => void;
 }) {
   const fragmentRef = useRecordsQueryPreloaded(queryRef);
   return <ArtistRecords fragmentRef={fragmentRef} artistName={artistName} onEdit={onEdit} onDelete={onDelete} />;

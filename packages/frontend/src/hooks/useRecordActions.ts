@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ConnectionHandler, ROOT_ID } from 'relay-runtime';
 import { useToast } from '../contexts';
+import { useAuth } from '../contexts/AuthContext';
 import { useDeleteRecordMutation, useUpdateRecordMutation } from './relay';
 import type { Record } from '../components/RecordCard';
 import type { RecordUpdates } from '../components/RecordEditModal';
@@ -22,8 +23,13 @@ interface RecordFilter {
  * Update returns all updatable fields so Relay merges them in place.
  */
 export function useRecordActions(filter?: RecordFilter) {
+  const { activeTenant } = useAuth();
   const { addToast } = useToast();
   const [editingRecord, setEditingRecord] = useState<Record | null>(null);
+
+  // VIEWER role cannot mutate records — returning undefined for handlers causes
+  // RecordCard to hide the edit/delete buttons entirely (they're optional props).
+  const canMutate = activeTenant?.role !== 'VIEWER';
 
   const { mutate: deleteRecord, isLoading: isDeleting } = useDeleteRecordMutation();
   const { mutate: updateRecord, isLoading: isUpdating } = useUpdateRecordMutation();
@@ -70,8 +76,8 @@ export function useRecordActions(filter?: RecordFilter) {
   return {
     editingRecord,
     isLoading,
-    handleEdit,
-    handleDelete,
+    handleEdit: canMutate ? handleEdit : undefined,
+    handleDelete: canMutate ? handleDelete : undefined,
     handleSaveEdit,
     handleCancelEdit,
   };
