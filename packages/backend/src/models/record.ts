@@ -43,6 +43,7 @@ export interface RecordFilter {
   title?: string;
   year?: number;
   format?: string;
+  genre?: string;
   location?: string;
   search?: string;
 }
@@ -150,14 +151,16 @@ export class RecordRepository {
       query.$text = { $search: filter.search };
     }
 
-    // Release-level filters (artist, title, year, format) require a join.
+    // Release-level filters (artist, title, year, format, genre) require a join.
     // Fetch matching release IDs first, then constrain records.releaseId.
-    if (filter.artist || filter.title || filter.year || filter.format) {
+    if (filter.artist || filter.title || filter.year || filter.format || filter.genre) {
       const releaseQuery: any = {};
       if (filter.artist) releaseQuery.artist = { $regex: filter.artist, $options: 'i' };
       if (filter.title) releaseQuery.title = { $regex: filter.title, $options: 'i' };
       if (filter.year) releaseQuery.year = filter.year;
       if (filter.format) releaseQuery.format = filter.format;
+      // release.genre is an array; MongoDB matches if the value is contained in it
+      if (filter.genre) releaseQuery.genre = filter.genre;
       const matchingReleases = await this.db
         .collection('releases')
         .find(releaseQuery, { projection: { _id: 1 } })

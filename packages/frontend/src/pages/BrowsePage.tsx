@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ArtistsView } from '../components/browse/ArtistsView';
 import { AlbumsView } from '../components/browse/AlbumsView';
 import { GenresView } from '../components/browse/GenresView';
+import { GenreRecordsView } from '../components/browse/GenreRecordsView';
 
 type BrowseTab = 'artists' | 'albums' | 'genres';
 
@@ -14,6 +15,7 @@ const TABS: { id: BrowseTab; label: string }[] = [
 export function BrowsePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') as BrowseTab) || 'artists';
+  const activeGenre = searchParams.get('genre');
 
   const handleTabChange = (tab: BrowseTab) => {
     setSearchParams({ tab });
@@ -52,7 +54,10 @@ export function BrowsePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {activeTab === 'artists' && <ArtistsView />}
         {activeTab === 'albums' && <AlbumsView />}
-        {activeTab === 'genres' && <GenresView />}
+        {activeTab === 'genres' && activeGenre
+          ? <GenreRecordsView genre={activeGenre} onBack={() => setSearchParams({ tab: 'genres' })} />
+          : activeTab === 'genres' && <GenresView />
+        }
       </div>
     </div>
   );

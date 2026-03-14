@@ -6,6 +6,7 @@ interface RecordFilter {
   title?: string;
   year?: number;
   format?: string;
+  genre?: string;
   location?: string;
   search?: string;
 }

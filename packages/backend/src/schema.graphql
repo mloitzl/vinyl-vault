@@ -318,6 +318,7 @@ input RecordFilter {
   title: String
   year: Int
   format: String
+  genre: String
   location: String
   search: String
 }

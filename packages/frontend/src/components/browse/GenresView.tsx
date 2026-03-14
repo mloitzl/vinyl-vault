@@ -13,7 +13,7 @@ function GenreChip({ name, recordCount }: { name: string; recordCount: number })
 
   return (
     <button
-      onClick={() => navigate(`/collection?search=${encodeURIComponent(name)}`)}
+      onClick={() => navigate(`/browse?tab=genres&genre=${encodeURIComponent(name)}`)}
       className={`inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-800 font-medium hover:bg-emerald-100 transition-colors ${sizeClass}`}
     >
       {name}
