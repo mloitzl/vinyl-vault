@@ -151,20 +151,24 @@ export class RecordRepository {
     }
 
     // Forward pagination: records after cursor
+    let afterCursorApplied = false;
     if (!isBackward && pagination.after) {
       try {
         const cursorId = new ObjectId(pagination.after);
         query._id = { $gt: cursorId };
+        afterCursorApplied = true;
       } catch {
         // Invalid cursor, ignore
       }
     }
 
     // Backward pagination: records before cursor
+    let beforeCursorApplied = false;
     if (isBackward && pagination.before) {
       try {
         const cursorId = new ObjectId(pagination.before);
         query._id = { $lt: cursorId };
+        beforeCursorApplied = true;
       } catch {
         // Invalid cursor, ignore
       }
@@ -208,8 +212,8 @@ export class RecordRepository {
       node: record,
     }));
 
-    const hasPreviousPage = isBackward ? hasExtraPage : !!pagination.after;
-    const hasNextPage = isBackward ? !!pagination.before : hasExtraPage;
+    const hasPreviousPage = isBackward ? hasExtraPage : afterCursorApplied;
+    const hasNextPage = isBackward ? beforeCursorApplied : hasExtraPage;
 
     // Try to use cached counters, fallback to countDocuments for complex queries
     let totalCount: number;

@@ -1,5 +1,5 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
-import { RenameTypes, wrapSchema } from '@graphql-tools/wrap';
+import { RenameTypes } from '@graphql-tools/wrap';
 import { buildASTSchema, parse } from 'graphql';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -39,24 +39,32 @@ export async function createStitchedSchema() {
   // stitchSchemas to crash when it walks the mutation type's fields.
   const backendSchema = buildASTSchema(parse(backendSDL));
 
-  // Rename the backend's Tenant type to avoid a shape conflict with the BFF's Tenant.
-  // Backend Tenant: { tenantId, tenantType, databaseName, ... }  (internal model)
-  // BFF Tenant:     { id, name, type, role }                     (client-facing model)
-  // TenantType and TenantRole have identical values in both schemas; stitchSchemas
-  // merges identical enums cleanly so no renaming is needed for those.
-  const remoteSchema = wrapSchema({
-    schema: backendSchema,
-    executor: backendExecutor,
-    transforms: [new RenameTypes((name) => (name === 'Tenant' ? 'BackendTenant' : name))],
-  });
-
-  // The BFF extensions (viewer, switchTenant, User session fields, Tenant/FeatureFlags
-  // types) are added as top-level typeDefs/resolvers on the stitched schema.
-  // Because BackendTenant is now the only backend-side Tenant, the BFF's `type Tenant`
-  // in typeDefs is unambiguous and `extend type User { availableTenants: [Tenant!]! }`
-  // resolves cleanly.
+  // BFF extensions (viewer, switchTenant, User session fields, Tenant/FeatureFlags types)
+  // are added as top-level typeDefs/resolvers on the stitched schema.
   return stitchSchemas({
-    subschemas: [remoteSchema],
+    subschemas: [
+      {
+        schema: backendSchema,
+        executor: backendExecutor,
+        // Rename the backend's Tenant type to avoid a shape conflict with the BFF's Tenant.
+        // Backend Tenant: { tenantId, tenantType, databaseName, ... }  (internal model)
+        // BFF Tenant:     { id, name, type, role }                     (client-facing model)
+        // TenantType/TenantRole are identical in both schemas — stitcher merges them cleanly.
+        // RenameTypes context generic defaults to Record<string,any>; cast avoids a
+        // mismatch with GraphQLContext since schema transforms don't receive request context.
+        transforms: [new RenameTypes((name) => (name === 'Tenant' ? 'BackendTenant' : name)) as any],
+        // Type merge: viewer/switchTenant return only session-side User fields.
+        // This tells the stitcher it can fetch missing backend User fields (githubId, role, …)
+        // on demand via query { user(id: $id) } rather than returning null for them.
+        merge: {
+          User: {
+            selectionSet: '{ id }',
+            fieldName: 'user',
+            args: ({ id }: { id: string }) => ({ id }),
+          },
+        },
+      },
+    ],
     typeDefs,
     resolvers,
   });

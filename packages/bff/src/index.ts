@@ -181,7 +181,7 @@ async function main() {
     }
   });
 
-  // Initialize Apollo Server (may retry if backend is temporarily unreachable)
+  // Initialize Apollo Server using the stitched schema built from the static backend SDL.
   const schema = await createStitchedSchema();
   const apolloServer = new ApolloServer<GraphQLContext>({
     schema,
