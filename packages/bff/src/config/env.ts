@@ -59,6 +59,12 @@ function getConfig() {
       enableTenantFeatures: process.env.ENABLE_TENANT_FEATURES !== 'false',
     },
 
+    // Spotify (optional — used for 30-sec track preview feature)
+    spotify: {
+      clientId: process.env.SPOTIFY_CLIENT_ID || '',
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET || '',
+    },
+
     // Check if in production
     isProduction: process.env.NODE_ENV === 'production',
   } as const;

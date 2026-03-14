@@ -1,3 +1,5 @@
+import { SpotifyPreviewButton } from './SpotifyPreviewButton';
+
 interface Track {
   position?: string;
   title: string;
@@ -6,9 +8,10 @@ interface Track {
 
 interface TrackListProps {
   tracks: Track[];
+  artist?: string;
 }
 
-export function TrackList({ tracks }: TrackListProps) {
+export function TrackList({ tracks, artist }: TrackListProps) {
   const validTracks = tracks ? tracks.filter((t) => t && t.title && t.title.trim().length > 0) : [];
   if (validTracks.length === 0) return null;
 
@@ -20,7 +23,10 @@ export function TrackList({ tracks }: TrackListProps) {
       <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
         {validTracks.map((track, index) => (
           <div key={index} className="px-3 py-1.5 flex items-center text-sm">
-            <span className="w-8 text-gray-400 text-xs">{track.position ?? index + 1}</span>
+            {artist && <SpotifyPreviewButton track={track.title} artist={artist} />}
+            <span className="w-8 text-gray-400 text-xs flex-shrink-0">
+              {track.position ?? index + 1}
+            </span>
             <span className="flex-1 truncate text-gray-700">{track.title}</span>
             {track.duration && <span className="text-gray-400 text-xs ml-2">{track.duration}</span>}
           </div>
