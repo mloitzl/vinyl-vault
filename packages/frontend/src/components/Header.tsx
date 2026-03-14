@@ -1,13 +1,9 @@
-// Header component with user profile and auth actions
-
 import { useAuth } from '../contexts/AuthContext';
-import { getRoleLabel, getRoleColors } from '../constants/roles';
-import { TenantSwitcher } from './TenantSwitcher';
-import { AddOrgButton } from './AddOrgButton';
+import { UserDropdownMenu } from './UserDropdownMenu';
 import { Button } from './ui/Button';
 
 export function Header() {
-  const { user, activeTenant, isLoading, login, logout, featureFlags } = useAuth();
+  const { user, isLoading, login } = useAuth();
 
   return (
     <header className="bg-white shadow-sm">
@@ -22,16 +18,11 @@ export function Header() {
           {/* Auth section */}
           <div className="flex items-center">
             {isLoading ? (
-              <div className="animate-pulse flex items-center">
-                <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+              <div className="animate-pulse">
+                <div className="w-8 h-8 bg-gray-200 rounded-full" />
               </div>
             ) : user ? (
-              <UserMenu
-                user={user}
-                tenant={activeTenant}
-                onLogout={logout}
-                enableTenantFeatures={featureFlags.enableTenantFeatures}
-              />
+              <UserDropdownMenu />
             ) : (
               <LoginButton onClick={login} />
             )}
@@ -42,7 +33,6 @@ export function Header() {
   );
 }
 
-// Login button component
 interface LoginButtonProps {
   onClick: () => void;
 }
@@ -59,65 +49,5 @@ function LoginButton({ onClick }: LoginButtonProps) {
       </svg>
       Sign in with GitHub
     </Button>
-  );
-}
-
-// User menu component with profile and logout
-interface UserMenuProps {
-  user: {
-    displayName: string;
-    avatarUrl?: string;
-    githubLogin: string;
-  };
-  tenant: { role: string } | null;
-  onLogout: () => Promise<void>;
-  enableTenantFeatures: boolean;
-}
-
-function UserMenu({ user, tenant, onLogout, enableTenantFeatures }: UserMenuProps) {
-  const tenantRole = tenant?.role || 'VIEWER';
-
-  return (
-    <div className="flex items-center space-x-4">
-      {/* Add Organization button - hidden by feature flag */}
-      {enableTenantFeatures && <AddOrgButton />}
-
-      {/* Tenant switcher - hidden by feature flag */}
-      {enableTenantFeatures && <TenantSwitcher />}
-
-      {/* User info */}
-      <div className="flex items-center space-x-3">
-        {user.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt={user.displayName}
-            className="w-8 h-8 rounded-full ring-2 ring-gray-200"
-          />
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-            <span className="text-gray-600 text-sm font-medium">
-              {user.displayName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
-        <div className="hidden sm:block">
-          <p className="text-sm font-medium text-gray-900">{user.displayName}</p>
-          <p className="text-xs text-gray-500">@{user.githubLogin}</p>
-        </div>
-        {/* Role badge */}
-        <span
-          className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getRoleColors(
-            tenantRole
-          )}`}
-        >
-          {getRoleLabel(tenantRole)}
-        </span>
-      </div>
-
-      {/* Logout button */}
-      <Button variant="secondary" onClick={onLogout} size="sm">
-        Sign out
-      </Button>
-    </div>
   );
 }
