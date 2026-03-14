@@ -4,27 +4,27 @@ import { RecordCard, type Record } from '../components/RecordCard';
 import { RecordEditModal } from '../components/RecordEditModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { Button } from '../components/ui/Button';
-import { useRecordsQueryPreloaded } from '../hooks/relay';
+import { useRecordsQueryPreloaded, useRecordListPagination } from '../hooks/relay';
 import { useRecordsQueryLoader } from '../hooks/relay/useRecordsQueryLoader';
 import { useRecordActions } from '../hooks/useRecordActions';
-import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
+import type { useRecordsQuery_records$data } from '../__generated__/useRecordsQuery_records.graphql';
 
-type RecordEdge = useRecordsQuery$data['records']['edges'][number];
+type RecordEdge = useRecordsQuery_records$data['records']['edges'][number];
 
 function ArtistRecords({
-  queryRef,
+  fragmentRef,
   artistName,
   onEdit,
   onDelete,
 }: {
-  queryRef: any;
+  fragmentRef: any;
   artistName: string;
   onEdit: (record: Record) => void;
   onDelete: (record: Record) => void;
 }) {
   const navigate = useNavigate();
-  const recordsData = useRecordsQueryPreloaded(queryRef);
-  const records = recordsData.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
+  const { data, loadNext, hasNext, isLoadingNext } = useRecordListPagination(fragmentRef);
+  const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
 
   // Derive artist cover image and genres from records
   const coverImageUrl = records.find((r: any) => r.release?.coverImageUrl)?.release?.coverImageUrl;
@@ -51,7 +51,6 @@ function ArtistRecords({
       <div className="bg-white border-b border-gray-200 mb-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center gap-5">
-            {/* Avatar */}
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 shadow">
               {coverImageUrl ? (
                 <img src={coverImageUrl} alt={artistName} className="w-full h-full object-cover" />
@@ -64,11 +63,10 @@ function ArtistRecords({
               )}
             </div>
 
-            {/* Details */}
             <div className="min-w-0">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{artistName}</h1>
               <p className="text-sm text-gray-500 mt-1">
-                {recordsData.totalCount} {recordsData.totalCount === 1 ? 'record' : 'records'}
+                {data.records.totalCount} {data.records.totalCount === 1 ? 'record' : 'records'}
               </p>
               {genres.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
@@ -87,16 +85,23 @@ function ArtistRecords({
         </div>
       </div>
 
-      {/* Records list */}
       <div className="space-y-4">
         {records.map((record: Record) => (
           <RecordCard key={record.id} record={record} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </div>
 
-      {recordsData.pageInfo.hasNextPage && (
+      {hasNext && (
         <div className="mt-8 text-center">
-          <p className="text-xs text-gray-400">Load more coming soon</p>
+          <Button
+            variant="secondary"
+            size="lg"
+            onClick={() => loadNext(50)}
+            isDisabled={isLoadingNext}
+            icon={isLoadingNext ? <LoadingSpinner size="sm" color="secondary" /> : undefined}
+          >
+            {isLoadingNext ? 'Loading…' : 'Load More'}
+          </Button>
         </div>
       )}
     </>
@@ -111,10 +116,26 @@ function ArtistDetailPageLoading() {
   );
 }
 
+// Wrapper inside Suspense: resolves the preloaded query into a fragment ref
+function ArtistRecordsWrapper({
+  queryRef,
+  artistName,
+  onEdit,
+  onDelete,
+}: {
+  queryRef: any;
+  artistName: string;
+  onEdit: (record: Record) => void;
+  onDelete: (record: Record) => void;
+}) {
+  const fragmentRef = useRecordsQueryPreloaded(queryRef);
+  return <ArtistRecords fragmentRef={fragmentRef} artistName={artistName} onEdit={onEdit} onDelete={onDelete} />;
+}
+
 export function ArtistDetailPage() {
   const { name } = useParams<{ name: string }>();
   const artistName = name ? decodeURIComponent(name) : '';
-  const { queryRef, loadQuery, refetch } = useRecordsQueryLoader();
+  const { queryRef, loadQuery } = useRecordsQueryLoader();
 
   useEffect(() => {
     if (artistName) {
@@ -122,9 +143,9 @@ export function ArtistDetailPage() {
     }
   }, [artistName, loadQuery]);
 
-  const doRefetch = () => refetch({ first: 50, filter: { artist: artistName } });
+  const filter = artistName ? { artist: artistName } : undefined;
   const { editingRecord, handleEdit, handleDelete, handleSaveEdit, handleCancelEdit } =
-    useRecordActions(doRefetch);
+    useRecordActions(filter);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -146,7 +167,7 @@ export function ArtistDetailPage() {
       ) : (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
           <Suspense fallback={<ArtistDetailPageLoading />}>
-            <ArtistRecords
+            <ArtistRecordsWrapper
               queryRef={queryRef}
               artistName={artistName}
               onEdit={handleEdit}

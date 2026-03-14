@@ -10,27 +10,27 @@ interface UpdateRecordInput {
   notes?: string;
 }
 
-type RefetchFn = (variables: Record<string, any>) => void;
 
 const UpdateRecordMutation = graphql`
   mutation useUpdateRecordMutation($input: UpdateRecordInput!) {
     updateRecord(input: $input) {
       record {
         id
+        condition
+        location
+        price
+        purchaseDate
+        notes
       }
       errors
     }
   }
 `;
 
-/**
- * Hook to update an existing record.
- * @returns Mutation function and loading state
- */
 export function useUpdateRecordMutation() {
   const [commit, isInFlight] = useMutation<UseUpdateRecordMutationType>(UpdateRecordMutation);
 
-  const mutate = async (input: UpdateRecordInput, refetch?: RefetchFn) => {
+  const mutate = async (input: UpdateRecordInput) => {
     return new Promise((resolve, reject) => {
       commit({
         variables: { input },
@@ -38,8 +38,7 @@ export function useUpdateRecordMutation() {
           if (response.updateRecord.errors && response.updateRecord.errors.length > 0) {
             reject(new Error(response.updateRecord.errors[0]));
           } else {
-            // Refetch records list after update
-            refetch?.({ first: 20 });
+            // Relay automatically merges updated fields into the store by id
             resolve(response.updateRecord.record);
           }
         },
