@@ -50,6 +50,20 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    path: '/browse',
+    label: 'Browse',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+          d="M4 6h16M4 10h16M4 14h16M4 18h16"
+        />
+      </svg>
+    ),
+  },
+  {
     path: '/search',
     label: 'Search',
     icon: (
@@ -77,7 +91,9 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
     <aside className="hidden md:flex md:flex-col md:w-56 lg:w-64 border-r border-gray-200 bg-white">
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = item.path === '/'
+            ? location.pathname === item.path
+            : location.pathname.startsWith(item.path);
           return (
             <Link
               key={item.path}
@@ -117,7 +133,9 @@ export function MobileNavigation() {
     <nav className="sticky bottom-0 bg-white border-t border-gray-200 md:hidden">
       <div className="flex justify-around">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = item.path === '/'
+            ? location.pathname === item.path
+            : location.pathname.startsWith(item.path);
           return (
             <Link
               key={item.path}

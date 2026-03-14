@@ -29,11 +29,12 @@ import MongoStore from 'connect-mongo';
 import { config, validateConfig } from './config/env.js';
 import { connectToDatabase, disconnectFromDatabase } from './db/connection.js';
 import { authRouter } from './auth/index.js';
-import { typeDefs } from './graphql/typeDefs.js';
-import { resolvers } from './graphql/resolvers.js';
+import { createStitchedSchema } from './graphql/schema.js';
+import { createGraphqlTelemetryPlugin } from './graphql/telemetry.js';
 import type { GraphQLContext } from './types/context.js';
 import './types/session.js'; // Import session types
-import { getActiveTenant } from './types/session.js';
+import { getActiveTenant, getAvailableTenants } from './types/session.js';
+import { signJwt } from './auth/jwt.js';
 import { verifyWebhookSignature, forwardWebhookToBackend } from './auth/webhook.js';
 import { logger, httpLogger } from './utils/logger.js';
 
@@ -151,37 +152,9 @@ async function main() {
   // Auth routes
   app.use('/auth', authLimiter, authRouter);
 
-  // Health check endpoint
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  // Initialize Apollo Server
-  const apolloServer = new ApolloServer<GraphQLContext>({
-    typeDefs,
-    resolvers,
-    introspection: !config.isProduction,
-    plugins: config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : [],
-  });
-
-  await apolloServer.start();
-
-  // GraphQL middleware
-  app.use(
-    '/graphql',
-    graphqlLimiter,
-    expressMiddleware(apolloServer, {
-      context: async ({ req, res }): Promise<GraphQLContext> => ({
-        req: req as any,
-        res,
-        user: req.session.user || null,
-        session: req.session,
-        activeTenantId: getActiveTenant(req.session) ?? null,
-      }),
-    })
-  );
-
-  // Bind to all interfaces so the BFF is reachable from other devices on the LAN when running in dev.
+  // Bind early so the health/readiness probe responds during schema stitching.
+  // The /graphql route is wired up after stitching completes.
+  let graphqlReady = false;
   const host = '0.0.0.0';
   const httpServer = app.listen(config.port, host, () => {
     logger.info(
@@ -193,6 +166,64 @@ async function main() {
       'BFF server running'
     );
   });
+
+  // Health check — always responds so k8s liveness probe never times out.
+  // Readiness check — returns 503 until the stitched schema is ready,
+  // preventing traffic from being routed to the pod before GraphQL is available.
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+  app.get('/ready', (_req, res) => {
+    if (graphqlReady) {
+      res.json({ status: 'ok' });
+    } else {
+      res.status(503).json({ status: 'starting' });
+    }
+  });
+
+  // Initialize Apollo Server using the stitched schema built from the static backend SDL.
+  const schema = await createStitchedSchema();
+  const apolloServer = new ApolloServer<GraphQLContext>({
+    schema,
+    introspection: !config.isProduction,
+    plugins: [
+      createGraphqlTelemetryPlugin(),
+      ...(config.isProduction ? [ApolloServerPluginLandingPageDisabled()] : []),
+    ],
+  });
+
+  await apolloServer.start();
+
+  // GraphQL middleware
+  app.use(
+    '/graphql',
+    graphqlLimiter,
+    expressMiddleware(apolloServer, {
+      context: async ({ req, res }): Promise<GraphQLContext> => {
+        const session = req.session;
+        const user = session.user || null;
+        const activeTenantId = getActiveTenant(session) ?? null;
+        let jwt: string | undefined;
+        if (user) {
+          const availableTenants = getAvailableTenants(session) || [];
+          const activeTenant =
+            availableTenants.find((t) => t.tenantId === activeTenantId) || availableTenants[0];
+          jwt = signJwt({
+            sub: user.id,
+            username: user.displayName || user.githubLogin,
+            avatarUrl: user.avatarUrl,
+            tenantId: activeTenant?.tenantId || `user_${user.id}`,
+            tenantRole: activeTenant?.role || 'VIEWER',
+            githubLogin: user.githubLogin,
+          });
+        }
+        return { req: req as any, res, user, session, activeTenantId, jwt };
+      },
+    })
+  );
+
+  // GraphQL is now fully wired — signal readiness probe
+  graphqlReady = true;
 
   // Graceful shutdown
   const shutdown = async (signal: NodeJS.Signals) => {
@@ -215,4 +246,5 @@ async function main() {
 
 main().catch((err) => {
   logger.error({ err }, 'BFF failed to start');
+  process.exit(1);
 });

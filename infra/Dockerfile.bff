@@ -11,6 +11,10 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/bff ./packages/bff
 
+# Backend schema is read statically at startup (avoids runtime introspection,
+# which is disabled in production). Must be present before tsc resolves paths.
+COPY packages/backend/src/schema.graphql ./packages/backend/src/schema.graphql
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
@@ -31,6 +35,10 @@ COPY --from=builder /app/packages/bff/dist ./dist
 COPY --from=builder /app/packages/bff/package.json ./
 COPY --from=builder /app/packages/bff/src/schema.graphql ./dist/
 COPY --from=builder /app/packages/bff/src/register.mjs ./dist/register.mjs
+
+# Backend schema: read at runtime by dist/graphql/schema.js via
+# join(__dirname, '../../backend/src/schema.graphql') → /app/backend/src/schema.graphql
+COPY --from=builder /app/packages/backend/src/schema.graphql ./backend/src/schema.graphql
 
 # Install production dependencies only
 RUN pnpm install --prod

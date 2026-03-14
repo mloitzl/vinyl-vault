@@ -1,58 +1,48 @@
 import { useState, useEffect, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { RecordEditModal, type RecordUpdates } from '../components/RecordEditModal';
-import {
-  useRecordsQueryPreloaded,
-  useDeleteRecordMutation,
-  useUpdateRecordMutation,
-} from '../hooks/relay';
+import { RecordEditModal } from '../components/RecordEditModal';
+import { useRecordsQueryPreloaded, useRecordListPagination } from '../hooks/relay';
 import { useRecordsQueryLoader } from '../hooks/relay/useRecordsQueryLoader';
-import { useToast } from '../contexts';
-import type { useRecordsQuery$data } from '../__generated__/useRecordsQuery.graphql';
+import { useRecordActions } from '../hooks/useRecordActions';
+import type { useRecordsQuery_records$data } from '../__generated__/useRecordsQuery_records.graphql';
 
-type RecordEdge = useRecordsQuery$data['records']['edges'][number];
+type RecordEdge = useRecordsQuery_records$data['records']['edges'][number];
 
 type RecordFilter = {
-  artist?: string;
-  title?: string;
-  year?: number;
-  format?: string;
   location?: string;
   search?: string;
 };
 
 export function CollectionPage() {
-  const { queryRef, loadQuery, refetch } = useRecordsQueryLoader();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
+  const [urlSearchParams] = useSearchParams();
+  const { queryRef, loadQuery } = useRecordsQueryLoader();
 
-  // Load initial query
+  const initialSearch = urlSearchParams.get('search') ?? '';
+
   useEffect(() => {
-    loadQuery({ first: 20 });
+    loadQuery({ first: 20, ...(initialSearch ? { filter: { search: initialSearch } } : {}) });
   }, [loadQuery]);
 
-  // Wait for initial query to load before rendering child component
   if (!queryRef) {
     return <CollectionPageLoading />;
   }
 
   return (
     <Suspense fallback={<CollectionPageLoading />}>
-      <CollectionPageContent
-        queryRef={queryRef}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        locationFilter={locationFilter}
-        setLocationFilter={setLocationFilter}
-        onRefetch={refetch}
-      />
+      <CollectionPageWrapper queryRef={queryRef} initialSearch={initialSearch} />
     </Suspense>
   );
+}
+
+// Wrapper inside Suspense: resolves the preloaded query into a fragment ref
+function CollectionPageWrapper({ queryRef, initialSearch }: { queryRef: any; initialSearch: string }) {
+  const fragmentRef = useRecordsQueryPreloaded(queryRef);
+  return <CollectionPageContent fragmentRef={fragmentRef} initialSearch={initialSearch} />;
 }
 
 function CollectionPageLoading() {
@@ -63,105 +53,43 @@ function CollectionPageLoading() {
   );
 }
 
-interface CollectionPageContentProps {
-  queryRef: any;
-  searchTerm: string;
-  setSearchTerm: (term: string) => void;
-  locationFilter: string;
-  setLocationFilter: (filter: string) => void;
-  onRefetch: (variables: { [key: string]: any }) => void;
-}
-
 function CollectionPageContent({
-  queryRef,
-  searchTerm,
-  setSearchTerm,
-  locationFilter,
-  setLocationFilter,
-  onRefetch,
-}: CollectionPageContentProps) {
+  fragmentRef,
+  initialSearch,
+}: {
+  fragmentRef: any;
+  initialSearch: string;
+}) {
   const navigate = useNavigate();
-  const { addToast } = useToast();
-  const [editingRecord, setEditingRecord] = useState<Record | null>(null);
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [locationFilter, setLocationFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  // Use preloaded query
-  const recordsData = useRecordsQueryPreloaded(queryRef);
+  const { data, loadNext, hasNext, isLoadingNext, refetch } = useRecordListPagination(fragmentRef);
 
-  // Build filter object
-  const filter: RecordFilter = {};
-  if (searchTerm.trim()) filter.search = searchTerm.trim();
-  if (locationFilter.trim()) filter.location = locationFilter.trim();
+  const currentFilter: RecordFilter = {};
+  if (searchTerm.trim()) currentFilter.search = searchTerm.trim();
+  if (locationFilter.trim()) currentFilter.location = locationFilter.trim();
 
-  const records = recordsData.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
-  const pageInfo = recordsData.pageInfo;
-  const totalCount = recordsData.totalCount;
+  const { editingRecord, isLoading, handleEdit, handleDelete, handleSaveEdit, handleCancelEdit } =
+    useRecordActions(Object.keys(currentFilter).length > 0 ? currentFilter : undefined);
 
-  const { mutate: deleteRecord, isLoading: isDeleting } = useDeleteRecordMutation();
-  const { mutate: updateRecord, isLoading: isUpdating } = useUpdateRecordMutation();
-
-  const isLoading = isDeleting || isUpdating;
-
-  const handleDelete = async (record: Record) => {
-    try {
-      await deleteRecord({ id: record.id }, () => {
-        // Refetch records after delete
-        onRefetch({ first: 20, filter: Object.keys(filter).length > 0 ? filter : undefined });
-      });
-      addToast('Record deleted successfully', 'success');
-    } catch (err: any) {
-      addToast(err?.message ?? 'Failed to delete record', 'error');
-    }
-  };
-
-  const handleEdit = (record: Record) => {
-    setEditingRecord(record);
-  };
-
-  const handleSaveEdit = async (updates: RecordUpdates) => {
-    if (!editingRecord) return;
-
-    try {
-      await updateRecord(
-        {
-          id: editingRecord.id,
-          ...updates,
-        },
-        () => {
-          // Refetch records after update
-          onRefetch({ first: 20, filter: Object.keys(filter).length > 0 ? filter : undefined });
-        }
-      );
-      addToast('Record updated successfully', 'success');
-      setEditingRecord(null);
-    } catch (err: any) {
-      throw new Error(err?.message ?? 'Failed to update record');
-    }
-  };
-
-  const handleLoadMore = () => {
-    if (pageInfo.endCursor && pageInfo.hasNextPage) {
-      // For pagination, we'd need to handle this differently with useQueryLoader
-      // For now, just load more from the start
-      onRefetch({
-        first: records.length + 20,
-        filter: Object.keys(filter).length > 0 ? filter : undefined,
-      });
-    }
-  };
+  const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
+  const totalCount = data.records.totalCount;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Refetch with new filter
-    onRefetch({ first: 20, filter: Object.keys(filter).length > 0 ? filter : undefined });
+    refetch(
+      { first: 20, filter: Object.keys(currentFilter).length > 0 ? currentFilter : undefined },
+      { fetchPolicy: 'network-only' }
+    );
   };
 
   const handleClearFilters = () => {
     setSearchTerm('');
     setLocationFilter('');
-    // Refetch without filters
-    onRefetch({ first: 20 });
+    refetch({ first: 20 }, { fetchPolicy: 'network-only' });
   };
 
   return (
@@ -300,7 +228,6 @@ function CollectionPageContent({
           </div>
         ) : (
           <>
-            {/* Records Grid */}
             <div className="space-y-4">
               {records.map((record: Record) => (
                 <RecordCard
@@ -312,17 +239,16 @@ function CollectionPageContent({
               ))}
             </div>
 
-            {/* Load More Button */}
-            {pageInfo.hasNextPage && (
+            {hasNext && (
               <div className="mt-8 text-center">
                 <Button
-                  onClick={handleLoadMore}
-                  isDisabled={isLoading}
+                  onClick={() => loadNext(20)}
+                  isDisabled={isLoadingNext}
                   variant="secondary"
                   size="lg"
-                  icon={isLoading ? <LoadingSpinner size="sm" color="secondary" /> : undefined}
+                  icon={isLoadingNext ? <LoadingSpinner size="sm" color="secondary" /> : undefined}
                 >
-                  {isLoading ? 'Loading...' : 'Load More'}
+                  {isLoadingNext ? 'Loading...' : 'Load More'}
                 </Button>
               </div>
             )}
@@ -330,12 +256,11 @@ function CollectionPageContent({
         )}
       </div>
 
-      {/* Edit Modal */}
       {editingRecord && (
         <RecordEditModal
           record={editingRecord}
           onSave={handleSaveEdit}
-          onCancel={() => setEditingRecord(null)}
+          onCancel={handleCancelEdit}
         />
       )}
     </div>
@@ -343,3 +268,4 @@ function CollectionPageContent({
 }
 
 export default CollectionPage;
+

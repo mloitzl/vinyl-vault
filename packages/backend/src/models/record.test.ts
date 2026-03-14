@@ -166,6 +166,113 @@ describe('RecordRepository', () => {
       expect(secondPage.edges).toHaveLength(1);
       expect(secondPage.pageInfo.hasNextPage).toBe(false);
     });
+
+    it('should return last N records in natural (ascending) order using `last`', async () => {
+      const userId = new ObjectId().toString();
+
+      // Create 5 records
+      for (let i = 0; i < 5; i++) {
+        await repository.create({
+          releaseId: new ObjectId().toString(),
+          userId,
+          notes: `Record ${i}`,
+        });
+      }
+
+      const result = await repository.findMany({ userId }, { last: 3 });
+
+      // Should return exactly 3 edges
+      expect(result.edges).toHaveLength(3);
+      expect(result.totalCount).toBe(5);
+
+      // Edges should be in ascending (_id) order (natural order restored after reverse)
+      const cursors = result.edges.map((e) => e.cursor);
+      expect(cursors).toEqual([...cursors].sort());
+
+      // There are records before these (hasPreviousPage = true), no `before` cursor so hasNextPage = false
+      expect(result.pageInfo.hasPreviousPage).toBe(true);
+      expect(result.pageInfo.hasNextPage).toBe(false);
+    });
+
+    it('should set hasPreviousPage=false and hasNextPage=false when `last` covers all records', async () => {
+      const userId = new ObjectId().toString();
+
+      // Create 2 records
+      for (let i = 0; i < 2; i++) {
+        await repository.create({
+          releaseId: new ObjectId().toString(),
+          userId,
+        });
+      }
+
+      const result = await repository.findMany({ userId }, { last: 5 });
+
+      expect(result.edges).toHaveLength(2);
+      expect(result.pageInfo.hasPreviousPage).toBe(false);
+      expect(result.pageInfo.hasNextPage).toBe(false);
+    });
+
+    it('should support cursor-based backward pagination using `before`', async () => {
+      const userId = new ObjectId().toString();
+
+      // Create 4 records
+      for (let i = 0; i < 4; i++) {
+        await repository.create({
+          releaseId: new ObjectId().toString(),
+          userId,
+          notes: `Record ${i}`,
+        });
+      }
+
+      // Get all records in forward order to obtain a cursor
+      const allRecords = await repository.findMany({ userId }, { first: 10 });
+      expect(allRecords.edges).toHaveLength(4);
+
+      // The cursor of the last record (4th)
+      const lastCursor = allRecords.pageInfo.endCursor!;
+
+      // Fetch 2 records before the last one
+      const page = await repository.findMany({ userId }, { last: 2, before: lastCursor });
+
+      expect(page.edges).toHaveLength(2);
+
+      // Returned cursors should all be less than lastCursor (i.e., come before it)
+      for (const edge of page.edges) {
+        expect(edge.cursor < lastCursor).toBe(true);
+      }
+
+      // Edges should be in ascending order
+      const cursors = page.edges.map((e) => e.cursor);
+      expect(cursors).toEqual([...cursors].sort());
+
+      // `before` is set so hasNextPage = true; whether hasPreviousPage depends on extra records
+      expect(page.pageInfo.hasNextPage).toBe(true);
+    });
+
+    it('should correctly set hasPreviousPage when there are no more records before `before` cursor', async () => {
+      const userId = new ObjectId().toString();
+
+      // Create 3 records
+      for (let i = 0; i < 3; i++) {
+        await repository.create({
+          releaseId: new ObjectId().toString(),
+          userId,
+        });
+      }
+
+      // Get all in forward order
+      const allRecords = await repository.findMany({ userId }, { first: 10 });
+      const thirdCursor = allRecords.pageInfo.endCursor!;
+
+      // Fetch last 5 before the third record — only 2 exist before it, no extra
+      const page = await repository.findMany({ userId }, { last: 5, before: thirdCursor });
+
+      expect(page.edges).toHaveLength(2);
+      // No extra records beyond the 2, so hasPreviousPage = false
+      expect(page.pageInfo.hasPreviousPage).toBe(false);
+      // `before` cursor provided so hasNextPage = true
+      expect(page.pageInfo.hasNextPage).toBe(true);
+    });
   });
 
   describe('update', () => {

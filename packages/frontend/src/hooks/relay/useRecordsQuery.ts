@@ -1,4 +1,4 @@
-import { useLazyLoadQuery, graphql, usePreloadedQuery } from 'react-relay';
+import { useLazyLoadQuery, usePreloadedQuery, usePaginationFragment, graphql } from 'react-relay';
 import type { useRecordsQuery as UseRecordsQueryType } from '../../__generated__/useRecordsQuery.graphql';
 
 interface RecordFilter {
@@ -6,6 +6,7 @@ interface RecordFilter {
   title?: string;
   year?: number;
   format?: string;
+  genre?: string;
   location?: string;
   search?: string;
 }
@@ -18,9 +19,18 @@ interface RecordsQueryVariables {
   filter?: RecordFilter;
 }
 
-export const RecordsQuery = graphql`
-  query useRecordsQuery($first: Int, $after: String, $filter: RecordFilter) {
-    records(first: $first, after: $after, filter: $filter) {
+// Fragment that owns the @connection — used with usePaginationFragment for
+// proper load-more (appending) and @deleteEdge support in mutations.
+export const RecordListFragment = graphql`
+  fragment useRecordsQuery_records on Query
+    @refetchable(queryName: "useRecordsQueryPaginationQuery")
+    @argumentDefinitions(
+      first:  { type: "Int",          defaultValue: 20 }
+      after:  { type: "String" }
+      filter: { type: "RecordFilter" }
+    ) {
+    records(first: $first, after: $after, filter: $filter)
+      @connection(key: "RecordList_records") {
       edges {
         node {
           id
@@ -70,22 +80,22 @@ export const RecordsQuery = graphql`
   }
 `;
 
-/**
- * Hook to fetch paginated records with filtering.
- * @param variables Query variables for pagination and filtering
- * @returns Records connection with pagination and records
- */
+export const RecordsQuery = graphql`
+  query useRecordsQuery($first: Int, $after: String, $filter: RecordFilter) {
+    ...useRecordsQuery_records @arguments(first: $first, after: $after, filter: $filter)
+  }
+`;
+
 export function useRecordsQuery(variables: RecordsQueryVariables = {}) {
   const data = useLazyLoadQuery<UseRecordsQueryType>(RecordsQuery, variables);
-  return data.records;
+  return data;
 }
 
-/**
- * Hook to use preloaded records query (for use with useQueryLoader).
- * @param queryRef Preloaded query reference
- * @returns Records connection with pagination and records
- */
 export function useRecordsQueryPreloaded(queryRef: any) {
   const data = usePreloadedQuery<UseRecordsQueryType>(RecordsQuery, queryRef);
-  return data.records;
+  return data;
+}
+
+export function useRecordListPagination(fragmentRef: any) {
+  return usePaginationFragment(RecordListFragment, fragmentRef);
 }

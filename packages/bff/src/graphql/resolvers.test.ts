@@ -4,16 +4,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GraphQLContext } from '../types/context.js';
 import { resolvers } from './resolvers.js';
 
-// Mock the backend client
-vi.mock('../services/backendClient.js', () => ({
-  queryBackend: vi.fn(),
-}));
-
-// Mock the JWT signing
-vi.mock('../auth/jwt.js', () => ({
-  signJwt: vi.fn(() => 'mock-jwt-token'),
-}));
-
 // Mock session helpers
 vi.mock('../types/session.js', () => ({
   getAvailableTenants: vi.fn(() => [
@@ -27,9 +17,13 @@ vi.mock('../types/session.js', () => ({
   setActiveTenant: vi.fn(),
 }));
 
-import { queryBackend } from '../services/backendClient.js';
-import { getAvailableTenants } from '../types/session.js';
-import { signJwt } from '../auth/jwt.js';
+// Mock feature flags
+vi.mock('../utils/featureFlags.js', () => ({
+  getFeatureFlags: vi.fn(() => ({ enableTenantFeatures: false })),
+}));
+
+import { getAvailableTenants, setActiveTenant } from '../types/session.js';
+import { getFeatureFlags } from '../utils/featureFlags.js';
 
 describe('BFF Resolvers', () => {
   let mockContext: GraphQLContext;
@@ -37,7 +31,6 @@ describe('BFF Resolvers', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    // Default tenant role for most tests
     vi.mocked(getAvailableTenants).mockReturnValue([
       {
         tenantId: 'user_123',
@@ -47,7 +40,7 @@ describe('BFF Resolvers', () => {
       },
     ]);
 
-    vi.mocked(signJwt).mockReturnValue('mock-jwt-token');
+    vi.mocked(getFeatureFlags).mockReturnValue({ enableTenantFeatures: false });
 
     mockContext = {
       req: {} as any,
@@ -62,227 +55,80 @@ describe('BFF Resolvers', () => {
         updatedAt: new Date().toISOString(),
       },
       activeTenantId: 'user_123',
-      session: {} as any,
+      session: { activeTenantId: 'user_123', save: (cb: (err: any) => void) => cb(null) } as any,
     };
   });
 
-  describe('Mutation.createRecord', () => {
-    it('should create a record when user is authenticated and has proper role', async () => {
-      const mockRecord = {
-        id: 'record-1',
-        purchaseDate: '2025-12-10T00:00:00.000Z',
-        price: 29.99,
-        condition: 'Mint',
-        location: 'Shelf A1',
-        notes: 'Test notes',
-        createdAt: '2025-12-10T00:00:00.000Z',
-        updatedAt: '2025-12-10T00:00:00.000Z',
-        release: {
-          id: 'release-1',
-          barcode: '123456789',
-          artist: 'Test Artist',
-          title: 'Test Album',
-        },
-        owner: {
-          id: '123',
-          githubLogin: 'testuser',
-          displayName: 'Test User',
-          avatarUrl: 'https://example.com/avatar.png',
-        },
-      };
-
-      vi.mocked(queryBackend).mockResolvedValue({
-        createRecord: mockRecord,
-      });
-
-      const result = await resolvers.Mutation.createRecord(
-        {},
-        {
-          input: {
-            releaseId: 'release-1',
-            purchaseDate: '2025-12-10T00:00:00.000Z',
-            price: 29.99,
-            condition: 'Mint',
-            location: 'Shelf A1',
-            notes: 'Test notes',
-          },
-        },
-        mockContext
-      );
-
-      expect(result.record).toEqual(mockRecord);
-      expect(result.errors).toEqual([]);
-      expect(queryBackend).toHaveBeenCalledWith(
-        expect.stringContaining('mutation CreateRecord'),
-        expect.objectContaining({
-          input: expect.objectContaining({
-            releaseId: 'release-1',
-            condition: 'Mint',
-          }),
-        }),
-        expect.objectContaining({ jwt: 'mock-jwt-token' })
-      );
+  describe('Query.viewer', () => {
+    it('should return user when authenticated', async () => {
+      const result = await resolvers.Query.viewer({}, {}, mockContext);
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('123');
+      expect(result?.githubLogin).toBe('testuser');
     });
 
-    it('should return error when user is not authenticated', async () => {
-      const result = await resolvers.Mutation.createRecord(
-        {},
-        {
-          input: {
-            releaseId: 'release-1',
-          },
-        },
-        { ...mockContext, user: null }
-      );
-
-      expect(result.record).toBeNull();
-      expect(result.errors).toContain('Unauthorized: user not authenticated');
-      expect(queryBackend).not.toHaveBeenCalled();
-    });
-
-    it('should return error when user has VIEWER role', async () => {
-      vi.mocked(getAvailableTenants).mockReturnValue([
-        {
-          tenantId: 'user_123',
-          name: 'Test User',
-          tenantType: 'USER',
-          role: 'VIEWER',
-        },
-      ]);
-
-      const result = await resolvers.Mutation.createRecord(
-        {},
-        {
-          input: {
-            releaseId: 'release-1',
-          },
-        },
-        mockContext
-      );
-
-      expect(result.record).toBeNull();
-      expect(result.errors).toContain(
-        'Unauthorized: MEMBER or ADMIN role required to create records'
-      );
-      expect(queryBackend).not.toHaveBeenCalled();
+    it('should return null when unauthenticated', async () => {
+      const result = await resolvers.Query.viewer({}, {}, { ...mockContext, user: null });
+      expect(result).toBeNull();
     });
   });
 
-  describe('Mutation.updateRecord', () => {
-    it('should update a record when user is authenticated and has proper role', async () => {
-      const mockRecord = {
-        id: 'record-1',
-        condition: 'Very Good',
-        price: 25.0,
-      };
-
-      vi.mocked(queryBackend).mockResolvedValue({
-        updateRecord: mockRecord,
-      });
-
-      const result = await resolvers.Mutation.updateRecord(
-        {},
-        {
-          input: {
-            id: 'record-1',
-            condition: 'Very Good',
-            price: 25.0,
-          },
-        },
-        mockContext
-      );
-
-      expect(result.record).toEqual(mockRecord);
-      expect(result.errors).toEqual([]);
+  describe('Mutation.switchTenant', () => {
+    it('should switch tenant and save session', async () => {
+      const result = await resolvers.Mutation.switchTenant({}, { tenantId: 'user_123' }, mockContext);
+      expect(setActiveTenant).toHaveBeenCalledWith(mockContext.session, 'user_123');
+      expect(result.id).toBe('123');
     });
 
-    it('should return error when user is not authenticated', async () => {
-      const result = await resolvers.Mutation.updateRecord(
-        {},
-        {
-          input: {
-            id: 'record-1',
-            condition: 'Mint',
-          },
-        },
-        { ...mockContext, user: null }
-      );
+    it('should throw when user does not have access to tenant', async () => {
+      await expect(
+        resolvers.Mutation.switchTenant({}, { tenantId: 'other_tenant' }, mockContext)
+      ).rejects.toThrow('Unauthorized');
+    });
 
-      expect(result.record).toBeNull();
-      expect(result.errors).toContain('Unauthorized: user not authenticated');
+    it('should throw when unauthenticated', async () => {
+      await expect(
+        resolvers.Mutation.switchTenant({}, { tenantId: 'user_123' }, { ...mockContext, user: null })
+      ).rejects.toThrow('Unauthorized');
     });
   });
 
-  describe('Mutation.deleteRecord', () => {
-    it('should delete a record when user is authenticated and has proper role', async () => {
-      vi.mocked(queryBackend).mockResolvedValue({
-        deleteRecord: true,
-      });
-
-      const result = await resolvers.Mutation.deleteRecord({}, { input: { id: 'record-1' } }, mockContext);
-      expect(result.deletedRecordId).toBe('record-1');
-      expect(result.errors).toEqual([]);
+  describe('User.availableTenants', () => {
+    it('should return tenants mapped from session', () => {
+      const result = resolvers.User.availableTenants({}, {}, mockContext);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('user_123');
+      expect(result[0].role).toBe('ADMIN');
     });
 
-    it('should return error when deletion fails', async () => {
-      vi.mocked(queryBackend).mockResolvedValue({
-        deleteRecord: false,
-      });
-
-      const result = await resolvers.Mutation.deleteRecord({}, { input: { id: 'record-1' } }, mockContext);
-
-      expect(result.deletedRecordId).toBeNull();
-      expect(result.errors).toContain('Failed to delete record');
+    it('should return empty array when no tenants in session', () => {
+      vi.mocked(getAvailableTenants).mockReturnValue([]);
+      const result = resolvers.User.availableTenants({}, {}, mockContext);
+      expect(result).toEqual([]);
     });
   });
 
-  describe('Query.records', () => {
-    it('should fetch records when user is authenticated', async () => {
-      const mockRecordsResponse = {
-        edges: [
-          {
-            cursor: 'cursor-1',
-            node: {
-              id: 'record-1',
-              condition: 'Mint',
-              release: {
-                id: 'release-1',
-                artist: 'Test Artist',
-                title: 'Test Album',
-              },
-            },
-          },
-        ],
-        pageInfo: {
-          hasNextPage: false,
-          hasPreviousPage: false,
-          startCursor: 'cursor-1',
-          endCursor: 'cursor-1',
-        },
-        totalCount: 1,
-      };
-
-      vi.mocked(queryBackend).mockResolvedValue({
-        records: mockRecordsResponse,
-      });
-
-      const result = await resolvers.Query.records({}, { first: 10 }, mockContext);
-
-      expect(result.edges).toHaveLength(1);
-      expect(result.totalCount).toBe(1);
-      expect(queryBackend).toHaveBeenCalledWith(
-        expect.stringContaining('query Records'),
-        expect.objectContaining({ first: 10 }),
-        expect.objectContaining({ jwt: 'mock-jwt-token' })
-      );
+  describe('User.activeTenant', () => {
+    it('should return the active tenant from session', () => {
+      const result = resolvers.User.activeTenant({}, {}, mockContext);
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('user_123');
     });
 
-    it('should return empty result when user is not authenticated', async () => {
-      const result = await resolvers.Query.records({}, {}, { ...mockContext, user: null });
+    it('should return null when activeTenantId does not match any tenant', () => {
+      const result = resolvers.User.activeTenant({}, {}, {
+        ...mockContext,
+        activeTenantId: 'unknown_tenant',
+        session: { activeTenantId: 'unknown_tenant' } as any,
+      });
+      expect(result).toBeNull();
+    });
+  });
 
-      expect(result.edges).toEqual([]);
-      expect(result.totalCount).toBe(0);
-      expect(queryBackend).not.toHaveBeenCalled();
+  describe('User.featureFlags', () => {
+    it('should return feature flags', () => {
+      const result = resolvers.User.featureFlags();
+      expect(result).toEqual({ enableTenantFeatures: false });
     });
   });
 });

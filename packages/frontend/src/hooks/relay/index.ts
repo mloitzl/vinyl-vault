@@ -1,5 +1,8 @@
 export { useViewerQuery } from './useViewerQuery';
-export { useRecordsQuery, useRecordsQueryPreloaded } from './useRecordsQuery';
+export { useRecordsQuery, useRecordsQueryPreloaded, useRecordListPagination } from './useRecordsQuery';
+export { useArtistsQuery, useArtistsQueryPreloaded } from './useArtistsQuery';
+export { useAlbumsQuery, useAlbumsQueryPreloaded } from './useAlbumsQuery';
+export { useGenresQuery } from './useGenresQuery';
 export { useCreateRecordMutation } from './useCreateRecordMutation';
 export { useUpdateRecordMutation } from './useUpdateRecordMutation';
 export { useDeleteRecordMutation } from './useDeleteRecordMutation';

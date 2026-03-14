@@ -43,6 +43,7 @@ export interface RecordFilter {
   title?: string;
   year?: number;
   format?: string;
+  genre?: string;
   location?: string;
   search?: string;
 }
@@ -50,6 +51,8 @@ export interface RecordFilter {
 export interface PaginationOptions {
   first?: number;
   after?: string;
+  last?: number;
+  before?: string;
 }
 
 export interface RecordConnection {
@@ -123,7 +126,13 @@ export class RecordRepository {
     pagination: PaginationOptions = {}
   ): Promise<RecordConnection> {
     const collection = this.db.collection<RecordDocument>('records');
-    const limit = Math.min(pagination.first || 20, 100);
+
+    // Determine direction: backward pagination takes priority if `last`/`before` are set
+    const isBackward = !!pagination.last || !!pagination.before;
+    const limit = Math.min(
+      isBackward ? (pagination.last || 20) : (pagination.first || 20),
+      100
+    );
 
     // Build MongoDB query
     const query: any = {};
@@ -135,32 +144,62 @@ export class RecordRepository {
 
     if (filter.location) {
       query.location = { $regex: filter.location, $options: 'i' };
-      isRegexLocation = true; // Mark as regex for counter fallback
+      isRegexLocation = true;
     }
 
-    // For artist, title, year, format - we need to join with releases
-    // For now, we'll implement basic text search on notes/condition
-    // Full filtering will be enhanced with aggregation pipeline
     if (filter.search) {
       query.$text = { $search: filter.search };
     }
 
-    // Handle cursor-based pagination
-    if (pagination.after) {
+    // Release-level filters (artist, title, year, format, genre) require a join.
+    // Fetch matching release IDs first, then constrain records.releaseId.
+    if (filter.artist || filter.title || filter.year || filter.format || filter.genre) {
+      const releaseQuery: any = {};
+      if (filter.artist) releaseQuery.artist = { $regex: filter.artist, $options: 'i' };
+      if (filter.title) releaseQuery.title = { $regex: filter.title, $options: 'i' };
+      if (filter.year) releaseQuery.year = filter.year;
+      if (filter.format) releaseQuery.format = filter.format;
+      // release.genre is an array; MongoDB matches if the value is contained in it
+      if (filter.genre) releaseQuery.genre = filter.genre;
+      const matchingReleases = await this.db
+        .collection('releases')
+        .find(releaseQuery, { projection: { _id: 1 } })
+        .toArray();
+      query.releaseId = { $in: matchingReleases.map((r) => r._id) };
+    }
+
+    // Forward pagination: records after cursor
+    let afterCursorApplied = false;
+    if (!isBackward && pagination.after) {
       try {
         const cursorId = new ObjectId(pagination.after);
         query._id = { $gt: cursorId };
+        afterCursorApplied = true;
       } catch {
         // Invalid cursor, ignore
       }
     }
 
-    // Fetch records with limit + 1 to determine hasNextPage
+    // Backward pagination: records before cursor
+    let beforeCursorApplied = false;
+    if (isBackward && pagination.before) {
+      try {
+        const cursorId = new ObjectId(pagination.before);
+        query._id = { $lt: cursorId };
+        beforeCursorApplied = true;
+      } catch {
+        // Invalid cursor, ignore
+      }
+    }
+
+    const sortDir = isBackward ? -1 : 1;
+
+    // Fetch limit + 1 to determine has{Next,Previous}Page
     let records: RecordDocument[] = [];
     try {
       records = await collection
         .find(query)
-        .sort({ _id: 1 })
+        .sort({ _id: sortDir })
         .limit(limit + 1)
         .toArray();
     } catch (error: any) {
@@ -170,7 +209,7 @@ export class RecordRepository {
         delete query.$text;
         records = await collection
           .find(query)
-          .sort({ _id: 1 })
+          .sort({ _id: sortDir })
           .limit(limit + 1)
           .toArray();
       } else {
@@ -178,11 +217,21 @@ export class RecordRepository {
       }
     }
 
-    const hasNextPage = records.length > limit;
-    const edges = records.slice(0, limit).map((record) => ({
+    const hasExtraPage = records.length > limit;
+    const pageItems = records.slice(0, limit);
+
+    // Backward pagination returns items in reverse order — restore natural order
+    if (isBackward) {
+      pageItems.reverse();
+    }
+
+    const edges = pageItems.map((record) => ({
       cursor: record._id.toString(),
       node: record,
     }));
+
+    const hasPreviousPage = isBackward ? hasExtraPage : afterCursorApplied;
+    const hasNextPage = isBackward ? beforeCursorApplied : hasExtraPage;
 
     // Try to use cached counters, fallback to countDocuments for complex queries
     let totalCount: number;
@@ -193,10 +242,8 @@ export class RecordRepository {
     });
 
     if (cachedCount !== null) {
-      // Use cached counter
       totalCount = cachedCount;
     } else {
-      // Fallback: use countDocuments for regex or other complex filters
       totalCount = await collection.countDocuments(query);
     }
 
@@ -204,7 +251,7 @@ export class RecordRepository {
       edges,
       pageInfo: {
         hasNextPage,
-        hasPreviousPage: !!pagination.after,
+        hasPreviousPage,
         startCursor: edges[0]?.cursor,
         endCursor: edges[edges.length - 1]?.cursor,
       },

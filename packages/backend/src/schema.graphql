@@ -1,5 +1,12 @@
 # Domain Backend GraphQL Schema
 
+"""
+Relay-compatible Node interface. All persisted domain types implement this.
+"""
+interface Node {
+  id: ID!
+}
+
 type Query {
   """
   Get a user by ID.
@@ -22,9 +29,31 @@ type Query {
   releasesByBarcode(barcode: String!): [Release!]!
 
   """
-  List records with pagination and filtering.
+  List records with cursor-based pagination and filtering.
+  The active user and tenant are resolved from the JWT — no userId parameter needed.
   """
-  records(userId: ID, first: Int, after: String, filter: RecordFilter): RecordConnection!
+  records(
+    first: Int
+    after: String
+    last: Int
+    before: String
+    filter: RecordFilter
+  ): RecordConnection!
+
+  """
+  Browse records grouped by artist.
+  """
+  artists(first: Int, after: String, filter: ArtistFilter): ArtistConnection!
+
+  """
+  Browse records grouped by release (album title + artist).
+  """
+  albums(first: Int, after: String, filter: AlbumBrowseFilter): AlbumBrowseConnection!
+
+  """
+  All genres present in the current tenant's collection.
+  """
+  genres: [GenreView!]!
 
   """
   Get all tenants for a user (including their role in each tenant).
@@ -34,25 +63,24 @@ type Query {
 
 type Mutation {
   """
-  Look up a barcode and return matching releases.
-  If not cached, fetches from external APIs.
+  Look up a barcode and return matching releases with scoring.
   """
-  lookupBarcode(barcode: String!): LookupBarcodePayload!
+  scanBarcode(barcode: String!): ScanBarcodePayload!
 
   """
   Create a new record.
   """
-  createRecord(input: CreateRecordInput!): Record!
+  createRecord(input: CreateRecordInput!): CreateRecordPayload!
 
   """
   Update a record.
   """
-  updateRecord(input: UpdateRecordInput!): Record!
+  updateRecord(input: UpdateRecordInput!): UpdateRecordPayload!
 
   """
   Delete a record.
   """
-  deleteRecord(id: ID!): Boolean!
+  deleteRecord(input: DeleteRecordInput!): DeleteRecordPayload!
 
   """
   Create or update a user from GitHub data.
@@ -87,7 +115,7 @@ type Mutation {
   ): CompleteInstallationSetupResult!
 }
 
-type User {
+type User implements Node {
   id: ID!
   githubId: String!
   githubLogin: String!
@@ -97,7 +125,6 @@ type User {
   role: UserRole!
   createdAt: String!
   updatedAt: String!
-  records: [Record!]!
 }
 
 """
@@ -112,7 +139,7 @@ enum UserRole {
   VIEWER
 }
 
-type Record {
+type Record implements Node {
   id: ID!
   release: Release!
   owner: User!
@@ -125,7 +152,7 @@ type Record {
   updatedAt: String!
 }
 
-type Release {
+type Release implements Node {
   id: ID!
   barcode: String!
   artist: String!
@@ -291,6 +318,7 @@ input RecordFilter {
   title: String
   year: Int
   format: String
+  genre: String
   location: String
   search: String
 }
@@ -313,6 +341,25 @@ input UpdateRecordInput {
   notes: String
 }
 
+input DeleteRecordInput {
+  id: ID!
+}
+
+type CreateRecordPayload {
+  record: Record
+  errors: [String!]
+}
+
+type UpdateRecordPayload {
+  record: Record
+  errors: [String!]
+}
+
+type DeleteRecordPayload {
+  deletedRecordId: ID
+  errors: [String!]
+}
+
 input UpsertUserInput {
   githubId: String!
   githubLogin: String!
@@ -324,7 +371,7 @@ input UpsertUserInput {
 """
 Result of a barcode lookup using the blended scoring approach.
 """
-type LookupBarcodePayload {
+type ScanBarcodePayload {
   """
   Aggregated albums derived from releases across all sources.
   Each album represents a unique normalized artist+title combination.
@@ -619,4 +666,70 @@ type CompleteInstallationSetupResult {
   tenantId: String!
   tenantName: String!
   message: String
+}
+
+# ─── Browsing views ──────────────────────────────────────────────────────────
+
+"""
+An artist as seen in the current tenant's collection.
+"""
+type ArtistView implements Node {
+  id: ID!
+  name: String!
+  recordCount: Int!
+  coverImageUrl: String
+  genres: [String!]!
+}
+
+type ArtistConnection {
+  edges: [ArtistEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ArtistEdge {
+  cursor: String!
+  node: ArtistView!
+}
+
+input ArtistFilter {
+  search: String
+}
+
+"""
+An album (release group) as seen in the current tenant's collection.
+"""
+type AlbumBrowseView implements Node {
+  id: ID!
+  title: String!
+  artist: String!
+  year: Int
+  coverImageUrl: String
+  format: String
+  recordCount: Int!
+  genres: [String!]!
+}
+
+type AlbumBrowseConnection {
+  edges: [AlbumBrowseEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type AlbumBrowseEdge {
+  cursor: String!
+  node: AlbumBrowseView!
+}
+
+input AlbumBrowseFilter {
+  search: String
+  artist: String
+}
+
+"""
+A genre present in the current tenant's collection.
+"""
+type GenreView {
+  name: String!
+  recordCount: Int!
 }

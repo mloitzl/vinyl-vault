@@ -1,366 +1,44 @@
-# BFF GraphQL Schema (Relay-friendly)
+# BFF GraphQL Schema — Auth & Session types only.
+# Domain types (Record, Release, Album, etc.) come from the stitched Backend schema.
 
-type Query {
+extend type Query {
   """
   The currently authenticated user, or null if not logged in.
   """
   viewer: User
-
-  """
-  Fetch a single record by ID.
-  """
-  node(id: ID!): Node
-
-  """
-  Browse the record collection with pagination and filtering.
-  """
-  records(
-    first: Int
-    after: String
-    last: Int
-    before: String
-    filter: RecordFilter
-  ): RecordConnection!
 }
 
-type Mutation {
-  """
-  Scan a barcode and look up release candidates.
-  """
-  scanBarcode(barcode: String!): ScanBarcodePayload!
-
-  """
-  Create a new record in the collection.
-  """
-  createRecord(input: CreateRecordInput!): CreateRecordPayload!
-
-  """
-  Update an existing record.
-  """
-  updateRecord(input: UpdateRecordInput!): UpdateRecordPayload!
-
-  """
-  Delete a record from the collection.
-  """
-  deleteRecord(input: DeleteRecordInput!): DeleteRecordPayload!
-
+extend type Mutation {
   """
   Switch the active tenant for the current user.
-  Updates session and returns user with new active tenant context.
+  Updates the session and returns the user with the new active tenant context.
   """
   switchTenant(tenantId: String!): User!
 }
 
-interface Node {
-  id: ID!
-}
-
-type User implements Node {
-  id: ID!
-  githubLogin: String!
-  displayName: String!
-  avatarUrl: String
+# Extends the backend User type with session-specific data resolved by the BFF.
+extend type User {
   availableTenants: [Tenant!]!
   activeTenant: Tenant
   featureFlags: FeatureFlags!
-  createdAt: String!
-  updatedAt: String!
 }
 
-enum TenantType {
-  USER
-  ORGANIZATION
-}
-
-enum TenantRole {
-  ADMIN
-  MEMBER
-  VIEWER
-}
+# TenantType and TenantRole are defined in the backend schema with identical values.
+# They arrive in the stitched schema from the remote subschema — no redefinition needed.
 
 """
-Feature flags available to the frontend
+Feature flags surfaced to the frontend.
 """
 type FeatureFlags {
   enableTenantFeatures: Boolean!
 }
 
 """
-Represents a tenant available to the user (personal or organization).
+A tenant available to the authenticated user (personal or organization collection).
 """
 type Tenant {
   id: String!
   name: String!
   type: TenantType!
   role: TenantRole!
-}
-
-
-type Record implements Node {
-  id: ID!
-  release: Release!
-  owner: User!
-  purchaseDate: String
-  price: Float
-  condition: String
-  location: String
-  notes: String
-  createdAt: String!
-  updatedAt: String!
-}
-
-type Release implements Node {
-  id: ID!
-  barcode: String!
-  artist: String!
-  title: String!
-  year: Int
-  format: String
-  label: String
-  country: String
-  coverImageUrl: String
-  externalId: String
-  source: ReleaseSource
-  genre: [String!]
-  style: [String!]
-  trackList: [Track!]
-}
-
-type Track {
-  position: String
-  title: String!
-  duration: String
-}
-
-enum ReleaseSource {
-  DISCOGS
-  MUSICBRAINZ
-  MANUAL
-}
-
-type RecordConnection {
-  edges: [RecordEdge!]!
-  pageInfo: PageInfo!
-  totalCount: Int!
-}
-
-type RecordEdge {
-  cursor: String!
-  node: Record!
-}
-
-type PageInfo {
-  hasNextPage: Boolean!
-  hasPreviousPage: Boolean!
-  startCursor: String
-  endCursor: String
-}
-
-input RecordFilter {
-  artist: String
-  title: String
-  year: Int
-  format: String
-  location: String
-  search: String
-}
-
-input CreateRecordInput {
-  releaseId: ID!
-  purchaseDate: String
-  price: Float
-  condition: String
-  location: String
-  notes: String
-}
-
-input UpdateRecordInput {
-  id: ID!
-  purchaseDate: String
-  price: Float
-  condition: String
-  location: String
-  notes: String
-}
-
-input DeleteRecordInput {
-  id: ID!
-}
-
-type ScanBarcodePayload {
-  """
-  Aggregated albums from blended scoring (primary output).
-  Sorted by score, highest first.
-  """
-  albums: [Album!]!
-
-  """
-  Legacy: flat list of all releases for backward compatibility.
-  """
-  releases: [Release!]! @deprecated(reason: "Use albums instead")
-
-  """
-  Whether results came from cache.
-  """
-  fromCache: Boolean!
-
-  """
-  Timing information for the lookup.
-  """
-  timing: LookupTiming
-
-  """
-  Non-fatal errors encountered during lookup.
-  """
-  errors: [String!]
-}
-
-"""
-An aggregated album combining releases from multiple sources.
-"""
-type Album {
-  """
-  Unique album identifier.
-  """
-  id: ID!
-
-  """
-  Normalized artist name.
-  """
-  artist: String!
-
-  """
-  Normalized album title.
-  """
-  title: String!
-
-  """
-  Barcode(s) associated with this album.
-  """
-  barcodes: [String!]!
-
-  """
-  The primary (highest-scoring) release.
-  """
-  primaryRelease: ScoredRelease!
-
-  """
-  Alternative releases for this album.
-  """
-  alternativeReleases: [AlternativeRelease!]!
-
-  """
-  Best available track list.
-  """
-  trackList: [Track!]
-
-  """
-  Aggregated genres from all releases.
-  """
-  genres: [String!]!
-
-  """
-  Aggregated styles from all releases.
-  """
-  styles: [String!]!
-
-  """
-  External IDs by source.
-  """
-  externalIds: ExternalIds!
-
-  """
-  Best available cover image URL.
-  """
-  coverImageUrl: String
-
-  """
-  Other title variations found.
-  """
-  otherTitles: [String!]!
-
-  """
-  Edition notes (e.g., "Remastered", "Deluxe").
-  """
-  editionNotes: [String!]!
-
-  """
-  Number of releases grouped into this album.
-  """
-  releaseCount: Int!
-
-  """
-  Score of the primary release.
-  """
-  score: Int!
-}
-
-"""
-A release with scoring information.
-"""
-type ScoredRelease {
-  release: Release!
-  score: Int!
-  scoreBreakdown: ScoreBreakdown
-}
-
-"""
-Breakdown of how a release was scored.
-"""
-type ScoreBreakdown {
-  mediaType: Int!
-  countryPreference: Int!
-  trackListCompleteness: Int!
-  coverArt: Int!
-  labelInfo: Int!
-  catalogNumber: Int!
-  yearInfo: Int!
-  sourceBonus: Int!
-}
-
-"""
-A non-primary release in an album group.
-"""
-type AlternativeRelease {
-  externalId: String!
-  source: ReleaseSource!
-  country: String
-  year: Int
-  format: String
-  label: String
-  score: Int!
-  editionNote: String
-}
-
-"""
-External IDs grouped by source.
-"""
-type ExternalIds {
-  discogs: [String!]!
-  musicbrainz: [String!]!
-}
-
-"""
-Timing information for lookup performance.
-"""
-type LookupTiming {
-  discogsMs: Int!
-  musicbrainzMs: Int!
-  scoringMs: Int!
-  totalMs: Int!
-}
-
-type CreateRecordPayload {
-  record: Record
-  errors: [String!]
-}
-
-type UpdateRecordPayload {
-  record: Record
-  errors: [String!]
-}
-
-type DeleteRecordPayload {
-  deletedRecordId: ID
-  errors: [String!]
 }

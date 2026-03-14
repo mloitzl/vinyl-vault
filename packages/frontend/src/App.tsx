@@ -1,9 +1,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { RelayEnvironmentProvider } from 'react-relay';
+import { RelayEnvironmentProvider, useLazyLoadQuery, graphql } from 'react-relay';
 import { RelayEnvironment } from './relay/environment';
 import { AuthProvider, useAuth, ToastProvider, LoadingProvider } from './contexts';
-import { useRecordsQuery } from './hooks/relay';
 import {
   Header,
   LoadingSpinner,
@@ -21,24 +20,26 @@ import {
   SearchPage,
   RecordDetailPage,
   NotFoundPage,
+  BrowsePage,
+  ArtistDetailPage,
 } from './pages';
+import type { AppCountsQuery as AppCountsQueryType } from './__generated__/AppCountsQuery.graphql';
+
+const AppCountsQuery = graphql`
+  query AppCountsQuery {
+    records(first: 1) {
+      totalCount
+    }
+    artists(first: 1) {
+      totalCount
+    }
+  }
+`;
 
 function AuthedContent() {
-  const [recordCount, setRecordCount] = useState(0);
-  const [artistCount, setArtistCount] = useState(0);
-  const recordsData = useRecordsQuery({ first: 1000 });
-
-  useEffect(() => {
-    if (recordsData && recordsData.edges) {
-      setRecordCount(recordsData.totalCount);
-      const artists = new Set(
-        recordsData.edges
-          .map((edge: any) => edge.node.release?.artist)
-          .filter((artist: any) => artist)
-      );
-      setArtistCount(artists.size);
-    }
-  }, [recordsData]);
+  const data = useLazyLoadQuery<AppCountsQueryType>(AppCountsQuery, {});
+  const recordCount = data.records?.totalCount ?? 0;
+  const artistCount = data.artists?.totalCount ?? 0;
 
   return (
     <div className="flex-1 flex">
@@ -61,6 +62,8 @@ function AuthedContent() {
               <Route path="/collection" element={<CollectionPage />} />
               <Route path="/collection/:recordId" element={<RecordDetailPage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/browse" element={<BrowsePage />} />
+              <Route path="/artists/:name" element={<ArtistDetailPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>

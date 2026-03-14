@@ -10,4 +10,6 @@ export interface GraphQLContext {
   user: SessionUser | null;
   session: Session;
   activeTenantId: string | null;
+  /** Pre-computed JWT for the current user's active tenant. Undefined when unauthenticated. */
+  jwt?: string;
 }
