@@ -113,9 +113,9 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
           className="w-full bg-white border border-gray-200 rounded-xl p-5 text-left hover:border-gray-300 hover:shadow-sm transition-all"
         >
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-emerald-50 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-emerald-600"
+                className="w-6 h-6 text-gray-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
