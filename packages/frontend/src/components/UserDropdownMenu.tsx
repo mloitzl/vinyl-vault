@@ -83,9 +83,7 @@ export function UserDropdownMenu() {
 
   const tenantRole = activeTenant?.role ?? 'VIEWER';
   const isAdmin = tenantRole === 'ADMIN';
-  const showTenantSection =
-    featureFlags.enableTenantFeatures &&
-    (availableTenants.length > 1 || isAdmin);
+  const showTenantSection = featureFlags.enableTenantFeatures;
 
   return (
     <>
