@@ -88,7 +88,7 @@ export function useRecordActions(filter?: RecordFilter) {
     isLoading,
     handleEdit: canMutate ? handleEdit : undefined,
     handleDelete: canMutate ? handleDelete : undefined,
-    handleSaveEdit: canMutate ? handleSaveEdit : undefined,
+    handleSaveEdit,
     handleCancelEdit,
   };
 }
