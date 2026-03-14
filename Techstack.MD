@@ -4,10 +4,11 @@
 
 This document summarizes the technology choices for Vinyl Vault across frontend, backend, data, integration, and infrastructure. It is meant to guide implementation and onboarding.
 
-**Monorepo Structure:** pnpm workspaces with three packages:
+**Monorepo Structure:** pnpm workspaces with four packages:
 - `packages/frontend` - React SPA
 - `packages/bff` - Backend-for-Frontend
 - `packages/backend` - Domain Backend
+- `packages/demo-server` - Koyeb demo orchestrator
 
 ## 2. Frontend (`packages/frontend`)
 
@@ -20,18 +21,19 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Key Dependencies:**
 - `react`, `react-dom` - UI framework
-- `react-relay` - GraphQL client
+- `react-relay` - GraphQL client with `@connection`, `usePaginationFragment`, `@deleteEdge`/`@appendNode` for store updates
 - `tailwindcss` - Utility-first CSS
-- `vite` - Build tool and dev server
+- `vite` - Build tool and dev server (with `relayRequireToImport()` plugin for ESM compatibility)
 - `@zxing/browser` - Barcode scanning via camera
 
 **Responsibilities:**
 
 - Accept web requests from browser clients (GraphQL queries/mutations + session cookies).
-- Display and manage vinyl record collections with pagination, filtering, and search.
+- Display and manage vinyl record collections with cursor-based pagination (`usePaginationFragment`, "Load More") and instant store updates (`@deleteEdge`/`@appendNode`).
+- Browse artists, albums, and genres via the `/browse` route (Artists/Albums/Genres tabs).
 - Provide barcode scanning via camera or manual input for album lookup.
 - Enable complete CRUD operations: Create (scan), Read (list/detail), Update (edit modal), Delete (confirmation).
-- Show collection statistics (record count, unique artist count) with real-time updates per tenant.
+- Show collection statistics with lightweight `AppCountsQuery` (`records(first:1) { totalCount }`, `artists(first:1) { totalCount }`).
 - Display toast notifications for user action feedback (success/error states) with auto-dismiss.
 - Implement RecordEditModal with form validation, ESC/backdrop close, and optimistic UI updates.
 - Proxy all GraphQL queries/mutations to the backend GraphQL endpoint with JWT authorization header.
@@ -46,7 +48,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 ## 3. Backend-for-Frontend (BFF) (`packages/bff`)
 
-- **Runtime:** Node.js (LTS) on Raspberry Pi 5
+- **Runtime:** Node.js (LTS)
 - **Language:** TypeScript (strict mode)
 - **Web Framework:** Express 4
 - **GraphQL:** Apollo Server 4 with `expressMiddleware`
@@ -60,6 +62,10 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `connect-mongo` - MongoDB session store
 - `jsonwebtoken` - JWT signing/verification
 - `dotenv` - Environment variable loading
+- `@graphql-tools/stitch` - Schema stitching
+- `@graphql-tools/schema` - Schema utilities
+- `@graphql-tools/executor-http` - HTTP executor for forwarding requests
+- `@graphql-tools/wrap` - Schema wrapping
 
 **Auth Endpoints:**
 - `GET /auth/github` - Initiate OAuth flow
@@ -69,9 +75,9 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Responsibilities:**
 
-- Expose a Relay-friendly GraphQL schema (viewer, records, scanBarcode, etc.).
+- Expose a Relay-friendly GraphQL schema via **schema stitching** (`@graphql-tools/stitch`): BFF's own `schema.graphql` contains only auth/session types; Backend types are proxied automatically.
 - Handle GitHub OAuth Web Application Flow.
-- Forward user operations (create, update, fetch) to Backend via GraphQL queries and mutations.
+- Inject JWT into forwarded requests via `buildHTTPExecutor` (`packages/bff/src/graphql/executor.ts`).
 - Maintain sessions via HTTP-only cookies and BFF MongoDB session store.
 - Create and sign short-lived JWTs for calls to the domain backend.
 
@@ -92,7 +98,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Responsibilities:**
 
-- Expose domain-centric GraphQL schema (User, Record, Release, Album, Tenant).
+- Expose domain-centric GraphQL schema (User, Record, Release, Album, Tenant, Artist, Album browse, Genre).
 - Implement tenant-scoped business logic and data access.
 - Manage complete record lifecycle (create, read, update, delete) with ownership validation and role-based authorization.
 - Implement repository pattern for clean data access (RecordRepository with CRUD methods, ReleaseRepository with caching).
@@ -100,7 +106,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - Support text search on records (notes, condition, location) and exact match filtering (location).
 - Handle composite release IDs (SOURCE‡externalId) and MongoDB ObjectId formats.
 - Validate and decode JWTs from the BFF, extracting tenantId and tenantRole.
-- Dynamically connect to tenant-specific MongoDB databases (vinylvault_user_{userId} or vinylvault_org_{orgName}).
+- Dynamically connect to tenant-specific MongoDB databases (`vv_<12-char-SHA256-hash-of-tenantId>`, e.g., `vv_a1b2c3d4e5f6`).
 - Enforce tenant isolation at database level - all queries execute against tenant database.
 - Initialize MongoDB indexes automatically on first tenant database access.
 - Implement role-based authorization (admin, member, viewer) for tenant operations.
@@ -149,7 +155,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `tenants` - Tenant records (personal and organization)
 - `user_tenant_roles` - Mapping of users to tenants with roles (admin, member, viewer)
 
-**Tenant Databases (`vinylvault_user_{userId}` or `vinylvault_org_{orgName}`):**
+**Tenant Databases (`vv_<12-char-SHA256-hash-of-tenantId>`, e.g., `vv_a1b2c3d4e5f6`):**
 - `records` - Physical owned items for this tenant
 - `releases` - Cached external metadata for this tenant
 - `scoring_configs` - Custom scoring configuration for this tenant (optional override)
@@ -181,7 +187,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
   tenantType: 'USER' | 'ORGANIZATION',
   name: string,               // Display name
   githubOrgName?: string,     // GitHub organization name (if type=ORGANIZATION)
-  databaseName: string,       // MongoDB database name (e.g., vinylvault_user_12345)
+  databaseName: string,       // MongoDB database name (e.g., vv_a1b2c3d4e5f6)
   createdAt: Date,
   updatedAt: Date
 }
@@ -259,16 +265,30 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 ## 7. Infrastructure and DevOps
 
-- **Host:** Raspberry Pi 5 (Linux)
-- **Containerization:** Docker with Docker Compose
-- **Reverse Proxy:** Caddy (configured in `infra/Caddyfile`)
+Three active environments:
+
+**Local DEV:**
+- Docker Compose + MongoDB on localhost.
+- `pnpm dev` runs all services in parallel (Vite :3000, BFF :3001, Backend :4000).
+
+**Staging (Kubernetes):**
+- Namespace `vinylvault-staging`; manifests in `infra/k8s/` (kubectl + Kustomize).
+- StatefulSets for `mongodb-bff` and `mongodb-backend`; Kubernetes Secrets for passwords.
+- Images pushed to GHCR (`ghcr.io/mloitzl/vinylvault-*:latest-staging`).
+- GitHub Actions CI/CD with self-hosted runner; build/push/deploy scripts in `scripts/`.
+
+**Demo (Koyeb):**
+- `packages/demo-server` orchestrates BFF + Backend as child processes; listens on port 8080.
+- Deployed via `infra/Dockerfile.demoserver`. Frontend on Vercel.
 
 **Infrastructure Files (`infra/`):**
-- `docker-compose.yml` - Service orchestration
+- `docker-compose.yml` - Local DEV service orchestration
 - `Caddyfile` - Reverse proxy configuration
 - `Dockerfile.bff` - BFF container
 - `Dockerfile.backend` - Backend container
 - `Dockerfile.frontend` - Frontend container
+- `Dockerfile.demoserver` - Demo server container (Koyeb)
+- `k8s/` - Kubernetes manifests (Kustomize, staging)
 
 **Process Management:**
 - Docker restart policies for production.
@@ -276,11 +296,11 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 **Logging:**
 - Application logs to stdout via **pino** (structured JSON, trace/span IDs injected via OTel mixin).
-- Forwarded to **Betterstack Logs** via OpenTelemetry OTLP exporter.
+- Forwarded to **Betterstack Logs** via OpenTelemetry OTLP exporter (Authorization Bearer header).
 
 **Monitoring:**
 - **Betterstack Logs** — distributed traces, metrics, and structured log aggregation for BFF and Backend (via OTel OTLP).
-- **LogRocket** — frontend session replay, JS error capture, and network request logging.
+- **LogRocket** — frontend session replay, JS error capture, and network request logging (`VITE_LOGROCKET_APP_ID`).
 
 ## 8. Development Environment
 
@@ -294,6 +314,14 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `pnpm build` - Build all packages
 - `pnpm lint` - Run ESLint across packages
 - `pnpm test` - Run tests
+- `pnpm update-schema` - Runs `generate-schema.mjs` to merge BFF + Backend SDL into `packages/frontend/schema.graphql`
+- `pnpm relay` - Runs relay-compiler against the merged schema
+- `pnpm update-schema && pnpm relay && pnpm build` - Full frontend build pipeline
+
+**Admin Scripts (`scripts/admin/`):**
+- Registered as `@vinylvault/admin-scripts` in pnpm workspace.
+- Operations: `list-users`, `list-tenants`, `add-user-to-tenant`, `remove-user-from-tenant`, `remove-tenant`, `force-logout-user`, `statistics`.
+- Support `DEV`/`STAGING`/`DEMO` environments; `STAGING` auto-handles kubectl port-forward.
 
 **Code Quality:**
 - ESLint (configured in `.eslintrc.json`)

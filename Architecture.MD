@@ -10,7 +10,7 @@ Vinyl Vault is a web application for managing vinyl record collections with mult
 - Keep all JWTs and backend secrets away from the browser.
 - Use GitHub as the single sign-on provider.
 - Support multi-tenant collections (personal and GitHub organizations).
-- Support role-based access per tenant: ADMIN/CONTRIBUTOR and READER.
+- Support role-based access per tenant: ADMIN/MEMBER and VIEWER.
 - Provide strict tenant isolation with database-per-tenant architecture.
 - Run on a single RPi 5 with limited resources but public internet exposure.
 - Prefer clear, maintainable TypeScript code across backend and frontend.
@@ -28,11 +28,16 @@ Main components:
   - Tenant switcher component allows users to switch between personal and organization collections.
   - Barcode scanning via @zxing/browser library (camera + manual input).
   - Mobile-first design with bottom navigation for authenticated users.
-  - Views: Home (welcome), Scan (barcode lookup with album results), Collection (placeholder), Search (placeholder), Tenant Selector.
+  - Views: Home (welcome), Scan (barcode lookup with album results), Collection (paginated list), Browse (`/browse` with Artists/Albums/Genres tabs), Tenant Selector.
+  - Relay `@connection(key: "RecordList_records")` with `usePaginationFragment` for cursor-based "Load More" pagination; `@deleteEdge`/`@appendNode` for instant store updates without network refetch on delete/create.
+  - Vite plugin `relayRequireToImport()` in `vite.config.ts` hoists Relay-generated `require()` calls to ESM imports (needed for Relay 16 Rust compiler `@refetchable` output with Vite's ESM dev server).
+  - Schema generation: `pnpm update-schema` runs `generate-schema.mjs` which merges static BFF + Backend SDL files into `packages/frontend/schema.graphql` (gitignored); `pnpm relay` then runs relay-compiler; `pnpm build` runs Vite.
 
 - **GraphQL BFF** (`packages/bff`)
   - Express + Apollo Server 4.
-  - Exposes a Relay-friendly GraphQL schema.
+  - Exposes a Relay-friendly GraphQL schema via **schema stitching** (`@graphql-tools/stitch`): BFF's own `schema.graphql` contains only auth/session types (`viewer`, `switchTenant`, `Tenant`, `FeatureFlags`); Backend schema fields are automatically proxied at startup by `createStitchedSchema()` which reads the static backend SDL.
+  - `packages/bff/src/graphql/executor.ts` builds an HTTP executor via `buildHTTPExecutor` that injects the JWT into every forwarded request.
+  - No dual-schema maintenance: adding a field to the Backend schema automatically exposes it through the BFF.
   - Handles GitHub OAuth Web Application Flow:
     - `/auth/github` - Initiates OAuth redirect.
     - `/auth/github/callback` - Exchanges code for token, creates session.
@@ -63,7 +68,7 @@ Main components:
   - **BFF MongoDB** (`MONGODB_URI`): Stores only session information via `connect-mongo`.
   - **Tenant MongoDB Databases** (Dynamic `MONGODB_URI_BASE` + tenantId):
     - Each tenant has a completely separate MongoDB database.
-    - Database naming: `vinylvault_user_{userId}` for personal tenants, `vinylvault_org_{orgId}` for organization tenants (using GitHub org ID for stability).
+    - Database naming: `vv_<12-char-SHA256-hash-of-tenantId>` (e.g., `vv_a1b2c3d4e5f6`). The tenantId itself remains `user_{githubId}` or `org_{githubId}`; only the MongoDB DB name is hashed (MongoDB's 38-byte name limit).
     - Stores tenant-specific data: users, records, and releases.
     - Complete logical and physical isolation between tenants.
     - Users can be members of multiple organization tenants.
@@ -76,27 +81,33 @@ Main components:
 
 ## 4. Deployment Architecture
 
-Target deployment on Raspberry Pi 5:
+Three active environments exist; RPi 5 remains the production target.
 
-- Reverse Proxy (e.g., Caddy, Nginx, or Traefik)
-  - Terminates TLS (Let’s Encrypt) and enforces HTTPS.
-  - Routes `/graphql` and `/auth/*` to the BFF.
-  - Serves static frontend assets.
-- BFF Container/Service
-  - Listens on an internal port.
-  - Accessible only via the reverse proxy.
-- Domain Backend Container/Service
-  - Listens on an internal port.
-  - Accessible only from the BFF (enforced by Docker network / firewall).
-- MongoDB Container/Service
-  - Bound to localhost or internal Docker network.
-  - Not exposed to the internet. [web:13][web:16][web:19]
+### Local DEV
+- Docker Compose + MongoDB on localhost (`infra/docker-compose.yml`).
+- Vite dev server on port 3000 (proxies `/graphql` and `/auth` to BFF).
+- BFF on port 3001, Backend on port 4000.
+- `pnpm dev` starts all services in parallel.
 
-Security hardening on the Pi:
+### Staging (Kubernetes)
+- Kubernetes cluster, namespace `vinylvault-staging`, managed via kubectl + Kustomize (`infra/k8s/`).
+- Kubernetes Secrets hold MongoDB passwords.
+- StatefulSets for MongoDB: `mongodb-bff` and `mongodb-backend`.
+- Images pushed to GHCR: `ghcr.io/mloitzl/vinylvault-*:latest-staging`.
+- GitHub Actions CI/CD with a self-hosted runner; build/push/deploy scripts in `scripts/`.
+- Frontend served as pre-built static assets.
 
-- Hardened SSH (keys only, no password, non-root login). [web:13][web:19]
-- OS kept up to date with security patches.
-- Firewall restricting inbound traffic to HTTPS (and SSH from trusted networks). [web:13][web:16]
+### Demo (Koyeb)
+- `packages/demo-server` orchestrator forks Backend (port 4001) and BFF (port 3001) as child processes and proxies `/graphql` + `/auth` routes; listens on port 8080.
+- Deployed via `infra/Dockerfile.demoserver`.
+- Frontend built with `pnpm build` and deployed to Vercel.
+- Build pipeline: `generate-schema.mjs` → `pnpm relay` → `vite build`.
+
+### Production Target (Raspberry Pi 5)
+- Reverse proxy (Caddy) terminates TLS (Let’s Encrypt) and routes `/graphql` and `/auth/*` to the BFF; serves static frontend assets.
+- BFF and Domain Backend run as containers accessible only via the reverse proxy / internal Docker network.
+- MongoDB bound to localhost or internal Docker network; not exposed to the internet.
+- Security hardening: SSH keys only, firewall restricting inbound to HTTPS.
 
 ## 5. Key Cross-Cutting Concepts
 
@@ -204,8 +215,8 @@ The system uses two complementary GitHub authentication modes:
 **Role Model:**
 
 - `ADMIN`: Full access within a tenant, can manage users and roles within that tenant.
-- `CONTRIBUTOR`: Can add/update/delete own records within a tenant.
-- `READER`: Read-only access to the collection within a tenant.
+- `MEMBER`: Can add/update/delete own records within a tenant.
+- `VIEWER`: Read-only access to the collection within a tenant.
 
 **Tenant Types:**
 
@@ -241,13 +252,13 @@ graph TB
     end
     
     subgraph "Tenant Databases"
-        subgraph "vinylvault_user_{userId}"
+        subgraph "vv_a1b2c3d4e5f6 (personal tenant)"
             TREC1[records]
             TREL1[releases]
             TSCR1[scoring_configs]
         end
         
-        subgraph "vinylvault_org_{orgName}"
+        subgraph "vv_b2c3d4e5f601 (org tenant)"
             TREC2[records]
             TREL2[releases]
             TSCR2[scoring_configs]
@@ -395,7 +406,7 @@ erDiagram
   displayName: string,
   email: string | null,
   avatarUrl: string,
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER',  // Role within this tenant
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER',  // Role within this tenant
   createdAt: Date,
   updatedAt: Date
 }
@@ -408,7 +419,7 @@ erDiagram
   userId: string,           // User's GitHub ID
   tenantId: string,         // Tenant identifier
   tenantType: 'user' | 'org',
-  role: 'ADMIN' | 'CONTRIBUTOR' | 'READER',
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER',
   createdAt: Date,
   updatedAt: Date
 }
@@ -499,20 +510,16 @@ erDiagram
 ### 5.5 GraphQL API Design
 
 **BFF GraphQL Schema (`packages/bff/src/schema.graphql`):**
-- Relay-friendly schema with `Node` interface for refetchable objects.
-- Queries: `viewer` (current user with tenant context), `node` (by ID), `records` (paginated tenant collection with filtering and text search).
-- Mutations: `scanBarcode` (tenant-scoped barcode lookup), `createRecord`, `updateRecord`, `deleteRecord`, `switchTenant` (unified tenant switching).
-- All record mutations proxy to backend with role-based authorization (ADMIN/MEMBER required).
-- Key types: `User`, `Tenant` (with `id`, `name`, `type`, `role`), `Record`, `Release`, `Album`, `ScoredRelease`, `ScoreBreakdown`.
-- Connection types for pagination: `RecordConnection`, `RecordEdge`, `PageInfo`.
-- Enums: `TenantType` (USER, ORGANIZATION), `TenantRole` (ADMIN, MEMBER, VIEWER), `ReleaseSource` (DISCOGS, MUSICBRAINZ, MANUAL).
-- Viewer includes `activeTenant`, `availableTenants[]`, each with tenant `role`.
-- Complete CRUD implementation with optimistic UI updates and error handling.
+- Contains **only** auth/session types: `viewer` (current user with tenant context), `switchTenant` mutation, `Tenant`, `FeatureFlags`, and `node`/`PageInfo` Relay plumbing.
+- All other types (`Record`, `Release`, `Album`, `records` query, CRUD mutations, etc.) come from the Backend schema and are proxied automatically via schema stitching — no manual resolver duplication.
+- `createStitchedSchema()` in `packages/bff/src/graphql/schema.ts` reads the static backend SDL file and stitches it with the BFF schema at startup.
+- `buildHTTPExecutor` in `packages/bff/src/graphql/executor.ts` injects the JWT into every forwarded request.
+- Enums: `TenantType` (USER, ORGANIZATION), `TenantRole` (ADMIN, MEMBER, VIEWER).
 
 **Backend GraphQL Schema (`packages/backend/src/schema.graphql`):**
 - Domain-centric schema for internal use by BFF.
 - All operations execute within tenant database context (extracted from JWT).
-- Queries: `user`, `record`, `release`, `releasesByBarcode`, `records` (all tenant-scoped), `userTenants` (returns user's tenant roles).
+- Queries: `user`, `record`, `release`, `releasesByBarcode`, `records`, `artists`, `albums`, `genres` (all tenant-scoped with cursor pagination and filtering), `userTenants`.
 - Mutations: 
   - Barcode & Records: `lookupBarcode` (uses tenant cache), `createRecord`, `updateRecord`, `deleteRecord`
   - User Management: `upsertUser`
@@ -521,6 +528,7 @@ erDiagram
 - Full `Album` type with detailed scoring information, alternative releases, and external IDs.
 - `LookupBarcodePayload` includes `albums[]`, legacy `releases[]` (deprecated), `fromCache`, `timing`, and `errors[]`.
 - `ScoreBreakdown` type provides detailed point attribution: `mediaType`, `countryPreference`, `trackListCompleteness`, `coverArt`, `labelInfo`, `catalogNumber`, `yearInfo`, `sourceBonus`.
+- `RecordFilter` includes `genre: String` in addition to existing fields.
 - GitHub App types: `GitHubInstallationWebhookInput` (with payload and signature), `CompleteInstallationSetupInput` (with userId and installationId).
 - Tenant-aware authorization checks for admin-only mutations (tenant management).
 
@@ -697,40 +705,50 @@ vinylvault/
 │   │       ├── components/    # UI components (Header, ScanBarcode, etc.)
 │   │       ├── contexts/      # React contexts (AuthContext)
 │   │       ├── hooks/         # Custom hooks
-│   │       ├── pages/         # Page components
+│   │       ├── pages/         # Page components (Collection, Browse, etc.)
 │   │       ├── relay/         # Relay environment configuration
 │   │       └── types/         # TypeScript type definitions
-│   ├── bff/               # Express + Apollo Server
+│   ├── bff/               # Express + Apollo Server (schema-stitched)
 │   │   └── src/
 │   │       ├── auth/          # GitHub OAuth handlers, JWT utilities
 │   │       ├── config/        # Environment configuration
 │   │       ├── db/            # MongoDB connection
-│   │       ├── graphql/       # GraphQL schema and resolvers
-│   │       ├── services/      # Backend client for forwarding requests
+│   │       ├── graphql/       # Stitched schema (schema.ts, executor.ts)
 │   │       └── types/         # TypeScript types (context, session)
-│   └── backend/           # Apollo Server (standalone)
-│       ├── config/        # Scoring configuration
-│       │   ├── scoring.json
-│       │   └── scoring.schema.json
-│       └── src/
-│           ├── db/            # MongoDB connection and collections
-│           ├── graphql/       # GraphQL schema and resolvers
-│           ├── models/        # Data models
-│           └── services/      # Business logic
-│               ├── discogs.ts     # Discogs API client
-│               ├── musicbrainz.ts # MusicBrainz API client
-│               ├── releasesCache.ts # Release caching
-│               ├── users.ts       # User management
-│               └── scoring/       # Blended scoring module
-│                   ├── types.ts
-│                   ├── config.ts
-│                   ├── normalize.ts
-│                   ├── score.ts
-│                   ├── aggregate.ts
-│                   ├── orchestrator.ts
-│                   └── index.ts
-├── infra/                 # Docker, Caddy configs
+│   ├── backend/           # Apollo Server (standalone)
+│   │   ├── config/        # Scoring configuration
+│   │   │   ├── scoring.json
+│   │   │   └── scoring.schema.json
+│   │   └── src/
+│   │       ├── db/            # MongoDB connection and collections
+│   │       ├── graphql/       # GraphQL schema and resolvers
+│   │       ├── models/        # Data models
+│   │       └── services/      # Business logic
+│   │           ├── discogs.ts     # Discogs API client
+│   │           ├── musicbrainz.ts # MusicBrainz API client
+│   │           ├── releasesCache.ts # Release caching
+│   │           ├── users.ts       # User management
+│   │           └── scoring/       # Blended scoring module
+│   │               ├── types.ts
+│   │               ├── config.ts
+│   │               ├── normalize.ts
+│   │               ├── score.ts
+│   │               ├── aggregate.ts
+│   │               ├── orchestrator.ts
+│   │               └── index.ts
+│   └── demo-server/       # Koyeb orchestrator (forks BFF + Backend, port 8080)
+├── scripts/
+│   └── admin/             # Admin management scripts (list-users, add-user-to-tenant, etc.)
+├── infra/
+│   ├── docker-compose.yml     # Local DEV service orchestration
+│   ├── Caddyfile              # Reverse proxy configuration
+│   ├── Dockerfile.bff         # BFF container
+│   ├── Dockerfile.backend     # Backend container
+│   ├── Dockerfile.frontend    # Frontend container
+│   ├── Dockerfile.demoserver  # Demo server container (Koyeb)
+│   └── k8s/               # Kubernetes manifests (Kustomize, staging)
 ├── docs/                  # Setup guides
+├── generate-schema.mjs    # Merges BFF + Backend SDL → packages/frontend/schema.graphql
 ├── .env                   # Environment variables (not in git)
 ├── pnpm-workspace.yaml    # Monorepo configuration
 └── tsconfig.base.json     # Shared TypeScript config

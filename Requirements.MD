@@ -23,8 +23,8 @@ External marketplaces, full Discogs collection sync, or mobile native apps are o
 - **BFF**: Backend-for-Frontend proxy (Express + Apollo Server).
 - **JWT**: JSON Web Token used between BFF and backend.
 - **ADMIN**: User role with full permissions including user management within a tenant.
-- **CONTRIBUTOR**: User role with write permissions for own records within a tenant.
-- **READER**: User role with read-only permissions within a tenant.
+- **MEMBER**: User role with write permissions for own records within a tenant.
+- **VIEWER**: User role with read-only permissions within a tenant.
 - **Tenant**: An isolated collection scope, either a personal user collection or a GitHub organization collection.
 - **Release**: A specific music release (artist, album, etc.).
 - **Record**: A physical vinyl owned by a user within a tenant.
@@ -32,7 +32,7 @@ External marketplaces, full Discogs collection sync, or mobile native apps are o
 
 ### 1.4 Stakeholders
 
-- Primary user: Owner of a vinyl collection (admin/contributor).
+- Primary user: Owner of a vinyl collection (admin/member).
 - Secondary users: Read-only viewers of the collection.
 - Operator: The person hosting and maintaining the system on the RPi 5.
 
@@ -54,10 +54,10 @@ The system consists of:
   - Full access within a tenant.
   - Manage all records within the tenant.
   - Assign roles to other users within the tenant.
-- **CONTRIBUTOR**:
+- **MEMBER**:
   - Manage own records within the tenant (create, update, delete).
   - Cannot manage other users.
-- **READER**:
+- **VIEWER**:
   - View records and details within the tenant.
   - No modification capabilities.
 
@@ -157,17 +157,17 @@ FR-CF-3: Source-specific rules
 - The system shall support defining source-specific rules (e.g. rules applied only to Discogs or only to MusicBrainz releases) for normalization and scoring.
 
 FR-3 Record Creation ✅ IMPLEMENTED
-- The system shall allow an ADMIN/CONTRIBUTOR to create a new record by:
+- The system shall allow an ADMIN/MEMBER to create a new record by:
   - Selecting a release retrieved from external services or
   - Manually entering basic information if no release is found. 
 - The system shall allow the user to add personal attributes such as purchase date, price, condition, location, and notes.
 - Implementation: RecordRepository, records service, createRecord mutation (backend), createRecord mutation proxy (BFF), ScanBarcode "Add to Collection" button (frontend).
 
 FR-4 Record Management ✅ IMPLEMENTED
-- The system shall allow an ADMIN/CONTRIBUTOR to:
+- The system shall allow an ADMIN/MEMBER to:
   - Update any personal attributes of their records. ✅ Edit modal with form validation
   - Delete records they own. ✅ Confirmation dialog with local state update
-- The system shall prevent READER users from creating, updating, or deleting records. ✅ Role-based authorization in BFF
+- The system shall prevent VIEWER users from creating, updating, or deleting records. ✅ Role-based authorization in BFF
 - Implementation: updateRecord/deleteRecord mutations (backend), mutation proxies with role checks (BFF), RecordEditModal with form validation (frontend), deleteRecord with confirmation (frontend CollectionPage).
 
 FR-5 Collection Browsing ✅ IMPLEMENTED
@@ -184,10 +184,10 @@ FR-6 Authentication via GitHub ✅ IMPLEMENTED
 - Implementation: `/auth/github`, `/auth/github/callback`, `/auth/me`, `/auth/logout` endpoints.
 
 FR-7 Authorization and Roles ✅ IMPLEMENTED
-- The system shall assign each user one role per tenant: ADMIN, CONTRIBUTOR, or READER.
+- The system shall assign each user one role per tenant: ADMIN, MEMBER, or VIEWER.
 - First authenticated user is automatically assigned ADMIN role for their personal tenant.
 - Organization tenants derive user roles from GitHub organization membership.
-- The system shall restrict access to mutation operations to ADMIN/CONTRIBUTOR users within the active tenant.
+- The system shall restrict access to mutation operations to ADMIN/MEMBER users within the active tenant.
 - The system shall enforce role-based access control both in the BFF and backend.
 - The system shall enforce tenant isolation to prevent cross-tenant data access.
 
@@ -225,9 +225,17 @@ FR-10 Tenant Management ✅ IMPLEMENTED
 - The system creates a personal tenant (user-type) for each user upon first authentication.
 - The system allows users to switch between available tenants (personal and organizations).
 - The system enforces strict database-level isolation between tenants.
-- Each tenant has its own MongoDB database instance.
+- Each tenant has its own MongoDB database instance (named `vv_<12-char-SHA256-hash-of-tenantId>`).
 - The system tracks user roles per tenant in the registry database `user_tenant_roles` collection.
 - Organization tenants are created only when users explicitly install the GitHub App via the "Add Organization" button (not automatic).
+
+FR-11 Browse ✅ IMPLEMENTED
+- The system provides a `/browse` route with three tabs: Artists, Albums, Genres.
+- **Artists tab:** Shows artist cards with cover art derived from their records. Clicking an artist navigates to `/artists/:name` showing all records by that artist with genre chips.
+- **Albums tab:** Shows all albums (unique title+artist combinations) sorted alphabetically by title then artist.
+- **Genres tab:** Shows genre chips. Clicking a genre shows all records in that genre.
+- All Browse views support edit/delete for ADMIN/MEMBER users (same permissions as the Collection page).
+- Backend queries: `artists(first, after, filter)`, `albums(first, after, filter)`, `genres(first, after, filter)` each return cursor-paginated Connection types. `RecordFilter` includes `genre: String`.
 
 
 FR-9 Auditability (basic) 
@@ -321,16 +329,20 @@ QR-04: Robustness to incomplete data
 - ✅ Record creation (FR-3) - Full implementation from barcode scan to database storage
 - ✅ Record update (FR-4) - RecordEditModal with form validation, ESC/backdrop close, optimistic UI updates
 - ✅ Record deletion (FR-4) - Backend mutations, BFF proxies with authorization, frontend with confirmation
-- ✅ Collection browsing (FR-5) - Paginated list with search/filter, cursor-based pagination, RecordCard components
+- ✅ Collection browsing (FR-5) - Paginated list with search/filter, Relay `@connection` cursor pagination, `@deleteEdge`/`@appendNode` store updates
+- ✅ Browse feature (FR-11) - `/browse` route with Artists, Albums, Genres tabs; artist detail page
+- ✅ Schema stitching in BFF - `@graphql-tools/stitch` replaces manual resolver proxying; no dual-schema maintenance
+- ✅ Frontend schema generation - `generate-schema.mjs` merges static SDL files; `pnpm update-schema` → `pnpm relay` pipeline
 - ✅ Release caching in MongoDB - Per-tenant release caching with composite ID lookup
-- ✅ Multi-tenant statistics - Real-time record and artist counts per tenant with auto-refresh
+- ✅ Multi-tenant statistics - Lightweight `AppCountsQuery` with `totalCount` (no full record load)
 - ✅ Toast notifications - Success/error feedback for user actions with auto-dismiss
 - ✅ GitHub App Installation for Organization Tenants (FR-9) - Explicit app installation for org tenant creation
 - ✅ Complete CRUD operations - Create (scan), Read (list/detail), Update (modal), Delete (confirmation)
+- ✅ Hashed tenant database names - `vv_<12-char-SHA256>` format enforced across backend
+- ✅ Betterstack Logs (OTLP) + LogRocket monitoring configured
 
 ## 7. Open Issues
 
 - Strategy for backup/restore (local NAS, cloud storage, etc.).
 - Mobile camera API integration refinements for barcode scanning.
 - Full release caching strategy (currently caching is partially disabled to always use live scoring orchestrator).
-- Migration strategy for existing org tenants from passive sync to active GitHub App installation (Phase 6.5 planning). - Solved. No production data yet, everything can be deleted.
