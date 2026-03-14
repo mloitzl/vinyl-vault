@@ -107,6 +107,42 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
           </div>
         </button>
 
+        {/* Browse Card */}
+        <button
+          onClick={() => navigate('/browse')}
+          className="w-full bg-white border border-gray-200 rounded-xl p-5 text-left hover:border-gray-300 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <svg
+                className="w-6 h-6 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                />
+              </svg>
+            </div>
+            <div>
+              <div className="font-medium text-gray-900">Browse</div>
+              <div className="text-sm text-gray-500">By artist, album or genre</div>
+            </div>
+            <svg
+              className="w-5 h-5 ml-auto text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </button>
+
         {/* Search Card */}
         <button
           onClick={() => navigate('/search')}
