@@ -21,6 +21,8 @@ import {
   SearchPage,
   RecordDetailPage,
   NotFoundPage,
+  BrowsePage,
+  ArtistDetailPage,
 } from './pages';
 
 function AuthedContent() {
@@ -61,6 +63,8 @@ function AuthedContent() {
               <Route path="/collection" element={<CollectionPage />} />
               <Route path="/collection/:recordId" element={<RecordDetailPage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/browse" element={<BrowsePage />} />
+              <Route path="/artists/:name" element={<ArtistDetailPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>

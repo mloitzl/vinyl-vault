@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
@@ -27,13 +27,15 @@ type RecordFilter = {
 };
 
 export function CollectionPage() {
+  const [urlSearchParams] = useSearchParams();
   const { queryRef, loadQuery, refetch } = useRecordsQueryLoader();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(urlSearchParams.get('search') ?? '');
   const [locationFilter, setLocationFilter] = useState('');
 
-  // Load initial query
+  // Load initial query — apply ?search= param from URL if present
   useEffect(() => {
-    loadQuery({ first: 20 });
+    const initialSearch = urlSearchParams.get('search');
+    loadQuery({ first: 20, ...(initialSearch ? { filter: { search: initialSearch } } : {}) });
   }, [loadQuery]);
 
   // Wait for initial query to load before rendering child component
