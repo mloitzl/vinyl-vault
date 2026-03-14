@@ -6,6 +6,12 @@ extend type Query {
   The currently authenticated user, or null if not logged in.
   """
   viewer: User
+
+  """
+  Look up a Spotify track preview URL for the given track/artist pair.
+  Returns nullable URLs when no match is found or Spotify credentials are not configured.
+  """
+  spotifyPreview(track: String!, artist: String!): SpotifyPreviewResult!
 }
 
 extend type Mutation {
@@ -41,4 +47,12 @@ type Tenant {
   name: String!
   type: TenantType!
   role: TenantRole!
+}
+
+"""
+Spotify preview lookup result.
+"""
+type SpotifyPreviewResult {
+  previewUrl: String
+  spotifyUrl: String
 }

@@ -12,6 +12,13 @@ interface PreviewResult {
   spotifyUrl: string | null;
 }
 
+interface PreviewGraphQLResponse {
+  data?: {
+    spotifyPreview?: PreviewResult | null;
+  };
+  errors?: Array<{ message?: string }>;
+}
+
 type State = 'idle' | 'loading' | 'playing' | 'paused' | 'unavailable';
 
 // Module-level: only one track plays at a time across all instances
@@ -70,12 +77,27 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
       result = previewCache.get(cacheKey)!;
     } else {
       try {
-        const params = new URLSearchParams({ track, artist });
-        const res = await fetch(getEndpoint(`/api/spotify/preview?${params}`), {
+        const query = `query SpotifyPreview($track: String!, $artist: String!) {
+          spotifyPreview(track: $track, artist: $artist) {
+            previewUrl
+            spotifyUrl
+          }
+        }`;
+
+        const res = await fetch(getEndpoint('/graphql'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
+          body: JSON.stringify({ query, variables: { track, artist } }),
         });
         if (!res.ok) throw new Error(`${res.status}`);
-        result = (await res.json()) as PreviewResult;
+
+        const payload = (await res.json()) as PreviewGraphQLResponse;
+        if (payload.errors?.length) {
+          throw new Error(payload.errors[0]?.message || 'GraphQL error');
+        }
+
+        result = payload.data?.spotifyPreview ?? { previewUrl: null, spotifyUrl: null };
         previewCache.set(cacheKey, result);
       } catch {
         setState('unavailable');

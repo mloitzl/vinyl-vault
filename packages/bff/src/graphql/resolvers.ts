@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 import type { GraphQLContext } from '../types/context.js';
 import { getAvailableTenants, setActiveTenant } from '../types/session.js';
 import { getFeatureFlags } from '../utils/featureFlags.js';
+import { lookupSpotifyPreview } from '../services/spotify.js';
 
 export const resolvers = {
   Query: {
@@ -20,6 +21,21 @@ export const resolvers = {
         createdAt: context.user.createdAt,
         updatedAt: context.user.updatedAt,
       };
+    },
+
+    spotifyPreview: async (
+      _parent: unknown,
+      args: { track: string; artist: string },
+      context: GraphQLContext
+    ) => {
+      if (!context.user) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      const track = String(args.track ?? '').trim();
+      const artist = String(args.artist ?? '').trim();
+
+      return lookupSpotifyPreview(track, artist);
     },
   },
 

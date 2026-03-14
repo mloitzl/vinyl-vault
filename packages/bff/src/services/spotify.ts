@@ -1,16 +1,12 @@
-import { Router } from 'express';
-import type { IRouter } from 'express';
 import { config } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-
-const router: IRouter = Router();
 
 interface TokenCache {
   accessToken: string;
   expiresAt: number;
 }
 
-interface SpotifyPreviewResult {
+export interface SpotifyPreviewResult {
   previewUrl: string | null;
   spotifyUrl: string | null;
 }
@@ -79,42 +75,28 @@ async function searchTrack(
   };
 }
 
-// GET /api/spotify/preview?track=X&artist=Y
-// Returns { previewUrl, spotifyUrl } — both nullable.
-// Returns nulls silently if Spotify credentials are not configured.
-router.get('/preview', async (req, res) => {
-  if (!req.session?.user) {
-    res.status(401).json({ error: 'Not authenticated' });
-    return;
-  }
-
-  const track = String(req.query.track ?? '').trim();
-  const artist = String(req.query.artist ?? '').trim();
-
+export async function lookupSpotifyPreview(
+  track: string,
+  artist: string
+): Promise<SpotifyPreviewResult> {
   if (!track || !artist) {
-    res.status(400).json({ error: 'track and artist query params are required' });
-    return;
+    throw new Error('track and artist query params are required');
   }
 
   const { clientId, clientSecret } = config.spotify;
   if (!clientId || !clientSecret) {
-    res.json({ previewUrl: null, spotifyUrl: null });
-    return;
+    return { previewUrl: null, spotifyUrl: null };
   }
 
   try {
     const token = await getAccessToken();
     if (!token) {
-      res.json({ previewUrl: null, spotifyUrl: null });
-      return;
+      return { previewUrl: null, spotifyUrl: null };
     }
 
-    const result = await searchTrack(track, artist, token);
-    res.json(result);
+    return await searchTrack(track, artist, token);
   } catch (err) {
     logger.error({ err, track, artist }, 'Spotify preview lookup failed');
-    res.json({ previewUrl: null, spotifyUrl: null });
+    return { previewUrl: null, spotifyUrl: null };
   }
-});
-
-export { router as spotifyRouter };
+}

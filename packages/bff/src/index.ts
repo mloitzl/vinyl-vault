@@ -29,7 +29,6 @@ import MongoStore from 'connect-mongo';
 import { config, validateConfig } from './config/env.js';
 import { connectToDatabase, disconnectFromDatabase } from './db/connection.js';
 import { authRouter } from './auth/index.js';
-import { spotifyRouter } from './services/spotify.js';
 import { createStitchedSchema } from './graphql/schema.js';
 import { createGraphqlTelemetryPlugin } from './graphql/telemetry.js';
 import type { GraphQLContext } from './types/context.js';
@@ -152,9 +151,6 @@ async function main() {
 
   // Auth routes
   app.use('/auth', authLimiter, authRouter);
-
-  // Spotify track preview (optional feature — silently no-ops if creds not configured)
-  app.use('/api/spotify', spotifyRouter);
 
   // Bind early so the health/readiness probe responds during schema stitching.
   // The /graphql route is wired up after stitching completes.
