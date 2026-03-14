@@ -29,7 +29,7 @@ export function useRecordActions(filter?: RecordFilter) {
 
   // VIEWER role cannot mutate records — returning undefined for handlers causes
   // RecordCard to hide the edit/delete buttons entirely (they're optional props).
-  const canMutate = activeTenant?.role !== 'VIEWER';
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
 
   const { mutate: deleteRecord, isLoading: isDeleting } = useDeleteRecordMutation();
   const { mutate: updateRecord, isLoading: isUpdating } = useUpdateRecordMutation();
