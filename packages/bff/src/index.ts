@@ -149,8 +149,19 @@ async function main() {
     })
   );
 
-  // Auth routes
-  app.use('/auth', authLimiter, authRouter);
+  // Auth routes — rate limit only the OAuth endpoints (initiation + callback +
+  // logout). /auth/me is a lightweight session check called on every page load
+  // and must NOT be rate-limited or repeated runs will exhaust the window.
+  app.use(
+    '/auth',
+    (req, _res, next) => {
+      if (req.path.startsWith('/github') || req.path === '/logout') {
+        return authLimiter(req, _res, next);
+      }
+      next();
+    },
+    authRouter
+  );
 
   // Bind early so the health/readiness probe responds during schema stitching.
   // The /graphql route is wired up after stitching completes.
