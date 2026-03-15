@@ -110,8 +110,14 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
               </svg>
             </div>
             <div>
-              <div className="font-medium text-gray-900">My Collection</div>
-              <div className="text-sm text-gray-500">Browse your vinyl records</div>
+              <div className="font-medium text-gray-900">
+                {isForeignTenant && activeTenant
+                  ? `${activeTenant.name}'s Collection`
+                  : 'My Collection'}
+              </div>
+              <div className="text-sm text-gray-500">
+                {isForeignTenant ? `Browse ${activeTenant!.name.split(' ')[0]}'s vinyl records` : 'Browse your vinyl records'}
+              </div>
             </div>
             <svg
               className="w-5 h-5 ml-auto text-gray-300"
