@@ -17,6 +17,12 @@ export interface AvailableTenant {
   role: 'ADMIN' | 'MEMBER' | 'VIEWER';
 }
 
+export interface UserSettings {
+  spotifyPreview: boolean;
+}
+
+const DEFAULT_USER_SETTINGS: UserSettings = { spotifyPreview: false };
+
 export interface User {
   id: string;
   githubId: string;
@@ -24,6 +30,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
+  settings: UserSettings;
   featureFlags?: FeatureFlags;
 }
 
@@ -69,7 +76,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const data = await response.json();
-      setUser(data.user || null);
+      setUser(data.user ? {
+        ...data.user,
+        settings: { ...DEFAULT_USER_SETTINGS, ...(data.user.settings ?? {}) },
+      } : null);
 
       // Extract feature flags from response
       if (data.user?.featureFlags) {

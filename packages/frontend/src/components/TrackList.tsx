@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SpotifyPreviewButton } from './SpotifyPreviewButton';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Track {
   position?: string;
@@ -13,6 +14,8 @@ interface TrackListProps {
 }
 
 export function TrackList({ tracks, artist }: TrackListProps) {
+  const { user } = useAuth();
+  const spotifyEnabled = user?.settings?.spotifyPreview === true;
   const [activeEmbed, setActiveEmbed] = useState<{ index: number; trackId: string } | null>(null);
 
   // Listen for Spotify embed postMessage events to detect end of playback
@@ -76,7 +79,7 @@ export function TrackList({ tracks, artist }: TrackListProps) {
 
           return (
             <div key={index} className="px-3 py-1.5 flex items-center text-sm">
-              {artist && (
+              {artist && spotifyEnabled && (
                 <SpotifyPreviewButton
                   track={track.title}
                   artist={artist}

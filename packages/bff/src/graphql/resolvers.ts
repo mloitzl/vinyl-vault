@@ -1,11 +1,25 @@
 // BFF GraphQL resolvers — Auth, session, and tenant management only.
 // Domain queries (records, scanBarcode, etc.) are handled by the stitched backend schema.
 
+import { parse } from 'graphql';
 import { logger } from '../utils/logger.js';
 import type { GraphQLContext } from '../types/context.js';
-import { getAvailableTenants, setActiveTenant } from '../types/session.js';
+import { getAvailableTenants, setActiveTenant, DEFAULT_USER_SETTINGS } from '../types/session.js';
+import type { UserSettings } from '../types/session.js';
 import { getFeatureFlags } from '../utils/featureFlags.js';
 import { lookupSpotifyPreview } from '../services/spotify.js';
+import { backendExecutor } from './executor.js';
+
+const UPDATE_USER_SETTINGS_MUTATION = parse(`
+  mutation BffUpdateUserSettings($input: UpdateUserSettingsInput!) {
+    updateUserSettings(input: $input) {
+      id
+      settings {
+        spotifyPreview
+      }
+    }
+  }
+`);
 
 export const resolvers = {
   Query: {
@@ -73,6 +87,54 @@ export const resolvers = {
         githubLogin: context.user.githubLogin,
         displayName: context.user.displayName,
         avatarUrl: context.user.avatarUrl || null,
+        createdAt: context.user.createdAt,
+        updatedAt: context.user.updatedAt,
+      };
+    },
+
+    updateUserSettings: async (
+      _parent: unknown,
+      _args: { input: { spotifyPreview?: boolean } },
+      context: GraphQLContext
+    ) => {
+      if (!context.user || !context.session) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      // Delegate to backend (JWT is injected by executor from context.jwt)
+      const result = await backendExecutor({
+        document: UPDATE_USER_SETTINGS_MUTATION,
+        variables: { input: _args.input },
+        context,
+      }) as { data?: { updateUserSettings?: { settings?: UserSettings } } };
+
+      const updatedSettings: UserSettings = {
+        ...DEFAULT_USER_SETTINGS,
+        ...(result.data?.updateUserSettings?.settings ?? {}),
+      };
+
+      // Keep session in sync so /auth/me returns fresh settings immediately
+      (context.session as any).user = {
+        ...(context.session as any).user,
+        settings: updatedSettings,
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        context.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      logger.info({ userId: context.user!.id, settings: updatedSettings }, 'User settings updated');
+
+      return {
+        __typename: 'User',
+        id: context.user.id,
+        githubLogin: context.user.githubLogin,
+        displayName: context.user.displayName,
+        avatarUrl: context.user.avatarUrl || null,
+        settings: updatedSettings,
         createdAt: context.user.createdAt,
         updatedAt: context.user.updatedAt,
       };

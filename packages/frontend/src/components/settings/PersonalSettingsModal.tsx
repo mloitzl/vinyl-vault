@@ -1,19 +1,58 @@
+import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Modal } from '../ui/Modal';
+import { getEndpoint } from '../../utils/apiUrl';
 
 interface PersonalSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const UPDATE_SETTINGS_MUTATION = `
+  mutation UpdateUserSettings($input: UpdateUserSettingsInput!) {
+    updateUserSettings(input: $input) {
+      id
+      settings {
+        spotifyPreview
+      }
+    }
+  }
+`;
+
 export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModalProps) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!user) return null;
+
+  const handleSpotifyToggle = async (enabled: boolean) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(getEndpoint('/graphql'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: UPDATE_SETTINGS_MUTATION,
+          variables: { input: { spotifyPreview: enabled } },
+        }),
+      });
+      const json = await res.json();
+      if (json.errors?.length) throw new Error(json.errors[0].message);
+      await refreshUser();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Modal isOpen={isOpen} title="Personal Settings" onClose={onClose} size="sm">
       <div className="space-y-4">
+        {/* Profile */}
         <div className="flex items-center gap-4">
           {user.avatarUrl ? (
             <img
@@ -34,8 +73,42 @@ export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModal
           </div>
         </div>
 
-        <div className="border-t border-gray-100 pt-4">
-          <p className="text-sm text-gray-400 italic">More settings coming soon.</p>
+        {/* Settings */}
+        <div className="border-t border-gray-100 pt-4 space-y-3">
+          <h3 className="text-sm font-medium text-gray-700">Preferences</h3>
+
+          {/* Spotify Preview Toggle */}
+          <label className="flex items-start justify-between gap-4 cursor-pointer">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Spotify Track Previews</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Show play buttons next to tracks to listen to 30-second previews
+              </p>
+            </div>
+            <div className="relative flex-shrink-0 mt-0.5">
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={user.settings.spotifyPreview}
+                disabled={saving}
+                onChange={(e) => handleSpotifyToggle(e.target.checked)}
+              />
+              <div
+                onClick={() => !saving && handleSpotifyToggle(!user.settings.spotifyPreview)}
+                className={`w-10 h-6 rounded-full transition-colors ${
+                  user.settings.spotifyPreview ? 'bg-[#1DB954]' : 'bg-gray-200'
+                } ${saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                    user.settings.spotifyPreview ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </div>
+            </div>
+          </label>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
       </div>
     </Modal>

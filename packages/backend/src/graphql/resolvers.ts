@@ -2,7 +2,7 @@
 
 import { logger } from '../utils/logger.js';
 import { upsertReleases } from '../services/releasesCache.js';
-import { findUserById, upsertUser } from '../services/users.js';
+import { findUserById, upsertUser, updateUserSettings } from '../services/users.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
   createRecord,
@@ -693,6 +693,15 @@ export const resolvers = {
     ) => {
       return upsertUser(_args.input);
     },
+    updateUserSettings: async (
+      _parent: unknown,
+      _args: { input: { spotifyPreview?: boolean } },
+      context: { user?: { sub?: string; id?: string } }
+    ) => {
+      const userId = context.user?.sub ?? context.user?.id;
+      if (!userId) throw new Error('Unauthorized');
+      return updateUserSettings(userId, _args.input);
+    },
     handleGitHubInstallationWebhook: async (
       _parent: unknown,
       _args: { input: { payloadBase64: string; signature: string } }
@@ -860,6 +869,11 @@ export const resolvers = {
         createdAt: userTenantRole.createdAt.toISOString(),
       };
     },
+  },
+  User: {
+    settings: (parent: { settings?: { spotifyPreview?: boolean } }) => ({
+      spotifyPreview: parent.settings?.spotifyPreview ?? false,
+    }),
   },
   Record: {
     release: async (_parent: { releaseId: string }, _args: unknown, context: GraphQLContext) => {

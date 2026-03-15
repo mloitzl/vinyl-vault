@@ -20,6 +20,12 @@ extend type Mutation {
   Updates the session and returns the user with the new active tenant context.
   """
   switchTenant(tenantId: String!): User!
+
+  """
+  Update personal settings for the current user. Persists to the database
+  and updates the session so subsequent /auth/me calls reflect the change.
+  """
+  updateUserSettings(input: UpdateUserSettingsInput!): User!
 }
 
 # Extends the backend User type with session-specific data resolved by the BFF.
