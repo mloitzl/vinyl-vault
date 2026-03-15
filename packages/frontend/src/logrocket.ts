@@ -31,3 +31,23 @@ if (appId) {
     },
   });
 }
+
+/**
+ * Associate the current LogRocket session with an authenticated user.
+ * No-op when LogRocket is not initialised (e.g. local dev without app ID).
+ */
+export function identifyUser(user: {
+  id: string;
+  githubLogin: string;
+  displayName: string;
+  email?: string;
+  avatarUrl?: string;
+}) {
+  if (!appId) return;
+  LogRocket.identify(user.id, {
+    name: user.displayName,
+    email: user.email ?? '',
+    githubLogin: user.githubLogin,
+    avatar: user.avatarUrl ?? '',
+  });
+}
