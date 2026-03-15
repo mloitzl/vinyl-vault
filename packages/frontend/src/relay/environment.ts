@@ -9,6 +9,7 @@ import {
 } from 'relay-runtime';
 import type { RequestParameters } from 'relay-runtime';
 import { getEndpoint } from '../utils/apiUrl.js';
+import { getSessionURL } from '../logrocket.js';
 
 /**
  * GraphQL error type from server response
@@ -47,11 +48,15 @@ const fetchGraphQL: FetchFunction = (request: RequestParameters, variables: any)
         });
 
         // Send POST request to BFF GraphQL endpoint
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        const lrSession = getSessionURL();
+        if (lrSession) headers['X-LogRocket-Session'] = lrSession;
+
         const response = await fetch(getEndpoint('/graphql'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           credentials: 'include', // Send cookies for auth
           body,
         });

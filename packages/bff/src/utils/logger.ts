@@ -55,6 +55,7 @@ export const httpLogger = pinoHttp({
       method: req.method,
       url: req.url,
       remoteAddress: req.headers['x-forwarded-for'] || req.socket?.remoteAddress,
+      logrocket_session: req.headers['x-logrocket-session'] || undefined,
     }),
     res: (res) => ({
       statusCode: res.statusCode,
