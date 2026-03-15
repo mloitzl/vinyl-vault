@@ -87,8 +87,12 @@ interface DesktopNavigationProps {
 
 export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigationProps) {
   const location = useLocation();
-  const { activeTenant } = useAuth();
+  const { user, activeTenant } = useAuth();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  const collectionLabel = isForeignTenant
+    ? `${activeTenant!.name.split(' ')[0]}'s Collection`
+    : 'My Collection';
   const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
@@ -107,7 +111,9 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
               }`}
             >
               <span className="w-5 h-5">{item.icon}</span>
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium">
+                {item.path === '/collection' ? collectionLabel : item.label}
+              </span>
             </Link>
           );
         })}
@@ -132,8 +138,13 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
 
 export function MobileNavigation() {
   const location = useLocation();
-  const { activeTenant } = useAuth();
+  const { user, activeTenant } = useAuth();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  // Mobile: keep it short — "[First name]'s" fits in the tab
+  const collectionLabel = isForeignTenant
+    ? `${activeTenant!.name.split(' ')[0]}'s`
+    : 'Collection';
   const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
@@ -152,7 +163,9 @@ export function MobileNavigation() {
               }`}
             >
               {item.icon}
-              <span className="text-xs mt-1">{item.label}</span>
+              <span className="text-xs mt-1">
+                {item.path === '/collection' ? collectionLabel : item.label}
+              </span>
             </Link>
           );
         })}

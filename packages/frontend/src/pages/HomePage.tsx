@@ -9,6 +9,7 @@ interface HomePageProps {
 export function HomePage({ recordCount, artistCount }: HomePageProps) {
   const { user, activeTenant } = useAuth();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
   const navigate = useNavigate();
 
   if (!user) {
@@ -34,10 +35,23 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
   return (
     <div className="flex-1 flex flex-col p-4">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">
-          Hi, {user.displayName.split(' ')[0]}
-        </h1>
-        <p className="text-gray-500">What would you like to do?</p>
+        {isForeignTenant && activeTenant ? (
+          <>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {activeTenant.name}'s Collection
+            </h1>
+            <p className="text-gray-500">
+              {canMutate ? 'You can add and edit records here.' : 'You are browsing in read-only mode.'}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl font-semibold text-gray-900">
+              Hi, {user.displayName.split(' ')[0]}
+            </h1>
+            <p className="text-gray-500">What would you like to do?</p>
+          </>
+        )}
       </div>
 
       <div className="space-y-3">

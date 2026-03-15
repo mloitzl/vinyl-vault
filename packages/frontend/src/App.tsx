@@ -74,8 +74,16 @@ function AuthedContent() {
 }
 
 function AppContent() {
-  const { user, isLoading, error, refreshUser } = useAuth();
+  const { user, isLoading, error, refreshUser, activeTenant } = useAuth();
   const [orgInstalled, setOrgInstalled] = useState<string | null>(null);
+
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  const isViewer = activeTenant?.role === 'VIEWER';
+  const ringClass = isForeignTenant
+    ? isViewer
+      ? 'ring-4 ring-inset ring-amber-400'
+      : 'ring-4 ring-inset ring-blue-400'
+    : '';
 
   // Detect org_installed query parameter from GitHub App installation redirect
   useEffect(() => {
@@ -94,7 +102,7 @@ function AppContent() {
   }, [refreshUser]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className={`min-h-screen bg-gray-50 flex flex-col ${ringClass}`}>
       <Header />
 
       {/* Error display */}
