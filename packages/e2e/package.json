@@ -6,7 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui",
+    "test:ui": "playwright test --ui --project chromium",
     "report": "playwright show-report",
     "install-browsers": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit"
