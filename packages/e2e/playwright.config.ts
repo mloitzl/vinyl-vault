@@ -13,6 +13,8 @@ const isCI = !!process.env.CI;
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
 
 export const AUTH_FILE = path.join(__dirname, '.auth/user.json');
+export const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+export const BFF_URL = process.env.E2E_BFF_URL ?? 'http://localhost:3001';
 
 export default defineConfig({
   testDir: './src/tests',
@@ -25,7 +27,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never', outputFolder: 'playwright-report' }], ['list']],
 
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
+    baseURL: BASE_URL,
     // Capture a trace on the first retry so failures are debuggable
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',

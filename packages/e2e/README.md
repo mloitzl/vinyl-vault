@@ -56,6 +56,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser pnpm e2e
 | Variable | Default | Description |
 |---|---|---|
 | `E2E_BASE_URL` | `http://localhost:3000` | Frontend URL to test against |
+| `E2E_BFF_URL` | `http://localhost:3001` | BFF URL (used for the OAuth login redirect) |
 | `E2E_GITHUB_USERNAME` | — | GitHub test account username |
 | `E2E_GITHUB_PASSWORD` | — | GitHub test account password |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | _(bundled)_ | Override browser binary (Pi system Chromium) |

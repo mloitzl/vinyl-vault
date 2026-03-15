@@ -19,8 +19,7 @@
 import { test as setup, expect } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
-
-const AUTH_FILE = path.join(__dirname, '../../.auth/user.json');
+import { AUTH_FILE, BASE_URL, BFF_URL } from '../../playwright.config.js';
 
 setup('authenticate via GitHub OAuth', async ({ page }) => {
   const username = process.env.E2E_GITHUB_USERNAME;
@@ -39,8 +38,8 @@ setup('authenticate via GitHub OAuth', async ({ page }) => {
   // ── Step 1: initiate the OAuth flow ──────────────────────────────────────
   // Navigate directly to the BFF (not through the Vite proxy) so a missing or
   // erroring proxy cannot silently swallow the redirect and leave the browser
-  // at localhost:3000 without any session cookie.
-  await page.goto('http://localhost:3001/auth/github');
+  // at the frontend URL without any session cookie.
+  await page.goto(`${BFF_URL}/auth/github`);
 
   // ── Step 2: handle GitHub's login / authorize page ───────────────────────
   // GitHub may show either a combined login+authorize page or just an authorize
@@ -63,7 +62,7 @@ setup('authenticate via GitHub OAuth', async ({ page }) => {
 
   // ── Step 3: wait for the authenticated app to load ───────────────────────
   // The BFF sets a session cookie and redirects back to the frontend root.
-  await page.waitForURL('http://localhost:3000/**', { timeout: 30_000 });
+  await page.waitForURL(`${BASE_URL}/**`, { timeout: 30_000 });
 
   // Wait for all network requests (including /auth/me) to settle so the React
   // auth context has had a chance to update from the session cookie.
@@ -83,7 +82,7 @@ setup('authenticate via GitHub OAuth', async ({ page }) => {
   if (state.cookies.length === 0) {
     throw new Error(
       'OAuth completed but no session cookies were captured.\n' +
-        'Ensure the BFF is running (localhost:3001) and GitHub OAuth credentials are valid.'
+        `Ensure the BFF is running (${BFF_URL}) and GitHub OAuth credentials are valid.`
     );
   }
 
