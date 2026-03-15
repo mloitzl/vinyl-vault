@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getEndpoint } from '../utils/apiUrl.js';
-import { getSessionURL } from '../logrocket.js';
+import { useSpotifyPreviewQuery, type SpotifyPreviewResult } from '../hooks/relay/useSpotifyPreviewQuery.js';
 
 interface SpotifyPreviewButtonProps {
   track: string;
@@ -8,31 +7,16 @@ interface SpotifyPreviewButtonProps {
   onEmbed?: (trackId: string) => void;
 }
 
-interface PreviewResult {
-  previewUrl: string | null;
-  spotifyUrl: string | null;
-}
-
-interface PreviewGraphQLResponse {
-  data?: {
-    spotifyPreview?: PreviewResult | null;
-  };
-  errors?: Array<{ message?: string }>;
-}
-
 type State = 'idle' | 'loading' | 'playing' | 'paused' | 'unavailable';
 
 // Module-level: only one track plays at a time across all instances
 let currentStop: (() => void) | null = null;
 
-// Simple cache to avoid duplicate BFF calls per (track, artist) pair
-const previewCache = new Map<string, PreviewResult>();
-
 export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewButtonProps) {
   const [state, setState] = useState<State>('idle');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mountedRef = useRef(true);
-  const cacheKey = `${artist}||${track}`;
+  const { fetchPreview } = useSpotifyPreviewQuery();
 
   // Cleanup on unmount: pause audio and clear global pointer if it points to this instance
   useEffect(() => {
@@ -85,42 +69,12 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
 
     setState('loading');
 
-    let result: PreviewResult;
-
-    if (previewCache.has(cacheKey)) {
-      result = previewCache.get(cacheKey)!;
-    } else {
-      try {
-        const query = `query SpotifyPreview($track: String!, $artist: String!) {
-          spotifyPreview(track: $track, artist: $artist) {
-            previewUrl
-            spotifyUrl
-          }
-        }`;
-
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        const lrSession = getSessionURL();
-        if (lrSession) headers['X-LogRocket-Session'] = lrSession;
-
-        const res = await fetch(getEndpoint('/graphql'), {
-          method: 'POST',
-          headers,
-          credentials: 'include',
-          body: JSON.stringify({ query, variables: { track, artist } }),
-        });
-        if (!res.ok) throw new Error(`${res.status}`);
-
-        const payload = (await res.json()) as PreviewGraphQLResponse;
-        if (payload.errors?.length) {
-          throw new Error(payload.errors[0]?.message || 'GraphQL error');
-        }
-
-        result = payload.data?.spotifyPreview ?? { previewUrl: null, spotifyUrl: null };
-        previewCache.set(cacheKey, result);
-      } catch {
-        setState('unavailable');
-        return;
-      }
+    let result: SpotifyPreviewResult;
+    try {
+      result = await fetchPreview(track, artist);
+    } catch {
+      if (mountedRef.current) setState('unavailable');
+      return;
     }
 
     if (!result.previewUrl) {

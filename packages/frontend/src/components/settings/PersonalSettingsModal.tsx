@@ -1,41 +1,27 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Modal } from '../ui/Modal';
-import { executeGraphQLMutation } from '../../utils/graphqlExecutor.js';
+import { useUpdateUserSettingsMutation } from '../../hooks/relay/useUpdateUserSettingsMutation.js';
 
 interface PersonalSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const UPDATE_SETTINGS_MUTATION = `
-  mutation UpdateUserSettings($input: UpdateUserSettingsInput!) {
-    updateUserSettings(input: $input) {
-      id
-      settings {
-        spotifyPreview
-      }
-    }
-  }
-`;
-
 export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModalProps) {
   const { user, refreshUser } = useAuth();
-  const [saving, setSaving] = useState(false);
+  const { mutate: updateSettings, isLoading: saving } = useUpdateUserSettingsMutation();
   const [error, setError] = useState<string | null>(null);
 
   if (!user) return null;
 
   const handleSpotifyToggle = async (enabled: boolean) => {
-    setSaving(true);
     setError(null);
     try {
-      await executeGraphQLMutation(UPDATE_SETTINGS_MUTATION, { input: { spotifyPreview: enabled } });
+      await updateSettings({ spotifyPreview: enabled });
       await refreshUser();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
-    } finally {
-      setSaving(false);
     }
   };
 
