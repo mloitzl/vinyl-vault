@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Modal } from '../ui/Modal';
-import { getEndpoint } from '../../utils/apiUrl';
+import { executeGraphQLMutation } from '../../utils/graphqlExecutor.js';
 
 interface PersonalSettingsModalProps {
   isOpen: boolean;
@@ -30,17 +30,7 @@ export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModal
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(getEndpoint('/graphql'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: UPDATE_SETTINGS_MUTATION,
-          variables: { input: { spotifyPreview: enabled } },
-        }),
-      });
-      const json = await res.json();
-      if (json.errors?.length) throw new Error(json.errors[0].message);
+      await executeGraphQLMutation(UPDATE_SETTINGS_MUTATION, { input: { spotifyPreview: enabled } });
       await refreshUser();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
@@ -94,7 +84,6 @@ export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModal
                 onChange={(e) => handleSpotifyToggle(e.target.checked)}
               />
               <div
-                onClick={() => !saving && handleSpotifyToggle(!user.settings.spotifyPreview)}
                 className={`w-10 h-6 rounded-full transition-colors ${
                   user.settings.spotifyPreview ? 'bg-[#1DB954]' : 'bg-gray-200'
                 } ${saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getEndpoint } from '../utils/apiUrl.js';
+import { getSessionURL } from '../logrocket.js';
 
 interface SpotifyPreviewButtonProps {
   track: string;
@@ -30,16 +31,24 @@ const previewCache = new Map<string, PreviewResult>();
 export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewButtonProps) {
   const [state, setState] = useState<State>('idle');
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const mountedRef = useRef(true);
   const cacheKey = `${artist}||${track}`;
 
-  // Cleanup on unmount
+  // Cleanup on unmount: pause audio and clear global pointer if it points to this instance
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      // Prevent stale reference from triggering setState on this unmounted instance
+      if (currentStop === stopCurrentRef.current) {
+        currentStop = null;
+      }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopCurrent = () => {
@@ -48,8 +57,12 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
       audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
-    setState('idle');
+    if (mountedRef.current) setState('idle');
   };
+
+  // Keep a stable ref to stopCurrent for the unmount cleanup comparison
+  const stopCurrentRef = useRef(stopCurrent);
+  stopCurrentRef.current = stopCurrent;
 
   const handleClick = async () => {
     if (state === 'playing') {
@@ -59,8 +72,9 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
     }
 
     if (state === 'paused' && audioRef.current) {
-      audioRef.current.play();
-      setState('playing');
+      audioRef.current.play()
+        .then(() => { if (mountedRef.current) setState('playing'); })
+        .catch(() => { if (mountedRef.current) setState('idle'); });
       return;
     }
 
@@ -84,9 +98,13 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
           }
         }`;
 
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        const lrSession = getSessionURL();
+        if (lrSession) headers['X-LogRocket-Session'] = lrSession;
+
         const res = await fetch(getEndpoint('/graphql'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           credentials: 'include',
           body: JSON.stringify({ query, variables: { track, artist } }),
         });
@@ -118,7 +136,7 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
 
     const audio = new Audio(result.previewUrl);
     audioRef.current = audio;
-    currentStop = stopCurrent;
+    currentStop = stopCurrentRef.current;
 
     audio.addEventListener('ended', () => {
       setState('idle');
@@ -144,7 +162,8 @@ export function SpotifyPreviewButton({ track, artist, onEmbed }: SpotifyPreviewB
       type="button"
       onClick={handleClick}
       disabled={isLoading}
-      title={isPlaying ? 'Stop preview' : isPaused ? 'Resume preview' : 'Play on Spotify'}
+      title={isPlaying ? 'Stop preview' : isPaused ? 'Resume preview' : 'Play 30-second preview'}
+      aria-label={isPlaying ? 'Stop preview' : isPaused ? 'Resume preview' : 'Play 30-second preview'}
       className={`w-6 flex-shrink-0 flex items-center justify-center rounded transition-colors ${
         isPlaying || isPaused
           ? 'text-[#1DB954] hover:text-[#1aa34a]'

@@ -9,7 +9,9 @@ extend type Query {
 
   """
   Look up a Spotify track preview URL for the given track/artist pair.
-  Returns nullable URLs when no match is found or Spotify credentials are not configured.
+  Requires authentication — throws if the request is unauthenticated.
+  Returns nullable URLs when no match is found, empty/blank input is provided,
+  or Spotify credentials are not configured.
   """
   spotifyPreview(track: String!, artist: String!): SpotifyPreviewResult!
 }

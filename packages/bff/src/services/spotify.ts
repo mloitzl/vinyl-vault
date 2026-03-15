@@ -79,8 +79,8 @@ export async function lookupSpotifyPreview(
   track: string,
   artist: string
 ): Promise<SpotifyPreviewResult> {
-  if (!track || !artist) {
-    throw new Error('track and artist query params are required');
+  if (!track?.trim() || !artist?.trim()) {
+    return { previewUrl: null, spotifyUrl: null };
   }
 
   const { clientId, clientSecret } = config.spotify;

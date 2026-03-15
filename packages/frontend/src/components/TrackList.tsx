@@ -13,6 +13,12 @@ interface TrackListProps {
   artist?: string;
 }
 
+interface SpotifyPlaybackPayload {
+  isPaused?: boolean;
+  position?: number;
+  duration?: number;
+}
+
 export function TrackList({ tracks, artist }: TrackListProps) {
   const { user } = useAuth();
   const spotifyEnabled = user?.settings?.spotifyPreview === true;
@@ -27,9 +33,13 @@ export function TrackList({ tracks, artist }: TrackListProps) {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data?.type === 'playback_update') {
-          const { isPaused, position, duration } = (data.payload ?? {}) as Record<string, number>;
-          // Detect end: paused at ≥95% through the track (covers both ms and s units)
-          if (isPaused && duration > 0 && position > 0 && position / duration >= 0.95) {
+          const { isPaused, position, duration } = (data.payload ?? {}) as SpotifyPlaybackPayload;
+          if (
+            isPaused === true &&
+            typeof position === 'number' &&
+            typeof duration === 'number' &&
+            duration > 0 && position > 0 && position / duration >= 0.95
+          ) {
             setActiveEmbed(null);
           }
         }
@@ -69,6 +79,7 @@ export function TrackList({ tracks, artist }: TrackListProps) {
                   type="button"
                   onClick={() => setActiveEmbed(null)}
                   title="Close player"
+                  aria-label="Close player"
                   className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/40 text-white text-xs hover:bg-black/70 transition-colors"
                 >
                   ✕
