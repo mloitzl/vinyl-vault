@@ -79,7 +79,8 @@ async function main() {
       credentials: true,
       // Allow W3C Trace Context headers so the browser can propagate the
       // distributed trace ID from the frontend to the BFF.
-      allowedHeaders: ['Content-Type', 'Authorization', 'traceparent', 'tracestate'],
+      // X-LogRocket-Session enables LogRocket ↔ backend trace correlation.
+      allowedHeaders: ['Content-Type', 'Authorization', 'traceparent', 'tracestate', 'X-LogRocket-Session'],
     })
   );
 
