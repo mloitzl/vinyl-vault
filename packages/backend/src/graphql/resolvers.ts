@@ -696,11 +696,10 @@ export const resolvers = {
     updateUserSettings: async (
       _parent: unknown,
       _args: { input: { spotifyPreview?: boolean } },
-      context: { user?: { sub?: string; id?: string } }
+      context: GraphQLContext
     ) => {
-      const userId = context.user?.sub ?? context.user?.id;
-      if (!userId) throw new Error('Unauthorized');
-      return updateUserSettings(userId, _args.input);
+      if (!context.userId) throw new Error('Unauthorized');
+      return updateUserSettings(context.userId, _args.input);
     },
     handleGitHubInstallationWebhook: async (
       _parent: unknown,

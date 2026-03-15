@@ -106,7 +106,11 @@ export const resolvers = {
         document: UPDATE_USER_SETTINGS_MUTATION,
         variables: { input: _args.input },
         context,
-      }) as { data?: { updateUserSettings?: { settings?: UserSettings } } };
+      }) as { data?: { updateUserSettings?: { settings?: UserSettings } }; errors?: { message: string }[] };
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
 
       const updatedSettings: UserSettings = {
         ...DEFAULT_USER_SETTINGS,
