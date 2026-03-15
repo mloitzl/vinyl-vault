@@ -39,9 +39,9 @@ export class BrowsePage extends AppPage {
     return this.page.getByRole('link').filter({ hasText: /.+/ });
   }
 
-  /** Album title headings in the Albums tab. */
-  get albumHeadings(): Locator {
-    return this.page.getByRole('heading', { level: 3 });
+  /** Per-album copy badges in the Albums tab (one badge per album card). */
+  get albumCards(): Locator {
+    return this.page.getByText(/\d+\s+cop(y|ies)/i);
   }
 
   /** Genre pill/button items in the Genres tab. */

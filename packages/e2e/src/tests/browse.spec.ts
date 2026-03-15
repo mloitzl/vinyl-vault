@@ -61,12 +61,15 @@ test.describe('Browse page', () => {
     await expect(browsePage.tab('Genres')).toBeVisible();
   });
 
-  test('shows album headings on the Albums tab when records exist', async ({ browsePage }) => {
+  test('shows albums on the Albums tab when records exist', async ({ browsePage }) => {
     await browsePage.open('Albums');
     await browsePage.waitForAppReady();
 
-    const count = await browsePage.albumHeadings.count();
-    test.skip(count === 0, 'No albums to assert — test account may have no records');
-    expect(count).toBeGreaterThan(0);
+    await expect
+      .poll(async () => browsePage.albumCards.count(), {
+        message: 'Expected at least one album card to render on the Albums tab',
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(0);
   });
 });

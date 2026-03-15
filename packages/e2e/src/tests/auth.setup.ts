@@ -2,6 +2,11 @@
  * Auth setup: log in once via GitHub OAuth, persist the session to
  * .auth/user.json so all authenticated spec files can reuse it.
  *
+ * The setup is SKIPPED when a valid session already exists in .auth/user.json
+ * — the saved cookies are loaded, the app is opened, and if the user menu is
+ * visible the OAuth flow is bypassed entirely. This avoids GitHub rate-limiting
+ * the OAuth endpoint when you run `pnpm e2e` repeatedly.
+ *
  * Required environment variables (add to .env at the repo root):
  *   E2E_GITHUB_USERNAME  – GitHub username of a dedicated test account
  *   E2E_GITHUB_PASSWORD  – Password for that account
@@ -10,8 +15,8 @@
  * or you must also set E2E_GITHUB_TOTP_SECRET and install the
  * `otpauth` package to generate codes.
  *
- * Run once manually if you want to cache the session:
- *   cd packages/e2e && npx playwright test src/tests/auth.setup.ts
+ * To force a fresh login (e.g. after the session expires), delete the file:
+ *   rm packages/e2e/.auth/user.json
  *
  * The resulting .auth/user.json is gitignored — never commit it.
  */
@@ -35,16 +40,60 @@ setup('authenticate via GitHub OAuth', async ({ page }) => {
   // Ensure the .auth directory exists
   fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
 
-  // ── Step 1: initiate the OAuth flow ──────────────────────────────────────
+  // ── Fast path: reuse the existing session if it is still valid ────────────
+  // Load the saved cookies into the browser and navigate to the app. Wait for
+  // either the user menu (session still valid) or the sign-in button (expired).
+  // This avoids a GitHub OAuth round-trip on every test run and prevents the
+  // OAuth endpoint from being rate-limited by repeated authorisation requests.
+  if (fs.existsSync(AUTH_FILE)) {
+    const saved = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
+    if (saved?.cookies?.length > 0) {
+      await page.context().addCookies(saved.cookies);
+      await page.goto(BASE_URL);
+
+      const userMenu = page.locator('header button[aria-haspopup="true"]').first();
+      const loginButton = page.getByRole('button', { name: 'Sign in with GitHub' });
+
+      // Race: whichever becomes visible first tells us the session state
+      const result = await Promise.race([
+        userMenu.waitFor({ state: 'visible', timeout: 20_000 }).then(() => 'valid' as const),
+        loginButton.waitFor({ state: 'visible', timeout: 20_000 }).then(() => 'expired' as const),
+      ]).catch(() => 'unknown' as const);
+
+      if (result === 'valid') {
+        console.log('✓ Existing session is still valid — skipping OAuth flow');
+        return;
+      }
+      console.log('⚠ Saved session has expired — performing fresh OAuth login');
+    }
+  }
+
+  // ── Full OAuth flow ───────────────────────────────────────────────────────
   // Navigate directly to the BFF (not through the Vite proxy) so a missing or
   // erroring proxy cannot silently swallow the redirect and leave the browser
   // at the frontend URL without any session cookie.
   await page.goto(`${BFF_URL}/auth/github`);
 
-  // ── Step 2: handle GitHub's login / authorize page ───────────────────────
+  // Detect GitHub rate-limiting before attempting any interaction.
+  // GitHub returns "Too many requests" or a reauthorization warning when the
+  // OAuth endpoint is called too frequently from the same account.
+  if (page.url().includes('github.com')) {
+    const rateLimited = await page
+      .getByText(/too many requests|unusually high number/i)
+      .isVisible({ timeout: 3_000 })
+      .catch(() => false);
+    if (rateLimited) {
+      throw new Error(
+        'GitHub is rate-limiting OAuth requests for this account.\n' +
+          'Wait a few minutes, then run again. The existing session in\n' +
+          '.auth/user.json will be reused automatically once it is valid.'
+      );
+    }
+  }
+
+  // ── Handle GitHub's login / authorize page ────────────────────────────────
   // GitHub may show either a combined login+authorize page or just an authorize
   // page if the browser already has a GitHub session in storageState.
-
   const loginField = page.locator('#login_field');
   const authorizeButton = page.getByRole('button', { name: /Authorize/i });
 
@@ -60,7 +109,7 @@ setup('authenticate via GitHub OAuth', async ({ page }) => {
     await authorizeButton.click();
   }
 
-  // ── Step 3: wait for the authenticated app to load ───────────────────────
+  // ── Wait for the authenticated app to load ────────────────────────────────
   // The BFF sets a session cookie and redirects back to the frontend root.
   await page.waitForURL(`${BASE_URL}/**`, { timeout: 30_000 });
 
@@ -75,7 +124,7 @@ setup('authenticate via GitHub OAuth', async ({ page }) => {
   const userMenuButton = page.locator('header button[aria-haspopup="true"]').first();
   await expect(userMenuButton).toBeVisible({ timeout: 20_000 });
 
-  // ── Step 4: persist the session ──────────────────────────────────────────
+  // ── Persist the session ───────────────────────────────────────────────────
   // Guard against saving an empty storageState — if no cookies were captured
   // the OAuth flow did not complete and subsequent tests would all fail.
   const state = await page.context().storageState();
