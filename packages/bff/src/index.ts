@@ -84,9 +84,18 @@ async function main() {
   );
 
   // Basic rate limiting for public-facing routes
+  // OAuth endpoints: strict — these trigger GitHub API calls and session writes
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 100,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+  });
+
+  // /auth/me: generous — it's a single MongoDB session read on every page load
+  const sessionCheckLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 1000,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
   });
@@ -149,14 +158,17 @@ async function main() {
     })
   );
 
-  // Auth routes — rate limit only the OAuth endpoints (initiation + callback +
-  // logout). /auth/me is a lightweight session check called on every page load
-  // and must NOT be rate-limited or repeated runs will exhaust the window.
+  // Auth routes — apply rate limiters per endpoint sensitivity:
+  //   /auth/github* + /auth/logout  → strict (OAuth flow, session mutation)
+  //   /auth/me                      → generous (single MongoDB session read)
   app.use(
     '/auth',
     (req, _res, next) => {
       if (req.path.startsWith('/github') || req.path === '/logout') {
         return authLimiter(req, _res, next);
+      }
+      if (req.path === '/me') {
+        return sessionCheckLimiter(req, _res, next);
       }
       next();
     },
