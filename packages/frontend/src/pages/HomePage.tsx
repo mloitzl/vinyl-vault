@@ -7,7 +7,8 @@ interface HomePageProps {
 }
 
 export function HomePage({ recordCount, artistCount }: HomePageProps) {
-  const { user } = useAuth();
+  const { user, activeTenant } = useAuth();
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
   const navigate = useNavigate();
 
   if (!user) {
@@ -40,11 +41,12 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
       </div>
 
       <div className="space-y-3">
-        {/* Scan Card - Primary Action */}
-        <button
-          onClick={() => navigate('/scan')}
-          className="w-full bg-gray-900 text-white rounded-xl p-5 text-left hover:bg-gray-800 transition-colors"
-        >
+        {/* Scan Card - Primary Action (hidden for VIEWERs) */}
+        {canMutate && (
+          <button
+            onClick={() => navigate('/scan')}
+            className="w-full bg-gray-900 text-white rounded-xl p-5 text-left hover:bg-gray-800 transition-colors"
+          >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,6 +72,7 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
             </svg>
           </div>
         </button>
+        )}
 
         {/* Collection Card */}
         <button

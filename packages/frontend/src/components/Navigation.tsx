@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface NavItem {
   path: string;
@@ -86,11 +87,14 @@ interface DesktopNavigationProps {
 
 export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigationProps) {
   const location = useLocation();
+  const { activeTenant } = useAuth();
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
     <aside className="hidden md:flex md:flex-col md:w-56 lg:w-64 border-r border-gray-200 bg-white">
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = item.path === '/'
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
@@ -128,11 +132,14 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
 
 export function MobileNavigation() {
   const location = useLocation();
+  const { activeTenant } = useAuth();
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
     <nav className="sticky bottom-0 bg-white border-t border-gray-200 md:hidden">
       <div className="flex justify-around">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = item.path === '/'
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
