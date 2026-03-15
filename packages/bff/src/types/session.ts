@@ -3,6 +3,14 @@
 import 'express-session';
 import type { Session } from 'express-session';
 
+export interface UserSettings {
+  spotifyPreview: boolean;
+}
+
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  spotifyPreview: false,
+};
+
 export interface SessionUser {
   id: string;
   githubId: string;
@@ -10,6 +18,7 @@ export interface SessionUser {
   displayName: string;
   avatarUrl?: string;
   email?: string;
+  settings?: UserSettings;
   createdAt: string;
   updatedAt: string;
 }

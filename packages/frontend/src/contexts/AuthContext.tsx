@@ -5,6 +5,7 @@ import { RecordSource as RelayRecordSource } from 'relay-runtime';
 import { executeGraphQLMutation } from '../utils/graphqlExecutor';
 import { RelayEnvironment } from '../relay/environment';
 import { getEndpoint } from '../utils/apiUrl.js';
+import { identifyUser } from '../logrocket.js';
 
 export interface FeatureFlags {
   enableTenantFeatures: boolean;
@@ -17,6 +18,12 @@ export interface AvailableTenant {
   role: 'ADMIN' | 'MEMBER' | 'VIEWER';
 }
 
+export interface UserSettings {
+  spotifyPreview: boolean;
+}
+
+const DEFAULT_USER_SETTINGS: UserSettings = { spotifyPreview: false };
+
 export interface User {
   id: string;
   githubId: string;
@@ -24,6 +31,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
+  settings: UserSettings;
   featureFlags?: FeatureFlags;
 }
 
@@ -69,7 +77,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const data = await response.json();
-      setUser(data.user || null);
+      const userData: User | null = data.user ? {
+        ...data.user,
+        settings: { ...DEFAULT_USER_SETTINGS, ...(data.user.settings ?? {}) },
+      } : null;
+
+      if (userData) {
+        identifyUser(userData);
+      }
+
+      setUser(userData);
 
       // Extract feature flags from response
       if (data.user?.featureFlags) {

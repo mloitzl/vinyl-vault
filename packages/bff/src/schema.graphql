@@ -6,6 +6,14 @@ extend type Query {
   The currently authenticated user, or null if not logged in.
   """
   viewer: User
+
+  """
+  Look up a Spotify track preview URL for the given track/artist pair.
+  Requires authentication — throws if the request is unauthenticated.
+  Returns nullable URLs when no match is found, empty/blank input is provided,
+  or Spotify credentials are not configured.
+  """
+  spotifyPreview(track: String!, artist: String!): SpotifyPreviewResult!
 }
 
 extend type Mutation {
@@ -14,6 +22,12 @@ extend type Mutation {
   Updates the session and returns the user with the new active tenant context.
   """
   switchTenant(tenantId: String!): User!
+
+  """
+  Update personal settings for the current user. Persists to the database
+  and updates the session so subsequent /auth/me calls reflect the change.
+  """
+  updateUserSettings(input: UpdateUserSettingsInput!): User!
 }
 
 # Extends the backend User type with session-specific data resolved by the BFF.
@@ -41,4 +55,12 @@ type Tenant {
   name: String!
   type: TenantType!
   role: TenantRole!
+}
+
+"""
+Spotify preview lookup result.
+"""
+type SpotifyPreviewResult {
+  previewUrl: String
+  spotifyUrl: String
 }

@@ -9,7 +9,7 @@ import { signJwt } from './jwt.js';
 import { handleSetup } from './setup.js';
 import { getFeatureFlags } from '../utils/featureFlags.js';
 import type { SessionUser, AvailableTenant } from '../types/session.js';
-import { setActiveTenant, setAvailableTenants } from '../types/session.js';
+import { setActiveTenant, setAvailableTenants, DEFAULT_USER_SETTINGS } from '../types/session.js';
 
 export const authRouter: IRouter = Router();
 
@@ -197,6 +197,9 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
           email
           createdAt
           updatedAt
+          settings {
+            spotifyPreview
+          }
         }
       }
     `;
@@ -210,6 +213,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       email?: string;
       createdAt: string;
       updatedAt: string;
+      settings?: { spotifyPreview?: boolean };
     }
 
     const backendResult = await queryBackend<{ upsertUser: BackendUser }>(UPSERT_USER_MUTATION, {
@@ -379,6 +383,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       email: user.email,
+      settings: { ...DEFAULT_USER_SETTINGS, ...(user.settings ?? {}) },
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -453,6 +458,7 @@ authRouter.get('/me', (req: Request, res: Response) => {
     res.json({
       user: {
         ...req.session.user,
+        settings: { ...DEFAULT_USER_SETTINGS, ...(req.session.user.settings ?? {}) },
         featureFlags: getFeatureFlags(),
       },
       availableTenants: mappedTenants,

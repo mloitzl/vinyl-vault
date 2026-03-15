@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface NavItem {
   path: string;
@@ -86,11 +87,18 @@ interface DesktopNavigationProps {
 
 export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigationProps) {
   const location = useLocation();
+  const { user, activeTenant } = useAuth();
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  const collectionLabel = isForeignTenant
+    ? `${activeTenant!.name.split(' ')[0]}'s Collection`
+    : 'My Collection';
+  const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
     <aside className="hidden md:flex md:flex-col md:w-56 lg:w-64 border-r border-gray-200 bg-white">
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = item.path === '/'
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
@@ -103,7 +111,9 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
               }`}
             >
               <span className="w-5 h-5">{item.icon}</span>
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium">
+                {item.path === '/collection' ? collectionLabel : item.label}
+              </span>
             </Link>
           );
         })}
@@ -128,11 +138,19 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
 
 export function MobileNavigation() {
   const location = useLocation();
+  const { user, activeTenant } = useAuth();
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  // Mobile: keep it short — "[First name]'s" fits in the tab
+  const collectionLabel = isForeignTenant
+    ? `${activeTenant!.name.split(' ')[0]}'s`
+    : 'Collection';
+  const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
     <nav className="sticky bottom-0 bg-white border-t border-gray-200 md:hidden">
       <div className="flex justify-around">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = item.path === '/'
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
@@ -145,7 +163,9 @@ export function MobileNavigation() {
               }`}
             >
               {item.icon}
-              <span className="text-xs mt-1">{item.label}</span>
+              <span className="text-xs mt-1">
+                {item.path === '/collection' ? collectionLabel : item.label}
+              </span>
             </Link>
           );
         })}

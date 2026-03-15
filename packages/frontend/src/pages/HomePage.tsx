@@ -7,7 +7,9 @@ interface HomePageProps {
 }
 
 export function HomePage({ recordCount, artistCount }: HomePageProps) {
-  const { user } = useAuth();
+  const { user, activeTenant } = useAuth();
+  const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
   const navigate = useNavigate();
 
   if (!user) {
@@ -33,18 +35,32 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
   return (
     <div className="flex-1 flex flex-col p-4">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">
-          Hi, {user.displayName.split(' ')[0]}
-        </h1>
-        <p className="text-gray-500">What would you like to do?</p>
+        {isForeignTenant && activeTenant ? (
+          <>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {activeTenant.name}'s Collection
+            </h1>
+            <p className="text-gray-500">
+              {canMutate ? 'You can add and edit records here.' : 'You are browsing in read-only mode.'}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl font-semibold text-gray-900">
+              Hi, {user.displayName.split(' ')[0]}
+            </h1>
+            <p className="text-gray-500">What would you like to do?</p>
+          </>
+        )}
       </div>
 
       <div className="space-y-3">
-        {/* Scan Card - Primary Action */}
-        <button
-          onClick={() => navigate('/scan')}
-          className="w-full bg-gray-900 text-white rounded-xl p-5 text-left hover:bg-gray-800 transition-colors"
-        >
+        {/* Scan Card - Primary Action (hidden for VIEWERs) */}
+        {canMutate && (
+          <button
+            onClick={() => navigate('/scan')}
+            className="w-full bg-gray-900 text-white rounded-xl p-5 text-left hover:bg-gray-800 transition-colors"
+          >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,6 +86,7 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
             </svg>
           </div>
         </button>
+        )}
 
         {/* Collection Card */}
         <button
@@ -93,8 +110,14 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
               </svg>
             </div>
             <div>
-              <div className="font-medium text-gray-900">My Collection</div>
-              <div className="text-sm text-gray-500">Browse your vinyl records</div>
+              <div className="font-medium text-gray-900">
+                {isForeignTenant && activeTenant
+                  ? `${activeTenant.name}'s Collection`
+                  : 'My Collection'}
+              </div>
+              <div className="text-sm text-gray-500">
+                {isForeignTenant ? `Browse ${activeTenant!.name.split(' ')[0]}'s vinyl records` : 'Browse your vinyl records'}
+              </div>
             </div>
             <svg
               className="w-5 h-5 ml-auto text-gray-300"

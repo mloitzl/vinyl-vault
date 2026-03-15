@@ -37,6 +37,12 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            - name: Compile Relay queries
+              run: |
+                  mkdir -p packages/frontend/src/__generated__
+                  pnpm --filter frontend update-schema
+                  pnpm --filter frontend relay
+
             - name: Run frontend tests
               run: pnpm --filter frontend test -- --run
 

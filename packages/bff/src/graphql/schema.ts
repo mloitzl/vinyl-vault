@@ -1,5 +1,5 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
-import { RenameTypes } from '@graphql-tools/wrap';
+import { RenameTypes, FilterRootFields } from '@graphql-tools/wrap';
 import { buildASTSchema, parse } from 'graphql';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -52,7 +52,14 @@ export async function createStitchedSchema() {
         // TenantType/TenantRole are identical in both schemas — stitcher merges them cleanly.
         // RenameTypes context generic defaults to Record<string,any>; cast avoids a
         // mismatch with GraphQLContext since schema transforms don't receive request context.
-        transforms: [new RenameTypes((name) => (name === 'Tenant' ? 'BackendTenant' : name)) as any],
+        transforms: [
+          new RenameTypes((name) => (name === 'Tenant' ? 'BackendTenant' : name)) as any,
+          // Remove mutations the BFF handles locally (session sync needed).
+          // The BFF extends type Mutation with its own resolver for these.
+          new FilterRootFields((op, fieldName) =>
+            !(op === 'Mutation' && fieldName === 'updateUserSettings')
+          ) as any,
+        ],
         // Type merge: viewer/switchTenant return only session-side User fields.
         // This tells the stitcher it can fetch missing backend User fields (githubId, role, …)
         // on demand via query { user(id: $id) } rather than returning null for them.

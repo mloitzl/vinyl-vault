@@ -86,6 +86,7 @@ type Mutation {
   Create or update a user from GitHub data.
   """
   upsertUser(input: UpsertUserInput!): User!
+  updateUserSettings(input: UpdateUserSettingsInput!): User!
 
   """
   Create a new tenant (personal or organization).
@@ -123,6 +124,7 @@ type User implements Node {
   avatarUrl: String
   email: String
   role: UserRole!
+  settings: UserSettings!
   createdAt: String!
   updatedAt: String!
 }
@@ -366,6 +368,17 @@ input UpsertUserInput {
   displayName: String!
   avatarUrl: String
   email: String
+}
+
+"""
+Per-user application settings persisted in the database.
+"""
+type UserSettings {
+  spotifyPreview: Boolean!
+}
+
+input UpdateUserSettingsInput {
+  spotifyPreview: Boolean
 }
 
 """
