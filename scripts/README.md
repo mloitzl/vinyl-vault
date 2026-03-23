@@ -108,10 +108,6 @@ kubectl rollout status deployment/backend -n vinylvault-staging
 kubectl logs -f -l app=backend -n vinylvault-staging
 ```
 
-## 📚 Documentation
-
-Full documentation: [DEPLOY_ANY_BRANCH_TO_STAGING.md](../docs/DEPLOY_ANY_BRANCH_TO_STAGING.md)
-
 ---
 
 ## Quick Tips
