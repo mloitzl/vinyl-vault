@@ -393,13 +393,11 @@ Per-user application settings persisted in the database.
 type UserSettings {
   spotifyPreview: Boolean!
   allowFriendInvites: Boolean!
-  isCollectionPublic: Boolean!
 }
 
 input UpdateUserSettingsInput {
   spotifyPreview: Boolean
   allowFriendInvites: Boolean
-  isCollectionPublic: Boolean
 }
 
 enum FriendshipStatus {

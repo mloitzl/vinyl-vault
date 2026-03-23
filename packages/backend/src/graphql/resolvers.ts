@@ -742,7 +742,7 @@ export const resolvers = {
     },
     updateUserSettings: async (
       _parent: unknown,
-      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean; isCollectionPublic?: boolean } },
+      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean } },
       context: GraphQLContext
     ) => {
       if (!context.userId) throw new Error('Unauthorized');
@@ -957,10 +957,9 @@ export const resolvers = {
     createdAt: (doc: FriendRequestDocument) => doc.createdAt.toISOString(),
   },
   User: {
-    settings: (parent: { settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean; isCollectionPublic?: boolean } }) => ({
+    settings: (parent: { settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean } }) => ({
       spotifyPreview: parent.settings?.spotifyPreview ?? false,
       allowFriendInvites: parent.settings?.allowFriendInvites ?? false,
-      isCollectionPublic: parent.settings?.isCollectionPublic ?? false,
     }),
     friendshipStatus: async (user: any, _args: unknown, context: GraphQLContext) => {
       if (!context.userId) return null;

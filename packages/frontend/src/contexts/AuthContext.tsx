@@ -21,7 +21,7 @@ export interface AvailableTenant {
 export interface UserSettings {
   spotifyPreview: boolean;
   allowFriendInvites: boolean;
-  isCollectionPublic: boolean;
+  isCollectionPublic: boolean; // retained for session compat; not exposed in UI
 }
 
 const DEFAULT_USER_SETTINGS: UserSettings = { spotifyPreview: false, allowFriendInvites: false, isCollectionPublic: false };

@@ -138,7 +138,7 @@ export const resolvers = {
 
     updateUserSettings: async (
       _parent: unknown,
-      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean; isCollectionPublic?: boolean } },
+      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean } },
       context: GraphQLContext
     ) => {
       if (!context.user || !context.session) {

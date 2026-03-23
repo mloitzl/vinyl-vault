@@ -200,7 +200,6 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
           settings {
             spotifyPreview
             allowFriendInvites
-            isCollectionPublic
           }
         }
       }
@@ -215,7 +214,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response) => {
       email?: string;
       createdAt: string;
       updatedAt: string;
-      settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean; isCollectionPublic?: boolean };
+      settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean };
     }
 
     const backendResult = await queryBackend<{ upsertUser: BackendUser }>(UPSERT_USER_MUTATION, {

@@ -15,7 +15,7 @@ export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModal
 
   if (!user) return null;
 
-  const handleToggle = async (field: 'spotifyPreview' | 'allowFriendInvites' | 'isCollectionPublic', enabled: boolean) => {
+  const handleToggle = async (field: 'spotifyPreview' | 'allowFriendInvites', enabled: boolean) => {
     setError(null);
     try {
       await updateSettings({ [field]: enabled });
@@ -70,16 +70,6 @@ export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModal
             checked={user.settings.allowFriendInvites}
             disabled={saving}
             onChange={(v) => handleToggle('allowFriendInvites', v)}
-            activeColor="bg-emerald-600"
-          />
-
-          {/* Make Collection Visible to Friends */}
-          <ToggleRow
-            label="Make collection visible to friends"
-            description="Friends can browse your vinyl collection when this is enabled"
-            checked={user.settings.isCollectionPublic}
-            disabled={saving}
-            onChange={(v) => handleToggle('isCollectionPublic', v)}
             activeColor="bg-emerald-600"
           />
 
