@@ -59,6 +59,18 @@ type Query {
   Get all tenants for a user (including their role in each tenant).
   """
   userTenants(userId: ID!): [UserTenantRole!]!
+
+  """
+  Exact-match search for users by GitHub login or email.
+  Returns empty array if the matched user has allowFriendInvites = false.
+  """
+  searchUsers(query: String!): [User!]!
+
+  """Lists incoming friend requests for the current user."""
+  pendingFriendRequests: [FriendRequest!]!
+
+  """Lists established friends (symmetric VIEWERs in personal tenant)."""
+  friends: [User!]!
 }
 
 type Mutation {
@@ -114,6 +126,10 @@ type Mutation {
   completeInstallationSetup(
     input: CompleteInstallationSetupInput!
   ): CompleteInstallationSetupResult!
+
+  sendFriendRequest(githubLogin: String!): Boolean!
+  respondToFriendRequest(requestId: ID!, accept: Boolean!): Boolean!
+  removeFriend(friendId: ID!): Boolean!
 }
 
 type User implements Node {
@@ -125,6 +141,7 @@ type User implements Node {
   email: String
   role: UserRole!
   settings: UserSettings!
+  friendshipStatus: FriendshipStatus
   createdAt: String!
   updatedAt: String!
 }
@@ -375,10 +392,27 @@ Per-user application settings persisted in the database.
 """
 type UserSettings {
   spotifyPreview: Boolean!
+  allowFriendInvites: Boolean!
+  isCollectionPublic: Boolean!
 }
 
 input UpdateUserSettingsInput {
   spotifyPreview: Boolean
+  allowFriendInvites: Boolean
+  isCollectionPublic: Boolean
+}
+
+enum FriendshipStatus {
+  NONE
+  PENDING_SENT
+  PENDING_RECEIVED
+  FRIENDS
+}
+
+type FriendRequest {
+  id: ID!
+  requester: User!
+  createdAt: String!
 }
 
 """
