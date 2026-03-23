@@ -139,6 +139,39 @@ export async function getUserTenants(
     ])
     .toArray();
 
+  // Privacy filter: drop VIEWER access to USER tenants where the owner has
+  // isCollectionPublic !== true.
+  const viewerUserTenants = userTenants.filter(
+    (t) => t.tenantType === 'USER' && t.role === 'VIEWER'
+  );
+
+  if (viewerUserTenants.length > 0) {
+    const db = await getRegistryDb();
+    const ownerIds = viewerUserTenants.map((t) => {
+      const ownerIdStr = t.tenantId.replace(/^user_/, '');
+      return new ObjectId(ownerIdStr);
+    });
+
+    const owners = await db
+      .collection('users')
+      .find({ _id: { $in: ownerIds } }, { projection: { settings: 1 } })
+      .toArray();
+
+    const publicOwners = new Set(
+      owners
+        .filter((u) => u.settings?.isCollectionPublic === true)
+        .map((u) => u._id.toString())
+    );
+
+    return userTenants.filter((t) => {
+      if (t.tenantType === 'USER' && t.role === 'VIEWER') {
+        const ownerIdStr = t.tenantId.replace(/^user_/, '');
+        return publicOwners.has(ownerIdStr);
+      }
+      return true;
+    });
+  }
+
   return userTenants;
 }
 
