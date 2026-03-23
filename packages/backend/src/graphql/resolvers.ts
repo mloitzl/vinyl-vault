@@ -1,5 +1,3 @@
-// Domain Backend GraphQL resolvers
-
 import { logger } from '../utils/logger.js';
 import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserSettings } from '../services/users.js';
@@ -20,6 +18,15 @@ import {
   getUserTenants,
 } from '../services/tenants.js';
 import {
+  searchUsers,
+  sendFriendRequest,
+  respondToFriendRequest,
+  removeFriend,
+  getPendingRequests,
+  getFriends,
+  getFriendshipStatus,
+} from '../services/friends.js';
+import {
   deleteInstallationFromEvent,
   upsertInstallationFromEvent,
   linkUserToInstallation,
@@ -29,7 +36,10 @@ import { requireMember, requireAdmin, canRead } from '../utils/authorization.js'
 import { verifyWebhookSignature } from '../utils/githubWebhook.js';
 import type { Album, RawRelease, ScoringDetail } from '../services/scoring/types.js';
 import type { GraphQLContext } from '../types/context.js';
+import type { FriendRequestDocument } from '../models/friendRequest.js';
+import { getRegistryDb } from '../db/registry.js';
 import { ObjectId } from 'mongodb';
+import { GraphQLError } from 'graphql';
 
 export const resolvers = {
   Query: {
@@ -201,6 +211,43 @@ export const resolvers = {
         name: tenant.name,
         databaseName: tenant.databaseName,
         createdAt: tenant.createdAt.toISOString(),
+      }));
+    },
+
+    searchUsers: async (_parent: unknown, { query }: { query: string }, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const docs = await searchUsers(query, new ObjectId(context.userId));
+      return docs.map((doc) => ({
+        id: doc._id.toString(),
+        githubId: doc.githubId,
+        githubLogin: doc.githubLogin,
+        displayName: doc.displayName,
+        avatarUrl: doc.avatarUrl,
+        email: doc.email,
+        settings: doc.settings,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
+      }));
+    },
+
+    pendingFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      return getPendingRequests(new ObjectId(context.userId));
+    },
+
+    friends: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const docs = await getFriends(new ObjectId(context.userId));
+      return docs.map((doc) => ({
+        id: doc._id.toString(),
+        githubId: doc.githubId,
+        githubLogin: doc.githubLogin,
+        displayName: doc.displayName,
+        avatarUrl: doc.avatarUrl,
+        email: doc.email,
+        settings: doc.settings,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
       }));
     },
 
@@ -695,7 +742,7 @@ export const resolvers = {
     },
     updateUserSettings: async (
       _parent: unknown,
-      _args: { input: { spotifyPreview?: boolean } },
+      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean; isCollectionPublic?: boolean } },
       context: GraphQLContext
     ) => {
       if (!context.userId) throw new Error('Unauthorized');
@@ -868,11 +915,67 @@ export const resolvers = {
         createdAt: userTenantRole.createdAt.toISOString(),
       };
     },
+
+    sendFriendRequest: async (
+      _parent: unknown,
+      { githubLogin }: { githubLogin: string },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const db = await getRegistryDb();
+      const recipient = await db.collection('users').findOne({ githubLogin });
+      if (!recipient) throw new GraphQLError('User not found');
+      await sendFriendRequest(new ObjectId(context.userId), recipient._id);
+      return true;
+    },
+
+    respondToFriendRequest: async (
+      _parent: unknown,
+      { requestId, accept }: { requestId: string; accept: boolean },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      await respondToFriendRequest(new ObjectId(requestId), accept, new ObjectId(context.userId));
+      return true;
+    },
+
+    removeFriend: async (
+      _parent: unknown,
+      { friendId }: { friendId: string },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      await removeFriend(new ObjectId(context.userId), new ObjectId(friendId));
+      return true;
+    },
+  },
+  FriendRequest: {
+    id: (doc: FriendRequestDocument) => doc._id.toString(),
+    requester: async (doc: FriendRequestDocument) => {
+      return findUserById(doc.requesterId.toString());
+    },
+    createdAt: (doc: FriendRequestDocument) => doc.createdAt.toISOString(),
   },
   User: {
-    settings: (parent: { settings?: { spotifyPreview?: boolean } }) => ({
+    settings: (parent: { settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean; isCollectionPublic?: boolean } }) => ({
       spotifyPreview: parent.settings?.spotifyPreview ?? false,
+      allowFriendInvites: parent.settings?.allowFriendInvites ?? false,
+      isCollectionPublic: parent.settings?.isCollectionPublic ?? false,
     }),
+    friendshipStatus: async (user: any, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) return null;
+      const userIdStr: string = user._id?.toString() ?? user.id;
+      if (!userIdStr) return null;
+      let targetId: ObjectId;
+      try {
+        targetId = new ObjectId(userIdStr);
+      } catch {
+        return null;
+      }
+      const currentId = new ObjectId(context.userId);
+      if (targetId.equals(currentId)) return null;
+      return getFriendshipStatus(currentId, targetId);
+    },
   },
   Record: {
     release: async (_parent: { releaseId: string }, _args: unknown, context: GraphQLContext) => {
