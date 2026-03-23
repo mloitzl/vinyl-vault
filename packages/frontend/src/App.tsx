@@ -22,6 +22,7 @@ import {
   NotFoundPage,
   BrowsePage,
   ArtistDetailPage,
+  SocialPage,
 } from './pages';
 import type { AppCountsQuery as AppCountsQueryType } from './__generated__/AppCountsQuery.graphql';
 
@@ -64,6 +65,7 @@ function AuthedContent() {
               <Route path="/search" element={<SearchPage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/artists/:name" element={<ArtistDetailPage />} />
+              <Route path="/social" element={<SocialPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>
@@ -78,11 +80,15 @@ function AppContent() {
   const [orgInstalled, setOrgInstalled] = useState<string | null>(null);
 
   const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
-  const isViewer = activeTenant?.role === 'VIEWER';
-  const ringClass = isForeignTenant
-    ? isViewer
-      ? 'ring-4 ring-inset ring-amber-400'
-      : 'ring-4 ring-inset ring-blue-400'
+  const isFriendCollection = isForeignTenant && activeTenant?.type === 'USER' && activeTenant?.role === 'VIEWER';
+  const isOrgViewer = isForeignTenant && activeTenant?.type === 'ORGANIZATION' && activeTenant?.role === 'VIEWER';
+  const isOrgMember = isForeignTenant && activeTenant?.type === 'ORGANIZATION' && activeTenant?.role !== 'VIEWER';
+  const ringClass = isFriendCollection
+    ? 'ring-4 ring-inset ring-slate-400'
+    : isOrgViewer
+    ? 'ring-4 ring-inset ring-amber-400'
+    : isOrgMember
+    ? 'ring-4 ring-inset ring-blue-400'
     : '';
 
   // Detect org_installed query parameter from GitHub App installation redirect
