@@ -57,7 +57,12 @@ export async function createStitchedSchema() {
           // Remove mutations the BFF handles locally (session sync needed).
           // The BFF extends type Mutation with its own resolver for these.
           new FilterRootFields((op, fieldName) =>
-            !(op === 'Mutation' && fieldName === 'updateUserSettings')
+            !(
+              op === 'Mutation' &&
+              (fieldName === 'updateUserSettings' ||
+                fieldName === 'respondToFriendRequest' ||
+                fieldName === 'removeFriend')
+            )
           ) as any,
         ],
         // Type merge: viewer/switchTenant return only session-side User fields.
