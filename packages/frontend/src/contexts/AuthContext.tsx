@@ -20,9 +20,11 @@ export interface AvailableTenant {
 
 export interface UserSettings {
   spotifyPreview: boolean;
+  allowFriendInvites: boolean;
+  isCollectionPublic: boolean;
 }
 
-const DEFAULT_USER_SETTINGS: UserSettings = { spotifyPreview: false };
+const DEFAULT_USER_SETTINGS: UserSettings = { spotifyPreview: false, allowFriendInvites: false, isCollectionPublic: false };
 
 export interface User {
   id: string;
