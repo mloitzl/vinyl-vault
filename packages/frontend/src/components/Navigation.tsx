@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext.js';
+import { useNotificationCount } from '../hooks/useNotificationCount.js';
 
 interface NavItem {
   path: string;
@@ -102,6 +103,7 @@ interface DesktopNavigationProps {
 export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigationProps) {
   const location = useLocation();
   const { user, activeTenant } = useAuth();
+  const notificationCount = useNotificationCount();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
   const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
   const collectionLabel = isForeignTenant
@@ -116,6 +118,7 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
           const isActive = item.path === '/'
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
+          const isFriends = item.path === '/social';
           return (
             <Link
               key={item.path}
@@ -124,7 +127,14 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
                 isActive ? 'bg-emerald-600 text-white' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
-              <span className="w-5 h-5">{item.icon}</span>
+              <span className="relative w-5 h-5">
+                {item.icon}
+                {isFriends && notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </span>
+                )}
+              </span>
               <span className="font-medium">
                 {item.path === '/collection' ? collectionLabel : item.label}
               </span>
@@ -153,6 +163,7 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
 export function MobileNavigation() {
   const location = useLocation();
   const { user, activeTenant } = useAuth();
+  const notificationCount = useNotificationCount();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
   const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
   // Mobile: keep it short — "[First name]'s" fits in the tab
@@ -168,6 +179,7 @@ export function MobileNavigation() {
           const isActive = item.path === '/'
             ? location.pathname === item.path
             : location.pathname.startsWith(item.path);
+          const isFriends = item.path === '/social';
           return (
             <Link
               key={item.path}
@@ -176,7 +188,14 @@ export function MobileNavigation() {
                 isActive ? 'text-emerald-600' : 'text-gray-400'
               }`}
             >
-              {item.icon}
+              <span className="relative">
+                {item.icon}
+                {isFriends && notificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </span>
+                )}
+              </span>
               <span className="text-xs mt-1">
                 {item.path === '/collection' ? collectionLabel : item.label}
               </span>

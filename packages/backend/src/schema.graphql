@@ -74,6 +74,13 @@ type Query {
 
   """Lists established friends (symmetric VIEWERs in personal tenant)."""
   friends: [User!]!
+
+  """
+  Aggregated notification count for the current user across all notification types
+  (pending friend requests, future: new records from friends, etc.).
+  Returns 0 for unauthenticated users.
+  """
+  notificationCount: Int!
 }
 
 type Mutation {

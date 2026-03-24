@@ -253,6 +253,12 @@ export const resolvers = {
       }));
     },
 
+    notificationCount: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) return 0;
+      const pending = await getPendingRequests(new ObjectId(context.userId));
+      return pending.length;
+    },
+
     artists: async (
       _parent: unknown,
       _args: { first?: number; after?: string; filter?: { search?: string } },
