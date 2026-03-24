@@ -17,7 +17,6 @@ const UPDATE_USER_SETTINGS_MUTATION = parse(`
       settings {
         spotifyPreview
         allowFriendInvites
-        isCollectionPublic
       }
     }
   }
