@@ -226,6 +226,7 @@ export function SocialPage() {
     setActionError(null);
     try {
       await respondToRequest(requestId, accept);
+      window.dispatchEvent(new CustomEvent('vinyl-vault:notifications-changed'));
       await refreshData();
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to respond to request');
@@ -236,6 +237,7 @@ export function SocialPage() {
     setActionError(null);
     try {
       await removeFriendMutation(friendId);
+      window.dispatchEvent(new CustomEvent('vinyl-vault:notifications-changed'));
       await refreshData();
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to remove friend');

@@ -43,8 +43,10 @@ export function useNotificationCount(): number {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('vinyl-vault:notifications-changed', fetchCount);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('vinyl-vault:notifications-changed', fetchCount);
     };
   }, [fetchCount]);
 
