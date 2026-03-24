@@ -20,6 +20,7 @@ interface UserResult {
 interface FriendRequestResult {
   id: string;
   requester: UserResult;
+  recipient: UserResult;
   createdAt: string;
 }
 
@@ -44,6 +45,27 @@ const PENDING_REQUESTS_QUERY = `
         githubLogin
         displayName
         avatarUrl
+      }
+      recipient {
+        id
+      }
+      createdAt
+    }
+  }
+`;
+
+const SENT_REQUESTS_QUERY = `
+  query SocialSentRequests {
+    sentFriendRequests {
+      id
+      recipient {
+        id
+        githubLogin
+        displayName
+        avatarUrl
+      }
+      requester {
+        id
       }
       createdAt
     }
@@ -73,6 +95,8 @@ export function SocialPage() {
   const [pendingRequests, setPendingRequests] = useState<FriendRequestResult[] | null>(null);
   const [pendingLoading, setPendingLoading] = useState(false);
 
+  const [sentRequests, setSentRequests] = useState<FriendRequestResult[] | null>(null);
+
   const [friends, setFriends] = useState<UserResult[] | null>(null);
   const [friendsLoading, setFriendsLoading] = useState(false);
 
@@ -89,10 +113,15 @@ export function SocialPage() {
     if (pendingRequests !== null) return;
     setPendingLoading(true);
     try {
-      const data = await executeGraphQLMutation(PENDING_REQUESTS_QUERY, {});
-      setPendingRequests(data?.pendingFriendRequests ?? []);
+      const [pendingData, sentData] = await Promise.all([
+        executeGraphQLMutation(PENDING_REQUESTS_QUERY, {}),
+        executeGraphQLMutation(SENT_REQUESTS_QUERY, {}),
+      ]);
+      setPendingRequests(pendingData?.pendingFriendRequests ?? []);
+      setSentRequests(sentData?.sentFriendRequests ?? []);
     } catch {
       setPendingRequests([]);
+      setSentRequests([]);
     } finally {
       setPendingLoading(false);
     }
@@ -140,16 +169,19 @@ export function SocialPage() {
     await refreshUser();
     // Reset so they reload fresh
     setPendingRequests(null);
+    setSentRequests(null);
     setFriends(null);
     // Reload
     setPendingLoading(true);
     setFriendsLoading(true);
     try {
-      const [pendingData, friendsData] = await Promise.all([
+      const [pendingData, sentData, friendsData] = await Promise.all([
         executeGraphQLMutation(PENDING_REQUESTS_QUERY, {}),
+        executeGraphQLMutation(SENT_REQUESTS_QUERY, {}),
         executeGraphQLMutation(FRIENDS_QUERY, {}),
       ]);
       setPendingRequests(pendingData?.pendingFriendRequests ?? []);
+      setSentRequests(sentData?.sentFriendRequests ?? []);
       setFriends(friendsData?.friends ?? []);
     } finally {
       setPendingLoading(false);
@@ -161,10 +193,13 @@ export function SocialPage() {
     setActionError(null);
     try {
       await sendRequest(githubLogin);
-      // Update search result status locally
+      // Optimistically update search result status and reload sent requests from server
       setSearchResults((prev) =>
         prev.map((u) => (u.githubLogin === githubLogin ? { ...u, friendshipStatus: 'PENDING_SENT' } : u))
       );
+      // Reload sent requests so the section is up-to-date immediately
+      const sentData = await executeGraphQLMutation(SENT_REQUESTS_QUERY, {});
+      setSentRequests(sentData?.sentFriendRequests ?? []);
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to send request');
     }
@@ -278,7 +313,7 @@ export function SocialPage() {
           )}
         </section>
 
-        {/* Pending Requests */}
+        {/* Pending Requests (incoming) */}
         <section>
           <h2 className="text-sm font-semibold text-gray-700 mb-2">Pending Requests</h2>
           {pendingLoading ? (
@@ -317,6 +352,25 @@ export function SocialPage() {
             </ul>
           )}
         </section>
+
+        {/* Sent Requests (outgoing) */}
+        {sentRequests && sentRequests.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">Sent Requests</h2>
+            <ul className="space-y-2">
+              {sentRequests.map((req) => (
+                <li key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                  <Avatar user={req.recipient} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{req.recipient.displayName}</p>
+                    <p className="text-xs text-gray-500">@{req.recipient.githubLogin}</p>
+                  </div>
+                  <span className="text-xs text-gray-400 italic">Awaiting response</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Friends List */}
         <section>

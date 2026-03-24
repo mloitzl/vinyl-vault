@@ -69,6 +69,9 @@ type Query {
   """Lists incoming friend requests for the current user."""
   pendingFriendRequests: [FriendRequest!]!
 
+  """Lists outgoing friend requests sent by the current user."""
+  sentFriendRequests: [FriendRequest!]!
+
   """Lists established friends (symmetric VIEWERs in personal tenant)."""
   friends: [User!]!
 }
@@ -410,6 +413,7 @@ enum FriendshipStatus {
 type FriendRequest {
   id: ID!
   requester: User!
+  recipient: User!
   createdAt: String!
 }
 

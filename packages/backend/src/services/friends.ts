@@ -61,6 +61,17 @@ export async function getPendingRequests(
     .toArray();
 }
 
+export async function getSentRequests(
+  requesterId: ObjectId
+): Promise<FriendRequestDocument[]> {
+  const db = await getRegistryDb();
+  return db
+    .collection<FriendRequestDocument>('friend_requests')
+    .find({ requesterId })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
 // accept=true: delete request + grant symmetric VIEWER roles.
 // accept=false: just delete the request.
 export async function respondToFriendRequest(

@@ -23,6 +23,7 @@ import {
   respondToFriendRequest,
   removeFriend,
   getPendingRequests,
+  getSentRequests,
   getFriends,
   getFriendshipStatus,
 } from '../services/friends.js';
@@ -233,6 +234,11 @@ export const resolvers = {
     pendingFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
       return getPendingRequests(new ObjectId(context.userId));
+    },
+
+    sentFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      return getSentRequests(new ObjectId(context.userId));
     },
 
     friends: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
@@ -953,6 +959,9 @@ export const resolvers = {
     id: (doc: FriendRequestDocument) => doc._id.toString(),
     requester: async (doc: FriendRequestDocument) => {
       return findUserById(doc.requesterId.toString());
+    },
+    recipient: async (doc: FriendRequestDocument) => {
+      return findUserById(doc.recipientId.toString());
     },
     createdAt: (doc: FriendRequestDocument) => doc.createdAt.toISOString(),
   },
