@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { getRegistryDb } from '../db/registry.js';
+import { getRegistryDb, getRegistryClient } from '../db/registry.js';
 import type { FriendRequestDocument } from '../models/friendRequest.js';
 import type { UserDocument } from '../models/user.js';
 import { ensureUserInTenant } from './tenants.js';
@@ -79,9 +79,8 @@ export async function getSentRequests(
     .toArray();
 }
 
-// accept=true: grant symmetric VIEWER roles then delete request.
-// Grants run first (idempotent upserts) so a failure before delete
-// leaves the request intact and retryable.
+// accept=true: grant symmetric VIEWER roles then delete request (in a transaction).
+// Grants run first so a transaction failure leaves the request intact and retryable.
 // accept=false: just delete the request.
 export async function respondToFriendRequest(
   requestId: ObjectId,
@@ -103,37 +102,50 @@ export async function respondToFriendRequest(
   const requesterTenantId = `user_${request.requesterId.toString()}`;
   const recipientTenantId = `user_${request.recipientId.toString()}`;
 
-  // Do grants first — they are idempotent upserts.
-  // Only delete the request once both grants succeed.
-  await Promise.all([
-    ensureUserInTenant(request.requesterId, recipientTenantId, 'VIEWER'),
-    ensureUserInTenant(request.recipientId, requesterTenantId, 'VIEWER'),
-  ]);
-  await db.collection('friend_requests').deleteOne({ _id: requestId });
+  const client = await getRegistryClient();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await ensureUserInTenant(request.requesterId, recipientTenantId, 'VIEWER');
+      await ensureUserInTenant(request.recipientId, requesterTenantId, 'VIEWER');
+      await db.collection('friend_requests').deleteOne({ _id: requestId }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
 }
 
-// Severs both VIEWER roles symmetrically.
-// Operations are idempotent deletes — a partial failure leaves stale data
-// that is harmless and will be cleaned up on the next removeFriend call.
+// Severs both VIEWER roles symmetrically within a single transaction.
 export async function removeFriend(userId: ObjectId, friendId: ObjectId): Promise<void> {
   const db = await getRegistryDb();
   const userTenantId = `user_${userId.toString()}`;
   const friendTenantId = `user_${friendId.toString()}`;
 
-  await Promise.all([
-    db
-      .collection('user_tenant_roles')
-      .deleteOne({ userId: friendId, tenantId: userTenantId, role: 'VIEWER' }),
-    db
-      .collection('user_tenant_roles')
-      .deleteOne({ userId, tenantId: friendTenantId, role: 'VIEWER' }),
-    db.collection('friend_requests').deleteMany({
-      $or: [
-        { requesterId: userId, recipientId: friendId },
-        { requesterId: friendId, recipientId: userId },
-      ],
-    }),
-  ]);
+  const client = await getRegistryClient();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await Promise.all([
+        db
+          .collection('user_tenant_roles')
+          .deleteOne({ userId: friendId, tenantId: userTenantId, role: 'VIEWER' }, { session }),
+        db
+          .collection('user_tenant_roles')
+          .deleteOne({ userId, tenantId: friendTenantId, role: 'VIEWER' }, { session }),
+        db.collection('friend_requests').deleteMany(
+          {
+            $or: [
+              { requesterId: userId, recipientId: friendId },
+              { requesterId: friendId, recipientId: userId },
+            ],
+          },
+          { session }
+        ),
+      ]);
+    });
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function getFriends(userId: ObjectId): Promise<UserDocument[]> {
