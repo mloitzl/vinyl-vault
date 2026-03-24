@@ -13,8 +13,9 @@ const NOTIFICATION_COUNT_QUERY = `
  * across all notification types (pending friend requests, and any future types
  * added to the backend `notificationCount` resolver).
  *
- * Fetches on mount and re-fetches whenever the browser tab regains focus
- * (visibilitychange), keeping the badge current without polling or WebSockets.
+ * Fetches on mount, whenever the browser tab regains focus (visibilitychange),
+ * on the `vinyl-vault:notifications-changed` custom event (own actions), and
+ * every 30 s so incoming requests from other users appear without a page reload.
  */
 export function useNotificationCount(): number {
   const { user } = useAuth();
@@ -42,9 +43,12 @@ export function useNotificationCount(): number {
       }
     };
 
+    const intervalId = setInterval(fetchCount, 30_000);
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('vinyl-vault:notifications-changed', fetchCount);
     return () => {
+      clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('vinyl-vault:notifications-changed', fetchCount);
     };
