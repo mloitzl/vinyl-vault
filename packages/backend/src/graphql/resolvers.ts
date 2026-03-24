@@ -1017,6 +1017,7 @@ export const resolvers = {
     createdAt: (doc: FriendRequestDocument) => doc.createdAt.toISOString(),
   },
   User: {
+    id: (doc: { _id?: ObjectId; id?: string }) => doc._id?.toString() ?? doc.id,
     settings: (parent: { settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean } }) => ({
       spotifyPreview: parent.settings?.spotifyPreview ?? false,
       allowFriendInvites: parent.settings?.allowFriendInvites ?? false,
