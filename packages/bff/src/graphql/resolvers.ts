@@ -107,8 +107,17 @@ export const resolvers = {
       }
 
       const { tenantId } = _args;
-      const availableTenants = getAvailableTenants(context.session) || [];
-      const targetTenant = availableTenants.find((t) => t.tenantId === tenantId);
+      let availableTenants = getAvailableTenants(context.session) || [];
+      let targetTenant = availableTenants.find((t) => t.tenantId === tenantId);
+
+      // Lazily refresh session tenants in case a new friendship was established
+      // by another user since this session was last populated.
+      if (!targetTenant) {
+        await refreshSessionTenants(context);
+        availableTenants = getAvailableTenants(context.session) || [];
+        targetTenant = availableTenants.find((t) => t.tenantId === tenantId);
+      }
+
       if (!targetTenant) {
         throw new Error(`Unauthorized: user does not have access to tenant ${tenantId}`);
       }
