@@ -1,4 +1,5 @@
 import { useMutation, graphql } from 'react-relay';
+import type { useRespondToFriendRequestMutation as UseRespondToFriendRequestMutationType } from '../../__generated__/useRespondToFriendRequestMutation.graphql';
 
 const RespondToFriendRequestMutation = graphql`
   mutation useRespondToFriendRequestMutation($requestId: ID!, $accept: Boolean!) {
@@ -7,13 +8,19 @@ const RespondToFriendRequestMutation = graphql`
 `;
 
 export function useRespondToFriendRequestMutation() {
-  const [commit, isInFlight] = useMutation(RespondToFriendRequestMutation);
+  const [commit, isInFlight] = useMutation<UseRespondToFriendRequestMutationType>(RespondToFriendRequestMutation);
 
   const mutate = (requestId: string, accept: boolean): Promise<void> => {
     return new Promise((resolve, reject) => {
       commit({
         variables: { requestId, accept },
-        onCompleted: () => resolve(),
+        onCompleted: (_response, errors) => {
+          if (errors && errors.length > 0) {
+            reject(new Error(errors.map((e) => e.message).join(', ')));
+            return;
+          }
+          resolve();
+        },
         onError: reject,
       });
     });

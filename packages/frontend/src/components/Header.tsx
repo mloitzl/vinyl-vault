@@ -1,10 +1,9 @@
 import { useAuth } from '../contexts/AuthContext';
 import { UserDropdownMenu } from './UserDropdownMenu';
 import { Button } from './ui/Button';
-import { executeGraphQLMutation } from '../utils/graphqlExecutor.js';
 
 export function Header() {
-  const { user, isLoading, login, activeTenant, availableTenants, refreshUser } = useAuth();
+  const { user, isLoading, login, activeTenant, availableTenants, switchTenant } = useAuth();
 
   const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
   const isFriendCollection = isForeignTenant && activeTenant?.type === 'USER' && activeTenant?.role === 'VIEWER';
@@ -17,11 +16,7 @@ export function Header() {
     const ownTenant = availableTenants.find((t) => t.id === ownTenantId);
     if (!ownTenant) return;
     try {
-      await executeGraphQLMutation(
-        `mutation HeaderSwitchTenant($tenantId: String!) { switchTenant(tenantId: $tenantId) { id } }`,
-        { tenantId: ownTenantId }
-      );
-      await refreshUser();
+      await switchTenant(ownTenantId);
     } catch {
       // Ignore errors silently
     }

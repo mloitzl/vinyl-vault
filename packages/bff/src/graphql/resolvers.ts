@@ -4,7 +4,7 @@
 import { parse } from 'graphql';
 import { logger } from '../utils/logger.js';
 import type { GraphQLContext } from '../types/context.js';
-import { getAvailableTenants, setActiveTenant, setAvailableTenants, DEFAULT_USER_SETTINGS } from '../types/session.js';
+import { getAvailableTenants, getActiveTenant, setActiveTenant, setAvailableTenants, DEFAULT_USER_SETTINGS } from '../types/session.js';
 import type { UserSettings, AvailableTenant } from '../types/session.js';
 import { getFeatureFlags } from '../utils/featureFlags.js';
 import { lookupSpotifyPreview } from '../services/spotify.js';
@@ -54,7 +54,21 @@ async function refreshSessionTenants(context: GraphQLContext): Promise<void> {
   })) as { data?: { userTenants: AvailableTenant[] } };
 
   if (result.data?.userTenants) {
-    setAvailableTenants(context.session, result.data.userTenants);
+    const tenants = result.data.userTenants;
+    setAvailableTenants(context.session, tenants);
+
+    // If the previously active tenant is no longer accessible, reset to the
+    // user's own personal tenant (or the first available tenant).
+    const currentActive = getActiveTenant(context.session);
+    const stillValid = tenants.some((t) => t.tenantId === currentActive);
+    if (!stillValid) {
+      const personalTenant = tenants.find((t) => t.tenantId === `user_${context.user!.id}`);
+      const fallback = personalTenant ?? tenants[0];
+      if (fallback) {
+        setActiveTenant(context.session, fallback.tenantId);
+      }
+    }
+
     await new Promise<void>((resolve, reject) => {
       context.session.save((err) => {
         if (err) reject(err);

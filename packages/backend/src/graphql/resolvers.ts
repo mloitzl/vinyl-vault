@@ -224,8 +224,6 @@ export const resolvers = {
         githubLogin: doc.githubLogin,
         displayName: doc.displayName,
         avatarUrl: doc.avatarUrl,
-        email: doc.email,
-        settings: doc.settings,
         createdAt: doc.createdAt.toISOString(),
         updatedAt: doc.updatedAt.toISOString(),
       }));
@@ -250,8 +248,6 @@ export const resolvers = {
         githubLogin: doc.githubLogin,
         displayName: doc.displayName,
         avatarUrl: doc.avatarUrl,
-        email: doc.email,
-        settings: doc.settings,
         createdAt: doc.createdAt.toISOString(),
         updatedAt: doc.updatedAt.toISOString(),
       }));
@@ -931,6 +927,12 @@ export const resolvers = {
       const db = await getRegistryDb();
       const recipient = await db.collection('users').findOne({ githubLogin });
       if (!recipient) throw new GraphQLError('User not found');
+      if (recipient._id.toString() === context.userId) {
+        throw new GraphQLError('Cannot send a friend request to yourself');
+      }
+      if (!recipient.settings?.allowFriendInvites) {
+        throw new GraphQLError('This user is not accepting friend requests', { extensions: { code: 'FORBIDDEN' } });
+      }
       await sendFriendRequest(new ObjectId(context.userId), recipient._id);
       return true;
     },

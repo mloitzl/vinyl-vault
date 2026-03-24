@@ -25,6 +25,14 @@ export async function getRegistryDb(): Promise<Db> {
   return registryDb;
 }
 
+export async function getRegistryClient(): Promise<MongoClient> {
+  await getRegistryDb(); // Ensure connected
+  return registryClient!;
+
+  logger.info('Connected to MongoDB registry database');
+  return registryDb;
+}
+
 export async function closeRegistryDb(): Promise<void> {
   if (registryClient) {
     await registryClient.close();

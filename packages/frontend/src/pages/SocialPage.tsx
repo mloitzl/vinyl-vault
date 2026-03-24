@@ -84,7 +84,7 @@ const FRIENDS_QUERY = `
 `;
 
 export function SocialPage() {
-  const { user, refreshUser } = useAuth();
+  const { user, switchTenant } = useAuth();
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,7 +166,6 @@ export function SocialPage() {
   };
 
   const refreshData = async () => {
-    await refreshUser();
     // Reset so they reload fresh
     setPendingRequests(null);
     setSentRequests(null);
@@ -246,11 +245,7 @@ export function SocialPage() {
   const handleViewCollection = async (friendId: string) => {
     const tenantId = `user_${friendId}`;
     try {
-      await executeGraphQLMutation(
-        `mutation SocialSwitchTenant($tenantId: String!) { switchTenant(tenantId: $tenantId) { id } }`,
-        { tenantId }
-      );
-      await refreshUser();
+      await switchTenant(tenantId);
       navigate('/collection');
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to switch to friend collection');

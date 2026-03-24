@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { getRegistryDb } from '../db/registry.js';
+import { getRegistryDb, getRegistryClient } from '../db/registry.js';
 import type { FriendRequestDocument } from '../models/friendRequest.js';
 import type { UserDocument } from '../models/user.js';
 import { ensureUserInTenant } from './tenants.js';
@@ -43,11 +43,18 @@ export async function sendFriendRequest(
   });
   if (existing) throw new Error('Already friends');
 
-  await db.collection<Omit<FriendRequestDocument, '_id'>>('friend_requests').insertOne({
-    requesterId,
-    recipientId,
-    createdAt: new Date(),
-  } as FriendRequestDocument);
+  try {
+    await db.collection<Omit<FriendRequestDocument, '_id'>>('friend_requests').insertOne({
+      requesterId,
+      recipientId,
+      createdAt: new Date(),
+    } as FriendRequestDocument);
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as { code?: number }).code === 11000) {
+      throw new Error('Friend request already sent');
+    }
+    throw err;
+  }
 }
 
 export async function getPendingRequests(
@@ -72,7 +79,7 @@ export async function getSentRequests(
     .toArray();
 }
 
-// accept=true: delete request + grant symmetric VIEWER roles.
+// accept=true: grant symmetric VIEWER roles then delete request (in a transaction).
 // accept=false: just delete the request.
 export async function respondToFriendRequest(
   requestId: ObjectId,
@@ -86,39 +93,60 @@ export async function respondToFriendRequest(
 
   if (!request) throw new Error('Friend request not found');
 
-  await db.collection('friend_requests').deleteOne({ _id: requestId });
+  if (!accept) {
+    await db.collection('friend_requests').deleteOne({ _id: requestId });
+    return;
+  }
 
-  if (accept) {
-    const requesterTenantId = `user_${request.requesterId.toString()}`;
-    const recipientTenantId = `user_${request.recipientId.toString()}`;
+  const requesterTenantId = `user_${request.requesterId.toString()}`;
+  const recipientTenantId = `user_${request.recipientId.toString()}`;
 
-    await Promise.all([
-      ensureUserInTenant(request.requesterId, recipientTenantId, 'VIEWER'),
-      ensureUserInTenant(request.recipientId, requesterTenantId, 'VIEWER'),
-    ]);
+  // Grant roles first (idempotent upserts), then delete the request.
+  // This way the request survives a partial failure and can be retried.
+  const client = await getRegistryClient();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await ensureUserInTenant(request.requesterId, recipientTenantId, 'VIEWER');
+      await ensureUserInTenant(request.recipientId, requesterTenantId, 'VIEWER');
+      await db.collection('friend_requests').deleteOne({ _id: requestId }, { session });
+    });
+  } finally {
+    await session.endSession();
   }
 }
 
-// Severs both VIEWER roles symmetrically.
+// Severs both VIEWER roles symmetrically within a single transaction.
 export async function removeFriend(userId: ObjectId, friendId: ObjectId): Promise<void> {
   const db = await getRegistryDb();
   const userTenantId = `user_${userId.toString()}`;
   const friendTenantId = `user_${friendId.toString()}`;
 
-  await Promise.all([
-    db
-      .collection('user_tenant_roles')
-      .deleteOne({ userId: friendId, tenantId: userTenantId, role: 'VIEWER' }),
-    db
-      .collection('user_tenant_roles')
-      .deleteOne({ userId, tenantId: friendTenantId, role: 'VIEWER' }),
-    db.collection('friend_requests').deleteMany({
-      $or: [
-        { requesterId: userId, recipientId: friendId },
-        { requesterId: friendId, recipientId: userId },
-      ],
-    }),
-  ]);
+  const client = await getRegistryClient();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await Promise.all([
+        db
+          .collection('user_tenant_roles')
+          .deleteOne({ userId: friendId, tenantId: userTenantId, role: 'VIEWER' }, { session }),
+        db
+          .collection('user_tenant_roles')
+          .deleteOne({ userId, tenantId: friendTenantId, role: 'VIEWER' }, { session }),
+        db.collection('friend_requests').deleteMany(
+          {
+            $or: [
+              { requesterId: userId, recipientId: friendId },
+              { requesterId: friendId, recipientId: userId },
+            ],
+          },
+          { session }
+        ),
+      ]);
+    });
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function getFriends(userId: ObjectId): Promise<UserDocument[]> {
