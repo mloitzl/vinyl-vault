@@ -41,10 +41,30 @@ spec:
         component: database
         environment: production
     spec:
+      securityContext:
+        fsGroup: 999
+      initContainers:
+        - name: keyfile-init
+          image: busybox:1.35
+          securityContext:
+            runAsUser: 0
+          command:
+            - sh
+            - -c
+            - |
+              cp /keyfile-src/keyfile /keyfile/keyfile
+              chown 999:999 /keyfile/keyfile
+              chmod 400 /keyfile/keyfile
+          volumeMounts:
+            - name: keyfile-src
+              mountPath: /keyfile-src
+              readOnly: true
+            - name: keyfile
+              mountPath: /keyfile
       containers:
         - name: mongodb
           image: mongo:4.4.6
-          args: ["--replSet", "rs0", "--bind_ip_all"]
+          args: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongodb/keyfile"]
           ports:
             - containerPort: 27017
               name: mongodb
@@ -91,6 +111,9 @@ spec:
           volumeMounts:
             - name: mongodb-data
               mountPath: /data/db
+            - name: keyfile
+              mountPath: /etc/mongodb/keyfile
+              subPath: keyfile
           resources:
             requests:
               cpu: 1000m
@@ -118,6 +141,13 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 3
+      volumes:
+        - name: keyfile-src
+          secret:
+            secretName: mongodb-keyfile
+            defaultMode: 0400
+        - name: keyfile
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: mongodb-data
