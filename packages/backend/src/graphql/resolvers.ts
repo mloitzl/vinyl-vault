@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserSettings } from '../services/users.js';
+import type { UserSettings } from '../models/user.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
   createRecord,
@@ -68,7 +69,7 @@ function mapUser(doc: {
   avatarUrl?: string;
   email?: string;
   role?: string;
-  settings?: Record<string, unknown>;
+  settings?: UserSettings;
   createdAt: Date;
   updatedAt: Date;
 }) {
