@@ -32,12 +32,12 @@ extend type Mutation {
   """
   Respond to a friend request. Refreshes session available tenants.
   """
-  respondToFriendRequest(requestId: ID!, accept: Boolean!): Boolean!
+  respondToFriendRequest(requestId: ID!, accept: Boolean!): RespondToFriendRequestPayload!
 
   """
   Remove a friend. Refreshes session available tenants.
   """
-  removeFriend(friendId: ID!): Boolean!
+  removeFriend(friendId: ID!): RemoveFriendPayload!
 }
 
 # Extends the backend User type with session-specific data resolved by the BFF.

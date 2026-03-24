@@ -67,13 +67,13 @@ type Query {
   searchUsers(query: String!): [User!]!
 
   """Lists incoming friend requests for the current user."""
-  pendingFriendRequests: [FriendRequest!]!
+  pendingFriendRequests(first: Int, after: String): FriendRequestConnection!
 
   """Lists outgoing friend requests sent by the current user."""
-  sentFriendRequests: [FriendRequest!]!
+  sentFriendRequests(first: Int, after: String): FriendRequestConnection!
 
   """Lists established friends (symmetric VIEWERs in personal tenant)."""
-  friends: [User!]!
+  friends(first: Int, after: String): UserConnection!
 
   """
   Aggregated notification count for the current user across all notification types
@@ -137,9 +137,9 @@ type Mutation {
     input: CompleteInstallationSetupInput!
   ): CompleteInstallationSetupResult!
 
-  sendFriendRequest(githubLogin: String!): Boolean!
-  respondToFriendRequest(requestId: ID!, accept: Boolean!): Boolean!
-  removeFriend(friendId: ID!): Boolean!
+  sendFriendRequest(githubLogin: String!): SendFriendRequestPayload!
+  respondToFriendRequest(requestId: ID!, accept: Boolean!): RespondToFriendRequestPayload!
+  removeFriend(friendId: ID!): RemoveFriendPayload!
 }
 
 type User implements Node {
@@ -417,11 +417,49 @@ enum FriendshipStatus {
   FRIENDS
 }
 
-type FriendRequest {
+type FriendRequest implements Node {
   id: ID!
   requester: User!
   recipient: User!
   createdAt: String!
+}
+
+type FriendRequestEdge {
+  cursor: String!
+  node: FriendRequest!
+}
+
+type FriendRequestConnection {
+  edges: [FriendRequestEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserEdge {
+  cursor: String!
+  node: User!
+}
+
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+}
+
+type SendFriendRequestPayload {
+  friendRequest: FriendRequest!
+}
+
+type RespondToFriendRequestPayload {
+  """The ID of the deleted request (for @deleteEdge on the pending list)."""
+  deletedRequestId: ID!
+  """The newly added friend when accept=true; null when declining."""
+  newFriend: User
+  """Updated notification count after the operation."""
+  notificationCount: Int!
+}
+
+type RemoveFriendPayload {
+  """The ID of the removed friend (for @deleteEdge on the friends list)."""
+  removedFriendId: ID!
 }
 
 """

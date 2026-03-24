@@ -31,7 +31,7 @@ export async function searchUsers(
 export async function sendFriendRequest(
   requesterId: ObjectId,
   recipientId: ObjectId
-): Promise<void> {
+): Promise<FriendRequestDocument> {
   const db = await getRegistryDb();
 
   // Guard: already friends (requester has VIEWER role in recipient's personal tenant)
@@ -43,18 +43,23 @@ export async function sendFriendRequest(
   });
   if (existing) throw new Error('Already friends');
 
+  const doc: FriendRequestDocument = {
+    _id: new ObjectId(),
+    requesterId,
+    recipientId,
+    createdAt: new Date(),
+  };
+
   try {
-    await db.collection<Omit<FriendRequestDocument, '_id'>>('friend_requests').insertOne({
-      requesterId,
-      recipientId,
-      createdAt: new Date(),
-    } as FriendRequestDocument);
+    await db.collection<FriendRequestDocument>('friend_requests').insertOne(doc);
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code?: number }).code === 11000) {
       throw new Error('Friend request already sent');
     }
     throw err;
   }
+
+  return doc;
 }
 
 export async function getPendingRequests(
@@ -82,11 +87,12 @@ export async function getSentRequests(
 // accept=true: grant symmetric VIEWER roles then delete request (in a transaction).
 // Grants run first so a transaction failure leaves the request intact and retryable.
 // accept=false: just delete the request.
+// Returns the requester's UserDocument when accept=true (for mutation payload), null otherwise.
 export async function respondToFriendRequest(
   requestId: ObjectId,
   accept: boolean,
   currentUserId: ObjectId
-): Promise<void> {
+): Promise<UserDocument | null> {
   const db = await getRegistryDb();
   const request = await db
     .collection<FriendRequestDocument>('friend_requests')
@@ -96,7 +102,7 @@ export async function respondToFriendRequest(
 
   if (!accept) {
     await db.collection('friend_requests').deleteOne({ _id: requestId });
-    return;
+    return null;
   }
 
   const requesterTenantId = `user_${request.requesterId.toString()}`;
@@ -113,6 +119,8 @@ export async function respondToFriendRequest(
   } finally {
     await session.endSession();
   }
+
+  return db.collection<UserDocument>('users').findOne({ _id: request.requesterId });
 }
 
 // Severs both VIEWER roles symmetrically within a single transaction.

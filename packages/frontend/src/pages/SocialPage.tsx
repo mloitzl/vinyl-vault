@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { PreloadedQuery } from 'react-relay';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { Button } from '../components/ui/Button';
@@ -7,7 +8,9 @@ import { Input } from '../components/ui/Input';
 import { useSendFriendRequestMutation } from '../hooks/relay/useSendFriendRequestMutation.js';
 import { useRespondToFriendRequestMutation } from '../hooks/relay/useRespondToFriendRequestMutation.js';
 import { useRemoveFriendMutation } from '../hooks/relay/useRemoveFriendMutation.js';
+import { useSocialQueryLoader, useSocialQueryPreloaded, useSocialQueryData } from '../hooks/relay/useSocialQuery.js';
 import { executeGraphQLMutation } from '../utils/graphqlExecutor.js';
+import type { useSocialQuery as SocialQueryType } from '../__generated__/useSocialQuery.graphql';
 
 interface UserResult {
   id: string;
@@ -15,13 +18,6 @@ interface UserResult {
   displayName: string;
   avatarUrl?: string;
   friendshipStatus?: 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'FRIENDS' | null;
-}
-
-interface FriendRequestResult {
-  id: string;
-  requester: UserResult;
-  recipient: UserResult;
-  createdAt: string;
 }
 
 const SEARCH_USERS_QUERY = `
@@ -36,70 +32,52 @@ const SEARCH_USERS_QUERY = `
   }
 `;
 
-const PENDING_REQUESTS_QUERY = `
-  query SocialPendingRequests {
-    pendingFriendRequests {
-      id
-      requester {
-        id
-        githubLogin
-        displayName
-        avatarUrl
-      }
-      recipient {
-        id
-      }
-      createdAt
-    }
-  }
-`;
-
-const SENT_REQUESTS_QUERY = `
-  query SocialSentRequests {
-    sentFriendRequests {
-      id
-      recipient {
-        id
-        githubLogin
-        displayName
-        avatarUrl
-      }
-      requester {
-        id
-      }
-      createdAt
-    }
-  }
-`;
-
-const FRIENDS_QUERY = `
-  query SocialFriends {
-    friends {
-      id
-      githubLogin
-      displayName
-      avatarUrl
-    }
-  }
-`;
-
 export function SocialPage() {
-  const { user, switchTenant } = useAuth();
+  const { user } = useAuth();
+  const { queryRef, load } = useSocialQueryLoader();
+
+  useEffect(() => {
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!user) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <p className="text-gray-500">Please sign in to use social features.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className="px-4 py-3 border-b border-gray-200 bg-white">
+        <h1 className="text-lg font-semibold text-gray-900">Friends</h1>
+        <p className="text-sm text-gray-500">Find friends and browse their collections</p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {queryRef ? (
+          <Suspense fallback={<LoadingSpinner size="sm" />}>
+            <SocialPageContent queryRef={queryRef} />
+          </Suspense>
+        ) : (
+          <LoadingSpinner size="sm" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SocialPageContent({ queryRef }: { queryRef: PreloadedQuery<SocialQueryType> }) {
+  const rootData = useSocialQueryPreloaded(queryRef);
+  const fragmentData = useSocialQueryData(rootData);
   const navigate = useNavigate();
+  const { switchTenant } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-
-  const [pendingRequests, setPendingRequests] = useState<FriendRequestResult[] | null>(null);
-  const [pendingLoading, setPendingLoading] = useState(false);
-
-  const [sentRequests, setSentRequests] = useState<FriendRequestResult[] | null>(null);
-
-  const [friends, setFriends] = useState<UserResult[] | null>(null);
-  const [friendsLoading, setFriendsLoading] = useState(false);
-
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { mutate: sendRequest, isLoading: sendingRequest } = useSendFriendRequestMutation();
@@ -108,43 +86,9 @@ export function SocialPage() {
 
   const isBusy = sendingRequest || responding || removing;
 
-  // Load pending requests and friends when first visiting the page
-  const loadPending = async () => {
-    if (pendingRequests !== null) return;
-    setPendingLoading(true);
-    try {
-      const [pendingData, sentData] = await Promise.all([
-        executeGraphQLMutation(PENDING_REQUESTS_QUERY, {}),
-        executeGraphQLMutation(SENT_REQUESTS_QUERY, {}),
-      ]);
-      setPendingRequests(pendingData?.pendingFriendRequests ?? []);
-      setSentRequests(sentData?.sentFriendRequests ?? []);
-    } catch {
-      setPendingRequests([]);
-      setSentRequests([]);
-    } finally {
-      setPendingLoading(false);
-    }
-  };
-
-  const loadFriends = async () => {
-    if (friends !== null) return;
-    setFriendsLoading(true);
-    try {
-      const data = await executeGraphQLMutation(FRIENDS_QUERY, {});
-      setFriends(data?.friends ?? []);
-    } catch {
-      setFriends([]);
-    } finally {
-      setFriendsLoading(false);
-    }
-  };
-
-  // Load pending requests and friends on mount
-  useEffect(() => {
-    loadPending();
-    loadFriends();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pendingRequests = fragmentData.pendingFriendRequests.edges.map((e) => e.node);
+  const sentRequests = fragmentData.sentFriendRequests.edges.map((e) => e.node);
+  const friends = fragmentData.friends.edges.map((e) => e.node);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,40 +109,14 @@ export function SocialPage() {
     }
   };
 
-  const refreshData = async () => {
-    // Reset so they reload fresh
-    setPendingRequests(null);
-    setSentRequests(null);
-    setFriends(null);
-    // Reload
-    setPendingLoading(true);
-    setFriendsLoading(true);
-    try {
-      const [pendingData, sentData, friendsData] = await Promise.all([
-        executeGraphQLMutation(PENDING_REQUESTS_QUERY, {}),
-        executeGraphQLMutation(SENT_REQUESTS_QUERY, {}),
-        executeGraphQLMutation(FRIENDS_QUERY, {}),
-      ]);
-      setPendingRequests(pendingData?.pendingFriendRequests ?? []);
-      setSentRequests(sentData?.sentFriendRequests ?? []);
-      setFriends(friendsData?.friends ?? []);
-    } finally {
-      setPendingLoading(false);
-      setFriendsLoading(false);
-    }
-  };
-
   const handleSendRequest = async (githubLogin: string) => {
     setActionError(null);
     try {
       await sendRequest(githubLogin);
-      // Optimistically update search result status and reload sent requests from server
+      // Optimistically update search result status; Relay store handles sentRequests via @appendNode
       setSearchResults((prev) =>
         prev.map((u) => (u.githubLogin === githubLogin ? { ...u, friendshipStatus: 'PENDING_SENT' } : u))
       );
-      // Reload sent requests so the section is up-to-date immediately
-      const sentData = await executeGraphQLMutation(SENT_REQUESTS_QUERY, {});
-      setSentRequests(sentData?.sentFriendRequests ?? []);
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to send request');
     }
@@ -207,8 +125,7 @@ export function SocialPage() {
   const handleAcceptFromSearch = async (githubLogin: string) => {
     const result = searchResults.find((u) => u.githubLogin === githubLogin);
     if (!result) return;
-    // Find the pending request from this person
-    const req = pendingRequests?.find((r) => r.requester.id === result.id);
+    const req = pendingRequests.find((r) => r.requester.id === result.id);
     if (!req) {
       setActionError('No pending request found from this user');
       return;
@@ -216,7 +133,9 @@ export function SocialPage() {
     setActionError(null);
     try {
       await respondToRequest(req.id, true);
-      await refreshData();
+      setSearchResults((prev) =>
+        prev.map((u) => (u.githubLogin === githubLogin ? { ...u, friendshipStatus: 'FRIENDS' } : u))
+      );
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to accept request');
     }
@@ -226,8 +145,6 @@ export function SocialPage() {
     setActionError(null);
     try {
       await respondToRequest(requestId, accept);
-      window.dispatchEvent(new CustomEvent('vinyl-vault:notifications-changed'));
-      await refreshData();
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to respond to request');
     }
@@ -237,8 +154,6 @@ export function SocialPage() {
     setActionError(null);
     try {
       await removeFriendMutation(friendId);
-      window.dispatchEvent(new CustomEvent('vinyl-vault:notifications-changed'));
-      await refreshData();
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to remove friend');
     }
@@ -254,166 +169,137 @@ export function SocialPage() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-6">
-        <p className="text-gray-500">Please sign in to use social features.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="px-4 py-3 border-b border-gray-200 bg-white">
-        <h1 className="text-lg font-semibold text-gray-900">Friends</h1>
-        <p className="text-sm text-gray-500">Find friends and browse their collections</p>
-      </div>
+    <>
+      {actionError && (
+        <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {actionError && (
-          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
-            {actionError}
-          </div>
+      {/* User Search */}
+      <section>
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">Find Users</h2>
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="GitHub username or email"
+            className="flex-1"
+          />
+          <Button type="submit" variant="primary" disabled={searchLoading || !searchQuery.trim()}>
+            {searchLoading ? <LoadingSpinner size="sm" /> : 'Search'}
+          </Button>
+        </form>
+
+        {searchError && !searchLoading && (
+          <p className="mt-2 text-sm text-gray-500">{searchError}</p>
         )}
 
-        {/* User Search */}
-        <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">Find Users</h2>
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="GitHub username or email"
-              className="flex-1"
-            />
-            <Button type="submit" variant="primary" disabled={searchLoading || !searchQuery.trim()}>
-              {searchLoading ? <LoadingSpinner size="sm" /> : 'Search'}
-            </Button>
-          </form>
-
-          {searchError && !searchLoading && (
-            <p className="mt-2 text-sm text-gray-500">{searchError}</p>
-          )}
-
-          {searchResults.length > 0 && (
-            <ul className="mt-3 space-y-2">
-              {searchResults.map((u) => (
-                <UserCard
-                  key={u.id}
-                  user={u}
-                  disabled={isBusy}
-                  onSendRequest={() => handleSendRequest(u.githubLogin)}
-                  onAccept={() => handleAcceptFromSearch(u.githubLogin)}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Pending Requests (incoming) */}
-        <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">Pending Requests</h2>
-          {pendingLoading ? (
-            <LoadingSpinner size="sm" />
-          ) : !pendingRequests || pendingRequests.length === 0 ? (
-            <p className="text-sm text-gray-400">No pending requests.</p>
-          ) : (
-            <ul className="space-y-2">
-              {pendingRequests.map((req) => (
-                <li key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
-                  <Avatar user={req.requester} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{req.requester.displayName}</p>
-                    <p className="text-xs text-gray-500">@{req.requester.githubLogin}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => handleRespondToRequest(req.id, true)}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => handleRespondToRequest(req.id, false)}
-                    >
-                      Decline
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Sent Requests (outgoing) */}
-        {sentRequests && sentRequests.length > 0 && (
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Sent Requests</h2>
-            <ul className="space-y-2">
-              {sentRequests.map((req) => (
-                <li key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
-                  <Avatar user={req.recipient} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{req.recipient.displayName}</p>
-                    <p className="text-xs text-gray-500">@{req.recipient.githubLogin}</p>
-                  </div>
-                  <span className="text-xs text-gray-400 italic">Awaiting response</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {searchResults.length > 0 && (
+          <ul className="mt-3 space-y-2">
+            {searchResults.map((u) => (
+              <UserCard
+                key={u.id}
+                user={u}
+                disabled={isBusy}
+                onSendRequest={() => handleSendRequest(u.githubLogin)}
+                onAccept={() => handleAcceptFromSearch(u.githubLogin)}
+              />
+            ))}
+          </ul>
         )}
+      </section>
 
-        {/* Friends List */}
+      {/* Pending Requests (incoming) */}
+      <section>
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">Pending Requests</h2>
+        {pendingRequests.length === 0 ? (
+          <p className="text-sm text-gray-400">No pending requests.</p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingRequests.map((req) => (
+              <li key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                <Avatar user={req.requester} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{req.requester.displayName}</p>
+                  <p className="text-xs text-gray-500">@{req.requester.githubLogin}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="primary" size="sm" disabled={isBusy} onClick={() => handleRespondToRequest(req.id, true)}>
+                    Accept
+                  </Button>
+                  <Button variant="secondary" size="sm" disabled={isBusy} onClick={() => handleRespondToRequest(req.id, false)}>
+                    Decline
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Sent Requests (outgoing) */}
+      {sentRequests.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">My Friends</h2>
-          {friendsLoading ? (
-            <LoadingSpinner size="sm" />
-          ) : !friends || friends.length === 0 ? (
-            <p className="text-sm text-gray-400">No friends yet. Search for users above!</p>
-          ) : (
-            <ul className="space-y-2">
-              {friends.map((friend) => (
-                <li key={friend.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
-                  <Avatar user={friend} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{friend.displayName}</p>
-                    <p className="text-xs text-gray-500">@{friend.githubLogin}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => handleViewCollection(friend.id)}
-                    >
-                      View Collection
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => handleRemoveFriend(friend.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <h2 className="text-sm font-semibold text-gray-700 mb-2">Sent Requests</h2>
+          <ul className="space-y-2">
+            {sentRequests.map((req) => (
+              <li key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                <Avatar user={req.recipient} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{req.recipient.displayName}</p>
+                  <p className="text-xs text-gray-500">@{req.recipient.githubLogin}</p>
+                </div>
+                <span className="text-xs text-gray-400 italic">Awaiting response</span>
+              </li>
+            ))}
+          </ul>
         </section>
-      </div>
-    </div>
+      )}
+
+      {/* Friends List */}
+      <section>
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">My Friends</h2>
+        {friends.length === 0 ? (
+          <p className="text-sm text-gray-400">No friends yet. Search for users above!</p>
+        ) : (
+          <ul className="space-y-2">
+            {friends.map((friend) => (
+              <li key={friend.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                <Avatar user={friend} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{friend.displayName}</p>
+                  <p className="text-xs text-gray-500">@{friend.githubLogin}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => handleViewCollection(friend.id)}
+                  >
+                    View Collection
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => handleRemoveFriend(friend.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   );
 }
 
-function Avatar({ user }: { user: Pick<UserResult, 'avatarUrl' | 'displayName'> }) {
+function Avatar({ user }: { user: { avatarUrl?: string | null; displayName: string } }) {
   if (user.avatarUrl) {
     return (
       <img

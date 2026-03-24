@@ -24,13 +24,24 @@ const UPDATE_USER_SETTINGS_MUTATION = parse(`
 
 const RESPOND_TO_FRIEND_REQUEST_MUTATION = parse(`
   mutation BffRespondToFriendRequest($requestId: ID!, $accept: Boolean!) {
-    respondToFriendRequest(requestId: $requestId, accept: $accept)
+    respondToFriendRequest(requestId: $requestId, accept: $accept) {
+      deletedRequestId
+      newFriend {
+        id
+        githubLogin
+        displayName
+        avatarUrl
+      }
+      notificationCount
+    }
   }
 `);
 
 const REMOVE_FRIEND_MUTATION = parse(`
   mutation BffRemoveFriend($friendId: ID!) {
-    removeFriend(friendId: $friendId)
+    removeFriend(friendId: $friendId) {
+      removedFriendId
+    }
   }
 `);
 
@@ -223,7 +234,7 @@ export const resolvers = {
         document: RESPOND_TO_FRIEND_REQUEST_MUTATION,
         variables: { requestId: _args.requestId, accept: _args.accept },
         context,
-      }) as { data?: { respondToFriendRequest?: boolean }; errors?: { message: string }[] };
+      }) as { data?: { respondToFriendRequest?: { deletedRequestId: string; newFriend: unknown; notificationCount: number } }; errors?: { message: string }[] };
 
       if (result.errors?.length) {
         throw new Error(result.errors[0].message);
@@ -236,7 +247,7 @@ export const resolvers = {
         { userId: context.user.id, requestId: _args.requestId, accept: _args.accept },
         'Responded to friend request'
       );
-      return true;
+      return result.data?.respondToFriendRequest;
     },
 
     removeFriend: async (
@@ -252,7 +263,7 @@ export const resolvers = {
         document: REMOVE_FRIEND_MUTATION,
         variables: { friendId: _args.friendId },
         context,
-      }) as { data?: { removeFriend?: boolean }; errors?: { message: string }[] };
+      }) as { data?: { removeFriend?: { removedFriendId: string } }; errors?: { message: string }[] };
 
       if (result.errors?.length) {
         throw new Error(result.errors[0].message);
@@ -262,7 +273,7 @@ export const resolvers = {
       await refreshSessionTenants(context);
 
       logger.info({ userId: context.user.id, friendId: _args.friendId }, 'Removed friend');
-      return true;
+      return result.data?.removeFriend;
     },
   },
 

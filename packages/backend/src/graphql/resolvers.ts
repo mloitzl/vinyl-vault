@@ -42,6 +42,50 @@ import { getRegistryDb } from '../db/registry.js';
 import { ObjectId } from 'mongodb';
 import { GraphQLError } from 'graphql';
 
+/** Converts a docs array into a Relay-compatible Connection shape with simple ID-based cursors. */
+function toConnection<T extends { _id: ObjectId }>(docs: T[]) {
+  const edges = docs.map((doc) => ({
+    cursor: Buffer.from(doc._id.toString()).toString('base64'),
+    node: doc,
+  }));
+  return {
+    edges,
+    pageInfo: {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      startCursor: edges[0]?.cursor ?? null,
+      endCursor: edges[edges.length - 1]?.cursor ?? null,
+    },
+  };
+}
+
+/** Maps a UserDocument to the GraphQL User shape. */
+function mapUser(doc: {
+  _id: ObjectId;
+  githubId: string;
+  githubLogin: string;
+  displayName: string;
+  avatarUrl?: string;
+  email?: string;
+  role?: string;
+  settings?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: doc._id.toString(),
+    githubId: doc.githubId,
+    githubLogin: doc.githubLogin,
+    displayName: doc.displayName,
+    avatarUrl: doc.avatarUrl,
+    email: doc.email,
+    role: doc.role,
+    settings: doc.settings,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
 export const resolvers = {
   Query: {
     user: async (_parent: unknown, _args: { id: string }) => {
@@ -231,26 +275,20 @@ export const resolvers = {
 
     pendingFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
-      return getPendingRequests(new ObjectId(context.userId));
+      const docs = await getPendingRequests(new ObjectId(context.userId));
+      return toConnection(docs);
     },
 
     sentFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
-      return getSentRequests(new ObjectId(context.userId));
+      const docs = await getSentRequests(new ObjectId(context.userId));
+      return toConnection(docs);
     },
 
     friends: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
       const docs = await getFriends(new ObjectId(context.userId));
-      return docs.map((doc) => ({
-        id: doc._id.toString(),
-        githubId: doc.githubId,
-        githubLogin: doc.githubLogin,
-        displayName: doc.displayName,
-        avatarUrl: doc.avatarUrl,
-        createdAt: doc.createdAt.toISOString(),
-        updatedAt: doc.updatedAt.toISOString(),
-      }));
+      return toConnection(docs);
     },
 
     notificationCount: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
@@ -939,8 +977,8 @@ export const resolvers = {
       if (!recipient.settings?.allowFriendInvites) {
         throw new GraphQLError('This user is not accepting friend requests', { extensions: { code: 'FORBIDDEN' } });
       }
-      await sendFriendRequest(new ObjectId(context.userId), recipient._id);
-      return true;
+      const friendRequest = await sendFriendRequest(new ObjectId(context.userId), recipient._id);
+      return { friendRequest };
     },
 
     respondToFriendRequest: async (
@@ -949,8 +987,13 @@ export const resolvers = {
       context: GraphQLContext
     ) => {
       if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
-      await respondToFriendRequest(new ObjectId(requestId), accept, new ObjectId(context.userId));
-      return true;
+      const newFriendDoc = await respondToFriendRequest(new ObjectId(requestId), accept, new ObjectId(context.userId));
+      const pending = await getPendingRequests(new ObjectId(context.userId));
+      return {
+        deletedRequestId: requestId,
+        newFriend: newFriendDoc ? mapUser(newFriendDoc) : null,
+        notificationCount: pending.length,
+      };
     },
 
     removeFriend: async (
@@ -960,7 +1003,7 @@ export const resolvers = {
     ) => {
       if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
       await removeFriend(new ObjectId(context.userId), new ObjectId(friendId));
-      return true;
+      return { removedFriendId: friendId };
     },
   },
   FriendRequest: {
