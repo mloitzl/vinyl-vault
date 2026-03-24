@@ -28,7 +28,14 @@ export function useNotificationCount(): number {
     }
     try {
       const data = await executeGraphQLMutation(NOTIFICATION_COUNT_QUERY, {});
-      setCount(data?.notificationCount ?? 0);
+      const newCount = data?.notificationCount ?? 0;
+      setCount((prev) => {
+        if (newCount > prev) {
+          // An incoming request arrived from another user — tell listeners to refresh
+          window.dispatchEvent(new CustomEvent('vinyl-vault:notifications-changed'));
+        }
+        return newCount;
+      });
     } catch {
       // Silently ignore — badge is best-effort
     }

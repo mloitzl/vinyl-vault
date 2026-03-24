@@ -34,10 +34,13 @@ const SEARCH_USERS_QUERY = `
 
 export function SocialPage() {
   const { user } = useAuth();
-  const { queryRef, load } = useSocialQueryLoader();
+  const { queryRef, load, reload } = useSocialQueryLoader();
 
   useEffect(() => {
     load();
+    const handleChange = () => reload();
+    window.addEventListener('vinyl-vault:notifications-changed', handleChange);
+    return () => window.removeEventListener('vinyl-vault:notifications-changed', handleChange);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) {

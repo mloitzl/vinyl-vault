@@ -60,7 +60,11 @@ export function useSocialQueryLoader() {
     loadQuery({}, { fetchPolicy: 'store-or-network' });
   };
 
-  return { queryRef, load };
+  const reload = () => {
+    loadQuery({}, { fetchPolicy: 'network-only' });
+  };
+
+  return { queryRef, load, reload };
 }
 
 export function useSocialQueryPreloaded(queryRef: PreloadedQuery<SocialQueryType>) {
