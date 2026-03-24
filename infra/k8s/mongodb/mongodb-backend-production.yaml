@@ -1,6 +1,6 @@
 ---
 # MongoDB for Backend (Registry + Tenant Databases) - PRODUCTION
-# Single replica for simplicity - can scale to replica set later
+# Single-node replica set — required for multi-document transactions.
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,7 +11,7 @@ metadata:
     component: database
     environment: production
 spec:
-  clusterIP: None  # Headless service
+  clusterIP: None  # Headless service — gives pods stable DNS names
   ports:
     - port: 27017
       targetPort: 27017
@@ -55,8 +55,31 @@ spec:
                   - bash
                   - -c
                   - |
-                    until mongosh --eval "db.adminCommand('ping').ok" --quiet; do sleep 1; done
-                    mongosh --eval "try { rs.status() } catch(e) { rs.initiate({_id:'rs0', members:[{_id:0, host:'localhost:27017'}]}) }" --quiet
+                    # Wait until MongoDB accepts authenticated connections
+                    until mongo -u root -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                      --authenticationDatabase admin \
+                      --eval "db.adminCommand('ping').ok" --quiet 2>/dev/null; do
+                      sleep 2
+                    done
+                    # Initiate the replica set using the pod's stable DNS FQDN.
+                    # Using the FQDN (not localhost) is critical: when the application
+                    # driver discovers RS members it must be able to resolve this name
+                    # from other pods.
+                    mongo -u root -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                      --authenticationDatabase admin \
+                      --eval "
+                        try {
+                          rs.initiate({
+                            _id: 'rs0',
+                            members: [{
+                              _id: 0,
+                              host: 'mongodb-backend-0.mongodb-backend.vinylvault-production.svc.cluster.local:27017'
+                            }]
+                          });
+                        } catch(e) {
+                          if (e.code !== 23) { print(e); exit(1); }
+                        }
+                      " --quiet
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               value: "root"
@@ -83,11 +106,17 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
-            tcpSocket:
-              port: 27017
-            initialDelaySeconds: 10
+            exec:
+              command:
+                - bash
+                - -c
+                - >-
+                  mongo -u root -p "$MONGO_INITDB_ROOT_PASSWORD"
+                  --authenticationDatabase admin
+                  --eval "db.adminCommand('ping').ok" --quiet
+            initialDelaySeconds: 15
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 3
   volumeClaimTemplates:
     - metadata:
