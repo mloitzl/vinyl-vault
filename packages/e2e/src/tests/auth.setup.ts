@@ -24,7 +24,7 @@
 import { test as setup, expect } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
-import { AUTH_FILE, BASE_URL, BFF_URL } from '../../playwright.config.js';
+import { AUTH_FILE, BASE_URL, BFF_URL } from '../../playwright.config';
 
 setup('authenticate via GitHub OAuth', async ({ page }) => {
   const username = process.env.E2E_GITHUB_USERNAME;

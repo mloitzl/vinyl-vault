@@ -53,7 +53,7 @@ export function RecordCard({ record, onEdit, onDelete }: RecordCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+    <div data-testid="record-card" className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
       {/* Card Header */}
       <div className="p-4">
         <div className="flex gap-4">

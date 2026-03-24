@@ -1,5 +1,5 @@
 import { type Page, type Locator } from '@playwright/test';
-import { AppPage } from './AppPage.js';
+import { AppPage } from './AppPage';
 
 export class CollectionPage extends AppPage {
   constructor(page: Page) {

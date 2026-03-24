@@ -51,4 +51,8 @@ export class AppPage {
     // Wait for it to disappear (or for it to never appear).
     await this.page.waitForLoadState('networkidle');
   }
+
+  currentUrl(): string {
+    return this.page.url();
+  }
 }

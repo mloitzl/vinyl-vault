@@ -159,12 +159,12 @@ async function main() {
   );
 
   // Auth routes — apply rate limiters per endpoint sensitivity:
-  //   /auth/github* + /auth/logout  → strict (OAuth flow, session mutation)
-  //   /auth/me                      → generous (single MongoDB session read)
+  //   /auth/github* + /auth/logout + /auth/setup  → strict (OAuth flow, session mutation)
+  //   /auth/me                                    → generous (single MongoDB session read)
   app.use(
     '/auth',
     (req, _res, next) => {
-      if (req.path.startsWith('/github') || req.path === '/logout') {
+      if (req.path.startsWith('/github') || req.path === '/logout' || req.path === '/setup') {
         return authLimiter(req, _res, next);
       }
       if (req.path === '/me') {

@@ -35,9 +35,7 @@ test.describe('Scan barcode', () => {
     while (toDelete > 0) {
       const heading = page.getByRole('heading', { name: TITLE, level: 3 }).first();
       if (!(await heading.isVisible({ timeout: 2_000 }).catch(() => false))) break;
-      const card = heading.locator(
-        'xpath=ancestor::div[contains(@class,"rounded-lg") and contains(@class,"shadow-sm")]'
-      );
+      const card = heading.locator('xpath=ancestor::div[@data-testid="record-card"]');
       page.once('dialog', (d) => d.accept());
       await card.getByTitle('Delete record').click();
       await page.waitForTimeout(300);
@@ -87,12 +85,8 @@ test.describe('Scan barcode', () => {
     );
 
     // ── 7. Delete the record ──────────────────────────────────────────────────
-    // Traverse from the h3 up to the RecordCard root div (identified by its
-    // rounded-lg + shadow-sm classes) to scope the delete button correctly.
     const heading = page.getByRole('heading', { name: TITLE, level: 3 }).first();
-    const recordCard = heading.locator(
-      'xpath=ancestor::div[contains(@class,"rounded-lg") and contains(@class,"shadow-sm")]'
-    );
+    const recordCard = heading.locator('xpath=ancestor::div[@data-testid="record-card"]');
     page.once('dialog', (d) => d.accept());
     await recordCard.getByTitle('Delete record').click();
 

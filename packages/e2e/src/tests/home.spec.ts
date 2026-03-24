@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/index.js';
+import { test, expect } from '../fixtures';
 
 /**
  * Home page tests — run with the authenticated session.

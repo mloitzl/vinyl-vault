@@ -1,9 +1,9 @@
 import { test as base } from '@playwright/test';
-import { HomePage } from '../pages/HomePage.js';
-import { CollectionPage } from '../pages/CollectionPage.js';
-import { BrowsePage } from '../pages/BrowsePage.js';
-import { ScanPage } from '../pages/ScanPage.js';
-import { SearchPage } from '../pages/SearchPage.js';
+import { HomePage } from '../pages/HomePage';
+import { CollectionPage } from '../pages/CollectionPage';
+import { BrowsePage } from '../pages/BrowsePage';
+import { ScanPage } from '../pages/ScanPage';
+import { SearchPage } from '../pages/SearchPage';
 
 /**
  * Extended test fixture that injects typed Page Object Models.

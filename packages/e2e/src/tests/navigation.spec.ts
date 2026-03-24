@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/index.js';
+import { test, expect } from '../fixtures';
 
 test.describe('Scan page', () => {
   test('renders the page heading and sub-heading', async ({ scanPage }) => {

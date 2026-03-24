@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/index.js';
+import { test, expect } from '../fixtures';
 
 test.describe('Browse page', () => {
   test('renders the page heading', async ({ browsePage }) => {
@@ -23,7 +23,7 @@ test.describe('Browse page', () => {
     await browsePage.waitForAppReady();
 
     // The URL should contain tab=artists or have no tab param (default)
-    const url = browsePage['page'].url();
+    const url = browsePage.currentUrl();
     expect(url).toMatch(/tab=artists|\/browse(\?.*)?$/);
   });
 
@@ -31,7 +31,7 @@ test.describe('Browse page', () => {
     await browsePage.open();
     await browsePage.switchToTab('Albums');
 
-    const url = browsePage['page'].url();
+    const url = browsePage.currentUrl();
     expect(url).toContain('tab=albums');
     await expect(browsePage.heading).toBeVisible();
   });
@@ -40,7 +40,7 @@ test.describe('Browse page', () => {
     await browsePage.open();
     await browsePage.switchToTab('Genres');
 
-    const url = browsePage['page'].url();
+    const url = browsePage.currentUrl();
     expect(url).toContain('tab=genres');
     await expect(browsePage.heading).toBeVisible();
   });
@@ -51,7 +51,7 @@ test.describe('Browse page', () => {
     await expect(browsePage.tab('Albums')).toBeVisible();
     await browsePage.waitForAppReady();
 
-    const url = browsePage['page'].url();
+    const url = browsePage.currentUrl();
     expect(url).toContain('tab=albums');
   });
 
