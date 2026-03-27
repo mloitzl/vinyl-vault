@@ -13,6 +13,7 @@ const isCI = !!process.env.CI;
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
 
 export const AUTH_FILE = path.join(__dirname, '.auth/user.json');
+export const AUTH_FILE_2 = path.join(__dirname, '.auth/user2.json');
 export const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 export const BFF_URL = process.env.E2E_BFF_URL ?? 'http://localhost:3001';
 
@@ -38,7 +39,7 @@ export default defineConfig({
   },
 
   projects: [
-    // ── 1. Auth setup ──────────────────────────────────────────────────────────
+    // ── 1. Auth setup (user 1) ─────────────────────────────────────────────────
     // Runs auth.setup.ts once to log in through GitHub OAuth and persist the
     // session to .auth/user.json. Subsequent authenticated tests reuse it.
     {
@@ -50,8 +51,21 @@ export default defineConfig({
       },
     },
 
-    // ── 2. Authenticated tests ─────────────────────────────────────────────────
-    // All spec files under src/tests/ run here with the saved session.
+    // ── 2. Auth setup (user 2) ─────────────────────────────────────────────────
+    // Runs auth.setup2.ts once for the second test account. Required by
+    // two-user social tests (friend request handshake, museum mode).
+    {
+      name: 'setup2',
+      testMatch: /auth\.setup2\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(executablePath ? { executablePath } : {}),
+      },
+    },
+
+    // ── 3. Authenticated tests ─────────────────────────────────────────────────
+    // All spec files under src/tests/ run here with user 1's saved session.
+    // Two-user spec files create their own browser context with AUTH_FILE_2.
     {
       name: 'chromium',
       testMatch: /\.spec\.ts/,
@@ -60,7 +74,7 @@ export default defineConfig({
         storageState: AUTH_FILE,
         ...(executablePath ? { executablePath } : {}),
       },
-      dependencies: ['setup'],
+      dependencies: ['setup', 'setup2'],
     },
   ],
 

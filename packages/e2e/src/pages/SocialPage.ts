@@ -61,4 +61,57 @@ export class SocialPage extends AppPage {
   get noFriendsText(): Locator {
     return this.page.getByText('No friends yet. Search for users above!');
   }
+
+  /** "Add Friend" button in search results for a given display name. */
+  addFriendButton(displayName: string): Locator {
+    return this.page
+      .locator('li')
+      .filter({ hasText: displayName })
+      .getByRole('button', { name: 'Add Friend' });
+  }
+
+  /** "Request Sent" status span in search results. */
+  requestSentBadge(displayName: string): Locator {
+    return this.page
+      .locator('li')
+      .filter({ hasText: displayName })
+      .getByText('Request Sent');
+  }
+
+  /** "Accept" button in Pending Requests for a given display name. */
+  acceptButton(displayName: string): Locator {
+    return this.page
+      .locator('li')
+      .filter({ hasText: displayName })
+      .getByRole('button', { name: 'Accept' });
+  }
+
+  /** "Decline" button in Pending Requests for a given display name. */
+  declineButton(displayName: string): Locator {
+    return this.page
+      .locator('li')
+      .filter({ hasText: displayName })
+      .getByRole('button', { name: 'Decline' });
+  }
+
+  /** "View Collection" button in My Friends for a given display name. */
+  viewCollectionButton(displayName: string): Locator {
+    return this.page
+      .locator('li')
+      .filter({ hasText: displayName })
+      .getByRole('button', { name: 'View Collection' });
+  }
+
+  /** "Remove" button in My Friends for a given display name. */
+  removeFriendButton(displayName: string): Locator {
+    return this.page
+      .locator('li')
+      .filter({ hasText: displayName })
+      .getByRole('button', { name: 'Remove' });
+  }
+
+  /** Red notification badge on the Friends nav link. */
+  get friendsNavBadge(): Locator {
+    return this.page.getByRole('link', { name: /Friends/i }).locator('.bg-red-500');
+  }
 }
