@@ -1,6 +1,5 @@
 import { Suspense, useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import type { PreloadedQuery } from 'react-relay';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { Button } from '../components/ui/Button';
@@ -8,9 +7,8 @@ import { Input } from '../components/ui/Input';
 import { useSendFriendRequestMutation } from '../hooks/relay/useSendFriendRequestMutation.js';
 import { useRespondToFriendRequestMutation } from '../hooks/relay/useRespondToFriendRequestMutation.js';
 import { useRemoveFriendMutation } from '../hooks/relay/useRemoveFriendMutation.js';
-import { useSocialQueryLoader, useSocialQueryPreloaded, useSocialQueryData } from '../hooks/relay/useSocialQuery.js';
+import { useSocialData } from '../hooks/relay/useSocialQuery.js';
 import { executeGraphQLMutation } from '../utils/graphqlExecutor.js';
-import type { useSocialQuery as SocialQueryType } from '../__generated__/useSocialQuery.graphql';
 
 interface UserResult {
   id: string;
@@ -34,25 +32,16 @@ const SEARCH_USERS_QUERY = `
 
 export function SocialPage() {
   const { user } = useAuth();
-  const location = useLocation();
-  const { queryRef, load, reload } = useSocialQueryLoader();
-
-  // Initial load
-  useEffect(() => {
-    load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reload from network each time the user navigates to this page so that
-  // sent requests accepted by the other party are reflected immediately.
-  useEffect(() => {
-    if (queryRef) reload();
-  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
+  // fetchKey lives outside the Suspense boundary so it is preserved while
+  // the inner component is suspended. Incrementing it forces useLazyLoadQuery
+  // to re-fetch (notification-triggered refresh).
+  const [fetchKey, setFetchKey] = useState(0);
 
   useEffect(() => {
-    const handleChange = () => reload();
-    window.addEventListener('vinyl-vault:notifications-changed', handleChange);
-    return () => window.removeEventListener('vinyl-vault:notifications-changed', handleChange);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const handler = () => setFetchKey((k) => k + 1);
+    window.addEventListener('vinyl-vault:notifications-changed', handler);
+    return () => window.removeEventListener('vinyl-vault:notifications-changed', handler);
+  }, []);
 
   if (!user) {
     return (
@@ -70,21 +59,19 @@ export function SocialPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {queryRef ? (
-          <Suspense fallback={<LoadingSpinner size="sm" />}>
-            <SocialPageContent queryRef={queryRef} />
-          </Suspense>
-        ) : (
-          <LoadingSpinner size="sm" />
-        )}
+        <Suspense fallback={<LoadingSpinner size="sm" />}>
+          <SocialPageContent fetchKey={fetchKey} />
+        </Suspense>
       </div>
     </div>
   );
 }
 
-function SocialPageContent({ queryRef }: { queryRef: PreloadedQuery<SocialQueryType> }) {
-  const rootData = useSocialQueryPreloaded(queryRef);
-  const fragmentData = useSocialQueryData(rootData);
+function SocialPageContent({ fetchKey }: { fetchKey: number }) {
+  // store-and-network: shows cached data immediately, always fires a background
+  // network fetch to sync stale data (e.g. a sent request that was accepted).
+  // fetchKey increment forces a fresh fetch without additional spinner flash.
+  const fragmentData = useSocialData(fetchKey);
   const navigate = useNavigate();
   const { switchTenant } = useAuth();
 

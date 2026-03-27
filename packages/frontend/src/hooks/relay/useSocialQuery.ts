@@ -1,7 +1,6 @@
-import { graphql, usePreloadedQuery, useQueryLoader, useFragment } from 'react-relay';
-import type { PreloadedQuery } from 'react-relay';
+import { graphql, useLazyLoadQuery, useFragment } from 'react-relay';
 import type { useSocialQuery as SocialQueryType } from '../../__generated__/useSocialQuery.graphql';
-import type { useSocialQueryData$key } from '../../__generated__/useSocialQueryData.graphql';
+import type { useSocialQueryData$data, useSocialQueryData$key } from '../../__generated__/useSocialQueryData.graphql';
 
 export const SocialDataFragment = graphql`
   fragment useSocialQueryData on Query {
@@ -53,24 +52,20 @@ export const SocialQuery = graphql`
   }
 `;
 
-export function useSocialQueryLoader() {
-  const [queryRef, loadQuery] = useQueryLoader<SocialQueryType>(SocialQuery);
-
-  const load = () => {
-    loadQuery({}, { fetchPolicy: 'store-or-network' });
-  };
-
-  const reload = () => {
-    loadQuery({}, { fetchPolicy: 'network-only' });
-  };
-
-  return { queryRef, load, reload };
-}
-
-export function useSocialQueryPreloaded(queryRef: PreloadedQuery<SocialQueryType>) {
-  return usePreloadedQuery(SocialQuery, queryRef);
-}
-
-export function useSocialQueryData(fragmentRef: useSocialQueryData$key) {
-  return useFragment(SocialDataFragment, fragmentRef);
+/**
+ * Fetches social data inside a Suspense boundary.
+ *
+ * fetchPolicy 'store-and-network':
+ *   - Shows any cached data immediately (no spinner on re-visits)
+ *   - Always fires a background network fetch to update stale data
+ *   - fetchKey increment forces a new network fetch (used for
+ *     notification-triggered refreshes) without suspending
+ */
+export function useSocialData(fetchKey: number): useSocialQueryData$data {
+  const rootData = useLazyLoadQuery<SocialQueryType>(
+    SocialQuery,
+    {},
+    { fetchPolicy: 'store-and-network', fetchKey },
+  );
+  return useFragment<useSocialQueryData$key>(SocialDataFragment, rootData);
 }
