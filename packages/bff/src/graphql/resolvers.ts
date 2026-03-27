@@ -4,8 +4,8 @@
 import { parse } from 'graphql';
 import { logger } from '../utils/logger.js';
 import type { GraphQLContext } from '../types/context.js';
-import { getAvailableTenants, setActiveTenant, DEFAULT_USER_SETTINGS } from '../types/session.js';
-import type { UserSettings } from '../types/session.js';
+import { getAvailableTenants, getActiveTenant, setActiveTenant, setAvailableTenants, DEFAULT_USER_SETTINGS } from '../types/session.js';
+import type { UserSettings, AvailableTenant } from '../types/session.js';
 import { getFeatureFlags } from '../utils/featureFlags.js';
 import { lookupSpotifyPreview } from '../services/spotify.js';
 import { backendExecutor } from './executor.js';
@@ -16,10 +16,78 @@ const UPDATE_USER_SETTINGS_MUTATION = parse(`
       id
       settings {
         spotifyPreview
+        allowFriendInvites
       }
     }
   }
 `);
+
+const RESPOND_TO_FRIEND_REQUEST_MUTATION = parse(`
+  mutation BffRespondToFriendRequest($requestId: ID!, $accept: Boolean!) {
+    respondToFriendRequest(requestId: $requestId, accept: $accept) {
+      deletedRequestId
+      newFriend {
+        id
+        githubLogin
+        displayName
+        avatarUrl
+      }
+      notificationCount
+    }
+  }
+`);
+
+const REMOVE_FRIEND_MUTATION = parse(`
+  mutation BffRemoveFriend($friendId: ID!) {
+    removeFriend(friendId: $friendId) {
+      removedFriendId
+    }
+  }
+`);
+
+const GET_USER_TENANTS_QUERY = parse(`
+  query BffGetUserTenants($userId: ID!) {
+    userTenants(userId: $userId) {
+      tenantId
+      tenantType
+      name
+      role
+    }
+  }
+`);
+
+async function refreshSessionTenants(context: GraphQLContext): Promise<void> {
+  if (!context.user) return;
+  const result = (await backendExecutor({
+    document: GET_USER_TENANTS_QUERY,
+    variables: { userId: context.user.id },
+    context,
+  })) as { data?: { userTenants: AvailableTenant[] } };
+
+  if (result.data?.userTenants) {
+    const tenants = result.data.userTenants;
+    setAvailableTenants(context.session, tenants);
+
+    // If the previously active tenant is no longer accessible, reset to the
+    // user's own personal tenant (or the first available tenant).
+    const currentActive = getActiveTenant(context.session);
+    const stillValid = tenants.some((t) => t.tenantId === currentActive);
+    if (!stillValid) {
+      const personalTenant = tenants.find((t) => t.tenantId === `user_${context.user!.id}`);
+      const fallback = personalTenant ?? tenants[0];
+      if (fallback) {
+        setActiveTenant(context.session, fallback.tenantId);
+      }
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      context.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+}
 
 export const resolvers = {
   Query: {
@@ -64,8 +132,17 @@ export const resolvers = {
       }
 
       const { tenantId } = _args;
-      const availableTenants = getAvailableTenants(context.session) || [];
-      const targetTenant = availableTenants.find((t) => t.tenantId === tenantId);
+      let availableTenants = getAvailableTenants(context.session) || [];
+      let targetTenant = availableTenants.find((t) => t.tenantId === tenantId);
+
+      // Lazily refresh session tenants in case a new friendship was established
+      // by another user since this session was last populated.
+      if (!targetTenant) {
+        await refreshSessionTenants(context);
+        availableTenants = getAvailableTenants(context.session) || [];
+        targetTenant = availableTenants.find((t) => t.tenantId === tenantId);
+      }
+
       if (!targetTenant) {
         throw new Error(`Unauthorized: user does not have access to tenant ${tenantId}`);
       }
@@ -94,7 +171,7 @@ export const resolvers = {
 
     updateUserSettings: async (
       _parent: unknown,
-      _args: { input: { spotifyPreview?: boolean } },
+      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean } },
       context: GraphQLContext
     ) => {
       if (!context.user || !context.session) {
@@ -142,6 +219,61 @@ export const resolvers = {
         createdAt: context.user.createdAt,
         updatedAt: context.user.updatedAt,
       };
+    },
+
+    respondToFriendRequest: async (
+      _parent: unknown,
+      _args: { requestId: string; accept: boolean },
+      context: GraphQLContext
+    ) => {
+      if (!context.user || !context.session) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      const result = await backendExecutor({
+        document: RESPOND_TO_FRIEND_REQUEST_MUTATION,
+        variables: { requestId: _args.requestId, accept: _args.accept },
+        context,
+      }) as { data?: { respondToFriendRequest?: { deletedRequestId: string; newFriend: unknown; notificationCount: number } }; errors?: { message: string }[] };
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
+
+      // Refresh session available tenants (accepting adds the requester's tenant)
+      await refreshSessionTenants(context);
+
+      logger.info(
+        { userId: context.user.id, requestId: _args.requestId, accept: _args.accept },
+        'Responded to friend request'
+      );
+      return result.data?.respondToFriendRequest;
+    },
+
+    removeFriend: async (
+      _parent: unknown,
+      _args: { friendId: string },
+      context: GraphQLContext
+    ) => {
+      if (!context.user || !context.session) {
+        throw new Error('Unauthorized: user not authenticated');
+      }
+
+      const result = await backendExecutor({
+        document: REMOVE_FRIEND_MUTATION,
+        variables: { friendId: _args.friendId },
+        context,
+      }) as { data?: { removeFriend?: { removedFriendId: string } }; errors?: { message: string }[] };
+
+      if (result.errors?.length) {
+        throw new Error(result.errors[0].message);
+      }
+
+      // Refresh session available tenants (friend's tenant is removed)
+      await refreshSessionTenants(context);
+
+      logger.info({ userId: context.user.id, friendId: _args.friendId }, 'Removed friend');
+      return result.data?.removeFriend;
     },
   },
 

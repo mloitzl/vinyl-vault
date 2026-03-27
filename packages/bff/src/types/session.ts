@@ -5,10 +5,12 @@ import type { Session } from 'express-session';
 
 export interface UserSettings {
   spotifyPreview: boolean;
+  allowFriendInvites: boolean;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   spotifyPreview: false,
+  allowFriendInvites: false,
 };
 
 export interface SessionUser {

@@ -38,7 +38,7 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
         {isForeignTenant && activeTenant ? (
           <>
             <h1 className="text-xl font-semibold text-gray-900">
-              {activeTenant.name}'s Collection
+              {activeTenant.name}&apos;s Collection
             </h1>
             <p className="text-gray-500">
               {canMutate ? 'You can add and edit records here.' : 'You are browsing in read-only mode.'}

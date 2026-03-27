@@ -25,6 +25,11 @@ export async function getRegistryDb(): Promise<Db> {
   return registryDb;
 }
 
+export async function getRegistryClient(): Promise<MongoClient> {
+  await getRegistryDb(); // Ensure connected
+  return registryClient!;
+}
+
 export async function closeRegistryDb(): Promise<void> {
   if (registryClient) {
     await registryClient.close();
@@ -49,4 +54,14 @@ export async function ensureRegistryIndexes(): Promise<void> {
   await userInstallationRoles.createIndex({ org_name: 1 });
 
   logger.info('Ensured indexes for installations and user_installation_roles');
+
+  const users = db.collection('users');
+  await users.createIndex({ githubLogin: 1 }, { unique: true, sparse: false });
+  await users.createIndex({ email: 1 }, { sparse: true });
+
+  const friendRequests = db.collection('friend_requests');
+  await friendRequests.createIndex({ requesterId: 1, recipientId: 1 }, { unique: true });
+  await friendRequests.createIndex({ recipientId: 1 });
+
+  logger.info('Ensured indexes for users and friend_requests');
 }

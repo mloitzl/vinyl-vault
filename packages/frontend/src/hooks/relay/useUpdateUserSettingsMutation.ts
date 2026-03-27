@@ -14,6 +14,7 @@ const UpdateUserSettingsMutation = graphql`
 
 export interface UserSettingsInput {
   spotifyPreview?: boolean;
+  allowFriendInvites?: boolean;
 }
 
 export function useUpdateUserSettingsMutation() {

@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb';
 
 export interface UserSettings {
   spotifyPreview: boolean;
+  allowFriendInvites: boolean;
 }
 
 export interface UserDocument {

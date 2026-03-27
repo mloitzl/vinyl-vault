@@ -7,3 +7,4 @@ export { ScanPage } from './ScanPage';
 export { SearchPage } from './SearchPage';
 export { BrowsePage } from './BrowsePage';
 export { ArtistDetailPage } from './ArtistDetailPage';
+export { SocialPage } from './SocialPage';
