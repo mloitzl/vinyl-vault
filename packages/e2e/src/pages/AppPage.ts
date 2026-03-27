@@ -35,6 +35,10 @@ export class AppPage {
     return this.page.getByRole('link', { name: 'Search' });
   }
 
+  get navFriends(): Locator {
+    return this.page.getByRole('link', { name: 'Friends' });
+  }
+
   get navScan(): Locator {
     return this.page.getByRole('link', { name: 'Scan' });
   }

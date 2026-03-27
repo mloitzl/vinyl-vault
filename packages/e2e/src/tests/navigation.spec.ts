@@ -31,6 +31,7 @@ test.describe('Navigation', () => {
     homePage,
     collectionPage,
     browsePage,
+    socialPage,
   }) => {
     await homePage.goto();
 
@@ -41,6 +42,10 @@ test.describe('Navigation', () => {
     // Browse
     await homePage.navBrowse.click();
     await expect(browsePage.heading).toBeVisible();
+
+    // Friends (social feature)
+    await homePage.navFriends.click();
+    await expect(socialPage.heading).toBeVisible();
 
     // Home
     await homePage.navHome.click();
