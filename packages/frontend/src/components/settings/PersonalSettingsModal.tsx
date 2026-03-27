@@ -19,7 +19,7 @@ export function PersonalSettingsModal({ isOpen, onClose }: PersonalSettingsModal
     setError(null);
     try {
       await updateSettings({ [field]: enabled });
-      await refreshUser();
+      await refreshUser(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
     }

@@ -46,7 +46,7 @@ interface AuthContextType {
   error: string | null;
   login: () => void;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: (silent?: boolean) => Promise<void>;
   switchTenant: (tenantId: string) => Promise<void>;
 }
 
@@ -64,10 +64,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch current user from /auth/me
-  const refreshUser = useCallback(async () => {
+  // Fetch current user from /auth/me.
+  // Pass silent=true to skip the isLoading flag (e.g. after a settings save)
+  // so components that gate on isLoading don't unmount during the refresh.
+  const refreshUser = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setError(null);
 
       const response = await fetch(getEndpoint('/auth/me'), {
@@ -113,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setAvailableTenants([]);
       setFeatureFlags({ enableTenantFeatures: true });
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, []);
 
