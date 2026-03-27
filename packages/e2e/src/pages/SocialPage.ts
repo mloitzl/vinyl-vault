@@ -14,7 +14,7 @@ export class SocialPage extends AppPage {
   // ── Page header ───────────────────────────────────────────────────────────
 
   get heading(): Locator {
-    return this.page.getByRole('heading', { name: 'Friends' });
+    return this.page.getByRole('heading', { name: 'Friends', exact: true });
   }
 
   // ── Find Users (search) section ───────────────────────────────────────────

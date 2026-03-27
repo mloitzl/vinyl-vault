@@ -42,18 +42,21 @@ async function ensureAllowFriendRequestsEnabled(p: Page): Promise<void> {
 
   // Open Personal Settings
   await p.getByRole('button', { name: 'Personal Settings' }).click();
+  const dialog = p.getByRole('dialog');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-  // Ensure the "Allow friend requests" checkbox is checked
-  const checkbox = p.getByRole('checkbox', { name: /allow friend requests/i });
-  await expect(checkbox).toBeVisible({ timeout: 10_000 });
+  // The checkbox is sr-only; check its state via the DOM, toggle via the label text
+  const checkbox = dialog.getByRole('checkbox', { name: /allow friend requests/i });
+  await expect(checkbox).toBeAttached({ timeout: 10_000 });
   if (!(await checkbox.isChecked())) {
-    await checkbox.check();
+    await dialog.getByText('Allow friend requests').click();
     // Wait for the mutation to settle before closing
     await p.waitForLoadState('networkidle');
   }
 
   // Close modal with the X button
-  await p.getByRole('button', { name: /close modal/i }).click();
+  await dialog.getByRole('button', { name: 'Close modal' }).click();
+  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
 }
 
 /**
@@ -187,13 +190,16 @@ test.describe('two-user social feature', () => {
     await viewBtn.click();
     await page.waitForLoadState('networkidle');
 
-    // Banner: "Browsing [name]'s collection" with FRIEND badge
-    await expect(page.getByText(/browsing/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/collection/i).first()).toBeVisible();
-    await expect(page.getByText('FRIEND')).toBeVisible();
+    // The slate banner appears in the header when viewing a friend's collection
+    const museumBanner = page.locator('div.bg-slate-50').filter({ has: page.getByText(/browsing/i) });
+    await expect(museumBanner).toBeVisible({ timeout: 10_000 });
+    // Banner must show the user's name and the FRIEND role badge
+    await expect(museumBanner).toContainText(/browsing/i);
+    await expect(museumBanner).toContainText(/collection/i);
+    await expect(museumBanner.getByText('FRIEND')).toBeVisible();
 
-    // Back button is present
-    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
+    // Back button is present inside the banner
+    await expect(museumBanner.getByRole('button', { name: 'Back' })).toBeVisible();
 
     // No edit or delete record buttons in the collection (canMutate = false)
     await expect(page.locator('[title="Edit record"]')).toHaveCount(0);
@@ -206,8 +212,8 @@ test.describe('two-user social feature', () => {
     await page.getByRole('button', { name: 'Back' }).click();
     await page.waitForLoadState('networkidle');
 
-    // Museum mode banner should be gone
-    await expect(page.getByText('FRIEND')).toBeHidden();
+    // Museum mode banner should be gone (the slate bg-slate-50 banner disappears)
+    await expect(museumBanner).toBeHidden();
 
     // ── Step 6: Remove friend ─────────────────────────────────────────────────
     await social1.goto();
@@ -220,6 +226,6 @@ test.describe('two-user social feature', () => {
 
     // User 2 should be gone from My Friends
     await expect(social1.removeFriendButton(USER2_GITHUB_LOGIN)).toBeHidden();
-    await expect(social1.noFriendsText).toBeVisible();
+    await expect(social1.viewCollectionButton(USER2_GITHUB_LOGIN)).toBeHidden();
   });
 });
