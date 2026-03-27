@@ -5,9 +5,9 @@
  *   User 1: E2E_GITHUB_USERNAME / E2E_GITHUB_PASSWORD  → .auth/user.json
  *   User 2: E2E_GITHUB_USERNAME_2 / E2E_GITHUB_PASSWORD_2 → .auth/user2.json
  *
- * Prerequisites (one-time setup on the test accounts):
- *   - User 2 must have "Allow friend requests" enabled in Personal Settings.
- *     The beforeAll hook in this file ensures this automatically.
+ * Prerequisites handled automatically by auth.setup2.ts (runs once before tests):
+ *   - User 2's session is persisted to .auth/user2.json
+ *   - "Allow friend requests" is enabled for user 2
  *
  * Tests are isolated: beforeEach/afterEach remove any lingering friendship so
  * each test starts from a clean slate.
@@ -26,38 +26,6 @@ const USER2_GITHUB_LOGIN = process.env.E2E_GITHUB_USERNAME_2 ?? 'vinylvaultuser1
 // Module-level so beforeAll/afterAll and individual tests can share it.
 let ctx2: BrowserContext;
 let page2: Page;
-
-/**
- * Open Personal Settings for the given page and ensure "Allow friend requests"
- * is checked. Leaves the modal closed when done.
- */
-async function ensureAllowFriendRequestsEnabled(p: Page): Promise<void> {
-  await p.goto(BASE_URL);
-  await p.waitForLoadState('networkidle');
-
-  // Open user dropdown
-  const userMenuBtn = p.locator('header button[aria-haspopup="true"]').first();
-  await expect(userMenuBtn).toBeVisible({ timeout: 20_000 });
-  await userMenuBtn.click();
-
-  // Open Personal Settings
-  await p.getByRole('button', { name: 'Personal Settings' }).click();
-  const dialog = p.getByRole('dialog');
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
-
-  // The checkbox is sr-only; check its state via the DOM, toggle via the label text
-  const checkbox = dialog.getByRole('checkbox', { name: /allow friend requests/i });
-  await expect(checkbox).toBeAttached({ timeout: 10_000 });
-  if (!(await checkbox.isChecked())) {
-    await dialog.getByText('Allow friend requests').click();
-    // Wait for the mutation to settle before closing
-    await p.waitForLoadState('networkidle');
-  }
-
-  // Close modal with the X button
-  await dialog.getByRole('button', { name: 'Close modal' }).click();
-  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
-}
 
 /**
  * Best-effort cleanup: remove any friendship or pending request between the
@@ -98,16 +66,10 @@ async function cleanupFriendship(user1Page: Page, user2Page: Page): Promise<void
 
 test.describe('two-user social feature', () => {
   test.beforeAll(async ({ browser }: { browser: Browser }) => {
-    if (!AUTH_FILE_2) {
-      test.skip();
-    }
-
-    // Create a persistent second-user context for the entire describe block
+    // Create a persistent second-user context for the entire describe block.
+    // "Allow friend requests" for user2 is already enabled by auth.setup2.ts.
     ctx2 = await browser.newContext({ storageState: AUTH_FILE_2 });
     page2 = await ctx2.newPage();
-
-    // Ensure user 2 is discoverable by user 1
-    await ensureAllowFriendRequestsEnabled(page2);
   });
 
   test.afterAll(async () => {

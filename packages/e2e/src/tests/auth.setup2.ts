@@ -5,6 +5,9 @@
  * Uses the same session-reuse logic as auth.setup.ts: if a valid session
  * already exists the OAuth flow is skipped entirely.
  *
+ * After authentication (fresh or reused), also ensures "Allow friend requests"
+ * is enabled for user2 so user1 can find them in search.
+ *
  * Required environment variables (add to .env at the repo root):
  *   E2E_GITHUB_USERNAME_2  – GitHub username of the second dedicated test account
  *   E2E_GITHUB_PASSWORD_2  – Password for that account
@@ -19,6 +22,24 @@ import { test as setup, expect } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AUTH_FILE_2, BASE_URL, BFF_URL } from '../../playwright.config';
+import { type Page } from '@playwright/test';
+
+async function ensureAllowFriendRequestsEnabled(page: Page, userMenuButton: ReturnType<Page['locator']>): Promise<void> {
+  await userMenuButton.click();
+  await page.getByRole('button', { name: 'Personal Settings' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  const checkbox = dialog.getByRole('checkbox', { name: /allow friend requests/i });
+  await expect(checkbox).toBeAttached({ timeout: 10_000 });
+  if (!(await checkbox.isChecked())) {
+    await dialog.getByText('Allow friend requests').click();
+    await page.waitForLoadState('networkidle', { timeout: 10_000 });
+    console.log('✓ Enabled "Allow friend requests" for user2');
+  } else {
+    console.log('✓ "Allow friend requests" already enabled for user2');
+  }
+  await dialog.getByRole('button', { name: 'Close modal' }).click();
+}
 
 setup('authenticate second user via GitHub OAuth', async ({ page }) => {
   const username = process.env.E2E_GITHUB_USERNAME_2;
@@ -34,6 +55,8 @@ setup('authenticate second user via GitHub OAuth', async ({ page }) => {
   // Ensure the .auth directory exists
   fs.mkdirSync(path.dirname(AUTH_FILE_2), { recursive: true });
 
+  const userMenuButton = page.locator('header button[aria-haspopup="true"]').first();
+
   // ── Fast path: reuse the existing session if it is still valid ────────────
   if (fs.existsSync(AUTH_FILE_2)) {
     const saved = JSON.parse(fs.readFileSync(AUTH_FILE_2, 'utf-8'));
@@ -41,16 +64,16 @@ setup('authenticate second user via GitHub OAuth', async ({ page }) => {
       await page.context().addCookies(saved.cookies);
       await page.goto(BASE_URL);
 
-      const userMenu = page.locator('header button[aria-haspopup="true"]').first();
       const loginButton = page.getByRole('button', { name: 'Sign in with GitHub' });
 
       const result = await Promise.race([
-        userMenu.waitFor({ state: 'visible', timeout: 20_000 }).then(() => 'valid' as const),
+        userMenuButton.waitFor({ state: 'visible', timeout: 20_000 }).then(() => 'valid' as const),
         loginButton.waitFor({ state: 'visible', timeout: 20_000 }).then(() => 'expired' as const),
       ]).catch(() => 'unknown' as const);
 
       if (result === 'valid') {
         console.log('✓ Existing session for user2 is still valid — skipping OAuth flow');
+        await ensureAllowFriendRequestsEnabled(page, userMenuButton);
         return;
       }
       console.log('⚠ Saved session for user2 has expired — performing fresh OAuth login');
@@ -89,7 +112,6 @@ setup('authenticate second user via GitHub OAuth', async ({ page }) => {
   await page.waitForURL(`${BASE_URL}/**`, { timeout: 30_000 });
   await page.waitForLoadState('networkidle', { timeout: 15_000 });
 
-  const userMenuButton = page.locator('header button[aria-haspopup="true"]').first();
   await expect(userMenuButton).toBeVisible({ timeout: 20_000 });
 
   const state = await page.context().storageState();
@@ -102,4 +124,9 @@ setup('authenticate second user via GitHub OAuth', async ({ page }) => {
 
   await page.context().storageState({ path: AUTH_FILE_2 });
   console.log(`✓ Saved ${state.cookies.length} session cookie(s) to .auth/user2.json`);
+
+  // ── Ensure user2 is discoverable ─────────────────────────────────────────
+  // Done here (once, during setup) rather than in beforeAll to avoid triggering
+  // OAuth re-auth during parallel test execution, which can cause rate limiting.
+  await ensureAllowFriendRequestsEnabled(page, userMenuButton);
 });
