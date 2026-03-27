@@ -1,5 +1,5 @@
 import { Suspense, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type { PreloadedQuery } from 'react-relay';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -34,10 +34,21 @@ const SEARCH_USERS_QUERY = `
 
 export function SocialPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const { queryRef, load, reload } = useSocialQueryLoader();
 
+  // Initial load
   useEffect(() => {
     load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload from network each time the user navigates to this page so that
+  // sent requests accepted by the other party are reflected immediately.
+  useEffect(() => {
+    if (queryRef) reload();
+  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     const handleChange = () => reload();
     window.addEventListener('vinyl-vault:notifications-changed', handleChange);
     return () => window.removeEventListener('vinyl-vault:notifications-changed', handleChange);
