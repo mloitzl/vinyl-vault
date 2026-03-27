@@ -22,6 +22,7 @@ import {
   NotFoundPage,
   BrowsePage,
   ArtistDetailPage,
+  SocialPage,
 } from './pages';
 import type { AppCountsQuery as AppCountsQueryType } from './__generated__/AppCountsQuery.graphql';
 
@@ -64,6 +65,7 @@ function AuthedContent() {
               <Route path="/search" element={<SearchPage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/artists/:name" element={<ArtistDetailPage />} />
+              <Route path="/social" element={<SocialPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>
@@ -74,8 +76,20 @@ function AuthedContent() {
 }
 
 function AppContent() {
-  const { user, isLoading, error, refreshUser } = useAuth();
+  const { user, isLoading, error, refreshUser, activeTenant } = useAuth();
   const [orgInstalled, setOrgInstalled] = useState<string | null>(null);
+
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  const isFriendCollection = isForeignTenant && activeTenant?.type === 'USER' && activeTenant?.role === 'VIEWER';
+  const isOrgViewer = isForeignTenant && activeTenant?.type === 'ORGANIZATION' && activeTenant?.role === 'VIEWER';
+  const isOrgMember = isForeignTenant && activeTenant?.type === 'ORGANIZATION' && activeTenant?.role !== 'VIEWER';
+  const ringClass = isFriendCollection
+    ? 'ring-4 ring-inset ring-slate-400'
+    : isOrgViewer
+    ? 'ring-4 ring-inset ring-amber-400'
+    : isOrgMember
+    ? 'ring-4 ring-inset ring-blue-400'
+    : '';
 
   // Detect org_installed query parameter from GitHub App installation redirect
   useEffect(() => {
@@ -94,7 +108,7 @@ function AppContent() {
   }, [refreshUser]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className={`min-h-screen bg-gray-50 flex flex-col ${ringClass}`}>
       <Header />
 
       {/* Error display */}

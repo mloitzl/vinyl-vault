@@ -5,6 +5,7 @@ import { RecordSource as RelayRecordSource } from 'relay-runtime';
 import { executeGraphQLMutation } from '../utils/graphqlExecutor';
 import { RelayEnvironment } from '../relay/environment';
 import { getEndpoint } from '../utils/apiUrl.js';
+import { identifyUser } from '../logrocket.js';
 
 export interface FeatureFlags {
   enableTenantFeatures: boolean;
@@ -17,6 +18,14 @@ export interface AvailableTenant {
   role: 'ADMIN' | 'MEMBER' | 'VIEWER';
 }
 
+export interface UserSettings {
+  spotifyPreview: boolean;
+  allowFriendInvites: boolean;
+  isCollectionPublic: boolean; // retained for session compat; not exposed in UI
+}
+
+const DEFAULT_USER_SETTINGS: UserSettings = { spotifyPreview: false, allowFriendInvites: false, isCollectionPublic: false };
+
 export interface User {
   id: string;
   githubId: string;
@@ -24,6 +33,7 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   email?: string;
+  settings: UserSettings;
   featureFlags?: FeatureFlags;
 }
 
@@ -36,7 +46,7 @@ interface AuthContextType {
   error: string | null;
   login: () => void;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: (silent?: boolean) => Promise<void>;
   switchTenant: (tenantId: string) => Promise<void>;
 }
 
@@ -54,10 +64,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch current user from /auth/me
-  const refreshUser = useCallback(async () => {
+  // Fetch current user from /auth/me.
+  // Pass silent=true to skip the isLoading flag (e.g. after a settings save)
+  // so components that gate on isLoading don't unmount during the refresh.
+  const refreshUser = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setError(null);
 
       const response = await fetch(getEndpoint('/auth/me'), {
@@ -69,7 +81,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const data = await response.json();
-      setUser(data.user || null);
+      const userData: User | null = data.user ? {
+        ...data.user,
+        settings: { ...DEFAULT_USER_SETTINGS, ...(data.user.settings ?? {}) },
+      } : null;
+
+      if (userData) {
+        identifyUser(userData);
+      }
+
+      setUser(userData);
 
       // Extract feature flags from response
       if (data.user?.featureFlags) {
@@ -94,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setAvailableTenants([]);
       setFeatureFlags({ enableTenantFeatures: true });
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, []);
 

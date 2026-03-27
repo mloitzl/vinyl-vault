@@ -59,6 +59,28 @@ type Query {
   Get all tenants for a user (including their role in each tenant).
   """
   userTenants(userId: ID!): [UserTenantRole!]!
+
+  """
+  Exact-match search for users by GitHub login or email.
+  Returns empty array if the matched user has allowFriendInvites = false.
+  """
+  searchUsers(query: String!): [User!]!
+
+  """Lists incoming friend requests for the current user."""
+  pendingFriendRequests(first: Int, after: String): FriendRequestConnection!
+
+  """Lists outgoing friend requests sent by the current user."""
+  sentFriendRequests(first: Int, after: String): FriendRequestConnection!
+
+  """Lists established friends (symmetric VIEWERs in personal tenant)."""
+  friends(first: Int, after: String): UserConnection!
+
+  """
+  Aggregated notification count for the current user across all notification types
+  (pending friend requests, future: new records from friends, etc.).
+  Returns 0 for unauthenticated users.
+  """
+  notificationCount: Int!
 }
 
 type Mutation {
@@ -86,6 +108,7 @@ type Mutation {
   Create or update a user from GitHub data.
   """
   upsertUser(input: UpsertUserInput!): User!
+  updateUserSettings(input: UpdateUserSettingsInput!): User!
 
   """
   Create a new tenant (personal or organization).
@@ -113,6 +136,10 @@ type Mutation {
   completeInstallationSetup(
     input: CompleteInstallationSetupInput!
   ): CompleteInstallationSetupResult!
+
+  sendFriendRequest(githubLogin: String!): SendFriendRequestPayload!
+  respondToFriendRequest(requestId: ID!, accept: Boolean!): RespondToFriendRequestPayload!
+  removeFriend(friendId: ID!): RemoveFriendPayload!
 }
 
 type User implements Node {
@@ -123,6 +150,8 @@ type User implements Node {
   avatarUrl: String
   email: String
   role: UserRole!
+  settings: UserSettings!
+  friendshipStatus: FriendshipStatus
   createdAt: String!
   updatedAt: String!
 }
@@ -366,6 +395,71 @@ input UpsertUserInput {
   displayName: String!
   avatarUrl: String
   email: String
+}
+
+"""
+Per-user application settings persisted in the database.
+"""
+type UserSettings {
+  spotifyPreview: Boolean!
+  allowFriendInvites: Boolean!
+}
+
+input UpdateUserSettingsInput {
+  spotifyPreview: Boolean
+  allowFriendInvites: Boolean
+}
+
+enum FriendshipStatus {
+  NONE
+  PENDING_SENT
+  PENDING_RECEIVED
+  FRIENDS
+}
+
+type FriendRequest implements Node {
+  id: ID!
+  requester: User!
+  recipient: User!
+  createdAt: String!
+}
+
+type FriendRequestEdge {
+  cursor: String!
+  node: FriendRequest!
+}
+
+type FriendRequestConnection {
+  edges: [FriendRequestEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserEdge {
+  cursor: String!
+  node: User!
+}
+
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+}
+
+type SendFriendRequestPayload {
+  friendRequest: FriendRequest!
+}
+
+type RespondToFriendRequestPayload {
+  """The ID of the deleted request (for @deleteEdge on the pending list)."""
+  deletedRequestId: ID!
+  """The newly added friend when accept=true; null when declining."""
+  newFriend: User
+  """Updated notification count after the operation."""
+  notificationCount: Int!
+}
+
+type RemoveFriendPayload {
+  """The ID of the removed friend (for @deleteEdge on the friends list)."""
+  removedFriendId: ID!
 }
 
 """

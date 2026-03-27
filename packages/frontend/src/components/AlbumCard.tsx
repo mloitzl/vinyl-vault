@@ -198,7 +198,7 @@ export function AlbumCard({ album, isSelected, onSelect }: AlbumCardProps) {
           {/* Details content */}
           <div className="p-4 space-y-4">
             {breakdown && <ScoreBreakdownDisplay breakdown={breakdown} />}
-            {album.trackList && <TrackList tracks={album.trackList} />}
+            {album.trackList && <TrackList tracks={album.trackList} artist={album.artist} />}
             {album.alternativeReleases.length > 0 && (
               <AlternativeReleasesList releases={album.alternativeReleases} />
             )}

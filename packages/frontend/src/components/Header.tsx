@@ -3,7 +3,24 @@ import { UserDropdownMenu } from './UserDropdownMenu';
 import { Button } from './ui/Button';
 
 export function Header() {
-  const { user, isLoading, login } = useAuth();
+  const { user, isLoading, login, activeTenant, availableTenants, switchTenant } = useAuth();
+
+  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
+  const isFriendCollection = isForeignTenant && activeTenant?.type === 'USER' && activeTenant?.role === 'VIEWER';
+  const isOrgContext = isForeignTenant && !isFriendCollection;
+  const isViewer = activeTenant?.role === 'VIEWER';
+
+  const handleBackToOwn = async () => {
+    if (!user) return;
+    const ownTenantId = `user_${user.id}`;
+    const ownTenant = availableTenants.find((t) => t.id === ownTenantId);
+    if (!ownTenant) return;
+    try {
+      await switchTenant(ownTenantId);
+    } catch {
+      // Ignore errors silently
+    }
+  };
 
   return (
     <header className="bg-white shadow-sm">
@@ -29,6 +46,58 @@ export function Header() {
           </div>
         </div>
       </div>
+
+      {/* Friend-collection context banner (slate blue) */}
+      {isFriendCollection && activeTenant && (
+        <div className="px-4 py-1.5 text-sm font-medium flex items-center gap-2 bg-slate-50 border-t border-slate-200 text-slate-800">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>
+            Browsing <strong>{activeTenant.name}</strong>&apos;s collection
+          </span>
+          <span className="ml-1 px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide bg-slate-200 text-slate-900">
+            FRIEND
+          </span>
+          <button
+            onClick={handleBackToOwn}
+            className="ml-auto text-xs font-semibold text-slate-700 hover:text-slate-900 underline"
+          >
+            Back
+          </button>
+        </div>
+      )}
+
+      {/* Org / member context banner (unchanged) */}
+      {isOrgContext && activeTenant && (
+        <div
+          className={`px-4 py-1.5 text-sm font-medium flex items-center gap-2 ${
+            isViewer
+              ? 'bg-amber-50 border-t border-amber-200 text-amber-800'
+              : 'bg-blue-50 border-t border-blue-200 text-blue-800'
+          }`}
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <span>
+            Browsing <strong>{activeTenant.name}</strong>&apos;s collection
+          </span>
+          <span
+            className={`ml-1 px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+              isViewer
+                ? 'bg-amber-200 text-amber-900'
+                : 'bg-blue-200 text-blue-900'
+            }`}
+          >
+            {activeTenant.role}
+          </span>
+        </div>
+      )}
     </header>
   );
 }

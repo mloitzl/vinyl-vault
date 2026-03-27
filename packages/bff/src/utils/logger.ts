@@ -50,6 +50,15 @@ export const httpLogger = pinoHttp({
     if (res.statusCode >= 400) return 'warn';
     return 'info';
   },
+  // Hoist logrocket_session to the top level of the log line so it survives
+  // the OTLP → Elastic pipeline (nested req.* fields are dropped; top-level
+  // fields are preserved as labels alongside trace_id / span_id).
+  customProps: (req) => {
+    const rawLrSession = req.headers['x-logrocket-session'];
+    return {
+      logrocket_session: Array.isArray(rawLrSession) ? rawLrSession[0] : (rawLrSession ?? undefined),
+    };
+  },
   serializers: {
     req: (req) => ({
       method: req.method,

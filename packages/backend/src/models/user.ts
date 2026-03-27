@@ -3,6 +3,11 @@
 
 import { ObjectId } from 'mongodb';
 
+export interface UserSettings {
+  spotifyPreview: boolean;
+  allowFriendInvites: boolean;
+}
+
 export interface UserDocument {
   _id: ObjectId;
   githubId: string;
@@ -10,6 +15,7 @@ export interface UserDocument {
   displayName: string;
   avatarUrl?: string;
   email?: string;
+  settings?: UserSettings;
   createdAt: Date;
   updatedAt: Date;
 }

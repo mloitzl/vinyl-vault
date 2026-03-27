@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TrackList } from './TrackList';
 
 type Track = {
   position?: string;
@@ -262,20 +263,7 @@ export function RecordCard({ record, onEdit, onDelete }: RecordCardProps) {
             {/* Track List */}
             {record.release.trackList && record.release.trackList.length > 0 && (
               <div className="md:col-span-2">
-                <h4 className="font-semibold text-gray-700 mb-2">Track List</h4>
-                <ol className="space-y-1 text-gray-700">
-                  {record.release.trackList.map((track, idx) => (
-                    <li key={idx} className="flex items-baseline gap-2">
-                      <span className="text-gray-400 text-xs">
-                        {track.position || `${idx + 1}.`}
-                      </span>
-                      <span className="flex-1">{track.title}</span>
-                      {track.duration && (
-                        <span className="text-gray-400 text-xs">{track.duration}</span>
-                      )}
-                    </li>
-                  ))}
-                </ol>
+                <TrackList tracks={record.release.trackList} artist={record.release.artist} />
               </div>
             )}
 

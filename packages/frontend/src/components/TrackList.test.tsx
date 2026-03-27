@@ -1,6 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TrackList } from './TrackList';
+
+// TrackList conditionally shows Spotify play buttons based on user settings.
+// Mock useAuth so the component renders without an AuthProvider in tests.
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { settings: { spotifyPreview: false } },
+    activeTenant: null,
+    availableTenants: [],
+    featureFlags: { enableTenantFeatures: false },
+    isLoading: false,
+    error: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+    switchTenant: vi.fn(),
+  }),
+}));
 
 describe('TrackList', () => {
   it('renders track list heading with count', () => {

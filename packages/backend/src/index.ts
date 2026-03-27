@@ -1,6 +1,4 @@
 // Domain Backend entry point
-// TODO: Implement Apollo Server with MongoDB
-
 import { ApolloServer } from '@apollo/server';
 import { ApolloServerPluginLandingPageDisabled } from '@apollo/server/plugin/disabled';
 import { expressMiddleware } from '@apollo/server/express4';

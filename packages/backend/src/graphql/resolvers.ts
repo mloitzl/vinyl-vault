@@ -1,8 +1,7 @@
-// Domain Backend GraphQL resolvers
-
 import { logger } from '../utils/logger.js';
 import { upsertReleases } from '../services/releasesCache.js';
-import { findUserById, upsertUser } from '../services/users.js';
+import { findUserById, upsertUser, updateUserSettings } from '../services/users.js';
+import type { UserSettings } from '../models/user.js';
 import { lookupAndScoreBarcode } from '../services/scoring/index.js';
 import {
   createRecord,
@@ -20,6 +19,16 @@ import {
   getUserTenants,
 } from '../services/tenants.js';
 import {
+  searchUsers,
+  sendFriendRequest,
+  respondToFriendRequest,
+  removeFriend,
+  getPendingRequests,
+  getSentRequests,
+  getFriends,
+  getFriendshipStatus,
+} from '../services/friends.js';
+import {
   deleteInstallationFromEvent,
   upsertInstallationFromEvent,
   linkUserToInstallation,
@@ -29,7 +38,54 @@ import { requireMember, requireAdmin, canRead } from '../utils/authorization.js'
 import { verifyWebhookSignature } from '../utils/githubWebhook.js';
 import type { Album, RawRelease, ScoringDetail } from '../services/scoring/types.js';
 import type { GraphQLContext } from '../types/context.js';
+import type { FriendRequestDocument } from '../models/friendRequest.js';
+import { getRegistryDb } from '../db/registry.js';
 import { ObjectId } from 'mongodb';
+import { GraphQLError } from 'graphql';
+
+/** Converts a docs array into a Relay-compatible Connection shape with simple ID-based cursors. */
+function toConnection<T extends { _id: ObjectId }>(docs: T[]) {
+  const edges = docs.map((doc) => ({
+    cursor: Buffer.from(doc._id.toString()).toString('base64'),
+    node: doc,
+  }));
+  return {
+    edges,
+    pageInfo: {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      startCursor: edges[0]?.cursor ?? null,
+      endCursor: edges[edges.length - 1]?.cursor ?? null,
+    },
+  };
+}
+
+/** Maps a UserDocument to the GraphQL User shape. */
+function mapUser(doc: {
+  _id: ObjectId;
+  githubId: string;
+  githubLogin: string;
+  displayName: string;
+  avatarUrl?: string;
+  email?: string;
+  role?: string;
+  settings?: UserSettings;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: doc._id.toString(),
+    githubId: doc.githubId,
+    githubLogin: doc.githubLogin,
+    displayName: doc.displayName,
+    avatarUrl: doc.avatarUrl,
+    email: doc.email,
+    role: doc.role,
+    settings: doc.settings,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
 
 export const resolvers = {
   Query: {
@@ -202,6 +258,44 @@ export const resolvers = {
         databaseName: tenant.databaseName,
         createdAt: tenant.createdAt.toISOString(),
       }));
+    },
+
+    searchUsers: async (_parent: unknown, { query }: { query: string }, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const docs = await searchUsers(query, new ObjectId(context.userId));
+      return docs.map((doc) => ({
+        id: doc._id.toString(),
+        githubId: doc.githubId,
+        githubLogin: doc.githubLogin,
+        displayName: doc.displayName,
+        avatarUrl: doc.avatarUrl,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
+      }));
+    },
+
+    pendingFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const docs = await getPendingRequests(new ObjectId(context.userId));
+      return toConnection(docs);
+    },
+
+    sentFriendRequests: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const docs = await getSentRequests(new ObjectId(context.userId));
+      return toConnection(docs);
+    },
+
+    friends: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const docs = await getFriends(new ObjectId(context.userId));
+      return toConnection(docs);
+    },
+
+    notificationCount: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) return 0;
+      const pending = await getPendingRequests(new ObjectId(context.userId));
+      return pending.length;
     },
 
     artists: async (
@@ -693,6 +787,14 @@ export const resolvers = {
     ) => {
       return upsertUser(_args.input);
     },
+    updateUserSettings: async (
+      _parent: unknown,
+      _args: { input: { spotifyPreview?: boolean; allowFriendInvites?: boolean } },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new Error('Unauthorized');
+      return updateUserSettings(context.userId, _args.input);
+    },
     handleGitHubInstallationWebhook: async (
       _parent: unknown,
       _args: { input: { payloadBase64: string; signature: string } }
@@ -859,6 +961,81 @@ export const resolvers = {
         role: userTenantRole.role,
         createdAt: userTenantRole.createdAt.toISOString(),
       };
+    },
+
+    sendFriendRequest: async (
+      _parent: unknown,
+      { githubLogin }: { githubLogin: string },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const db = await getRegistryDb();
+      const recipient = await db.collection('users').findOne({ githubLogin });
+      if (!recipient) throw new GraphQLError('User not found');
+      if (recipient._id.toString() === context.userId) {
+        throw new GraphQLError('Cannot send a friend request to yourself');
+      }
+      if (!recipient.settings?.allowFriendInvites) {
+        throw new GraphQLError('This user is not accepting friend requests', { extensions: { code: 'FORBIDDEN' } });
+      }
+      const friendRequest = await sendFriendRequest(new ObjectId(context.userId), recipient._id);
+      return { friendRequest };
+    },
+
+    respondToFriendRequest: async (
+      _parent: unknown,
+      { requestId, accept }: { requestId: string; accept: boolean },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      const newFriendDoc = await respondToFriendRequest(new ObjectId(requestId), accept, new ObjectId(context.userId));
+      const pending = await getPendingRequests(new ObjectId(context.userId));
+      return {
+        deletedRequestId: requestId,
+        newFriend: newFriendDoc ? mapUser(newFriendDoc) : null,
+        notificationCount: pending.length,
+      };
+    },
+
+    removeFriend: async (
+      _parent: unknown,
+      { friendId }: { friendId: string },
+      context: GraphQLContext
+    ) => {
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      await removeFriend(new ObjectId(context.userId), new ObjectId(friendId));
+      return { removedFriendId: friendId };
+    },
+  },
+  FriendRequest: {
+    id: (doc: FriendRequestDocument) => doc._id.toString(),
+    requester: async (doc: FriendRequestDocument) => {
+      return findUserById(doc.requesterId.toString());
+    },
+    recipient: async (doc: FriendRequestDocument) => {
+      return findUserById(doc.recipientId.toString());
+    },
+    createdAt: (doc: FriendRequestDocument) => doc.createdAt.toISOString(),
+  },
+  User: {
+    id: (doc: { _id?: ObjectId; id?: string }) => doc._id?.toString() ?? doc.id,
+    settings: (parent: { settings?: { spotifyPreview?: boolean; allowFriendInvites?: boolean } }) => ({
+      spotifyPreview: parent.settings?.spotifyPreview ?? false,
+      allowFriendInvites: parent.settings?.allowFriendInvites ?? false,
+    }),
+    friendshipStatus: async (user: any, _args: unknown, context: GraphQLContext) => {
+      if (!context.userId) return null;
+      const userIdStr: string = user._id?.toString() ?? user.id;
+      if (!userIdStr) return null;
+      let targetId: ObjectId;
+      try {
+        targetId = new ObjectId(userIdStr);
+      } catch {
+        return null;
+      }
+      const currentId = new ObjectId(context.userId);
+      if (targetId.equals(currentId)) return null;
+      return getFriendshipStatus(currentId, targetId);
     },
   },
   Record: {

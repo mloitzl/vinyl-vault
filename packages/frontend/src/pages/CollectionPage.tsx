@@ -72,7 +72,7 @@ function CollectionPageContent({
   if (searchTerm.trim()) currentFilter.search = searchTerm.trim();
   if (locationFilter.trim()) currentFilter.location = locationFilter.trim();
 
-  const { editingRecord, isLoading, handleEdit, handleDelete, handleSaveEdit, handleCancelEdit } =
+  const { editingRecord, isLoading, canMutate, handleEdit, handleDelete, handleSaveEdit, handleCancelEdit } =
     useRecordActions(Object.keys(currentFilter).length > 0 ? currentFilter : undefined);
 
   const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
@@ -205,26 +205,30 @@ function CollectionPageContent({
             <p className="mt-1 text-sm text-gray-500">
               {searchTerm || locationFilter
                 ? 'Try adjusting your filters or search terms.'
-                : 'Get started by scanning a barcode to add your first vinyl record.'}
+                : canMutate
+                  ? 'Get started by scanning a barcode to add your first vinyl record.'
+                  : 'This collection has no records yet.'}
             </p>
-            <div className="mt-6">
-              <Button
-                onClick={() => navigate('/scan')}
-                variant="primary"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                }
-              >
-                Scan Barcode
-              </Button>
-            </div>
+            {canMutate && (
+              <div className="mt-6">
+                <Button
+                  onClick={() => navigate('/scan')}
+                  variant="primary"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                  }
+                >
+                  Scan Barcode
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <>

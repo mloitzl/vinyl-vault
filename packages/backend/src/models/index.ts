@@ -2,3 +2,4 @@
 export * from './user';
 export * from './record';
 export * from './release';
+export * from './friendRequest';

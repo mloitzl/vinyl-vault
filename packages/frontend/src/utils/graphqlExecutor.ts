@@ -4,6 +4,7 @@
  */
 
 import { getEndpoint } from './apiUrl.js';
+import { getSessionURL } from '../logrocket.js';
 
 interface GraphQLResponse {
   data?: Record<string, any> | null;
@@ -18,9 +19,13 @@ export async function executeGraphQLMutation(
   query: string,
   variables: Record<string, any>
 ): Promise<any> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const lrSession = getSessionURL();
+  if (lrSession) headers['X-LogRocket-Session'] = lrSession;
+
   const response = await fetch(getEndpoint('/graphql'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     credentials: 'include',
     body: JSON.stringify({ query, variables }),
   });

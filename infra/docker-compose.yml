@@ -3,7 +3,7 @@ name: vinylvault
 services:
   mongodb:
     image: mongo:latest
-    command: ["--bind_ip_all"]
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     container_name: vinylvault-mongodb
     restart: unless-stopped
     ports:
@@ -12,6 +12,33 @@ services:
       - mongodb_data:/data/db
     environment:
       - MONGO_INITDB_DATABASE=vinylvault
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - vinylvault-network
+
+  mongo-rs-init:
+    image: mongo:latest
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: >
+      mongosh --host mongodb:27017 --eval "
+        try { rs.status() } catch(e) {
+          rs.initiate({_id:'rs0', members:[{_id:0, host:'mongodb:27017'}]});
+        };
+        var retries = 30;
+        while (retries-- > 0) {
+          try { if (rs.status().myState === 1) { print('PRIMARY ready'); quit(0); } } catch(e) {}
+          sleep(1000);
+        };
+        print('ERROR: did not become PRIMARY'); quit(1);
+      "
+    restart: "no"
     networks:
       - vinylvault-network
 
@@ -30,7 +57,8 @@ services:
       - DISCOGS_API_TOKEN=${DISCOGS_API_TOKEN}
       - MUSICBRAINZ_USER_AGENT=${MUSICBRAINZ_USER_AGENT}
     depends_on:
-      - mongodb
+      mongo-rs-init:
+        condition: service_completed_successfully
     networks:
       - vinylvault-network
 
