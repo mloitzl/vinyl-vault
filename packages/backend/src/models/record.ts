@@ -451,13 +451,17 @@ export class RecordRepository {
     if (filter.country?.length)   matchFilter.releaseCountry = { $in: filter.country };
     const hasMatchFilter = Object.keys(matchFilter).length > 0;
 
-    // The search operator applied to text fields
-    const searchOperator = query.trim()
+    // The search operator applied to text fields.
+    // Only apply fuzzy for queries longer than 4 chars; require first 2 chars
+    // to match exactly to avoid "ZZ" matching half the collection.
+    const trimmed = query.trim();
+    const useFuzzy = trimmed.length > 4;
+    const searchOperator = trimmed
       ? {
           text: {
-            query,
+            query: trimmed,
             path: ['releaseArtist', 'releaseTitle', 'releaseLabel', 'releaseGenre', 'releaseStyle', 'notes'],
-            fuzzy: { maxEdits: 1 },
+            ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
           },
         }
       : { wildcard: { query: '*', path: ['releaseArtist', 'releaseTitle'], allowAnalyzedField: true } };

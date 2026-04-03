@@ -110,15 +110,17 @@ function ActiveFilters({
 function SearchResults({
   query,
   filter,
+  pageSize,
   onFacetsChange,
   onLoadMore,
 }: {
   query: string;
   filter: RecordSearchFilter;
+  pageSize: number;
   onFacetsChange: (facets: Facets) => void;
-  onLoadMore: (cursor: string | null | undefined) => void;
+  onLoadMore: () => void;
 }) {
-  const data = useSearchRecordsQuery({ query, first: 20, filter });
+  const data = useSearchRecordsQuery({ query, first: pageSize, filter });
   const { edges, pageInfo, totalCount, facets } = data.searchRecords;
 
   const currentFacets = facets as unknown as Facets;
@@ -153,7 +155,7 @@ function SearchResults({
       {pageInfo.hasNextPage && (
         <div className="mt-6 text-center">
           <button
-            onClick={() => onLoadMore(pageInfo.endCursor)}
+            onClick={onLoadMore}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
             Load more
@@ -173,6 +175,7 @@ export function SearchPage() {
   const [filter, setFilter] = useState<RecordSearchFilter>({});
   const [facets, setFacets] = useState<Facets>({ genre: [], format: [], condition: [], location: [], country: [] });
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(20);
   const [, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -184,6 +187,7 @@ export function SearchPage() {
       startTransition(() => {
         setCommittedQuery(value);
         setFilter({});
+        setPageSize(20);
       });
     }, 350);
   }, []);
@@ -196,6 +200,7 @@ export function SearchPage() {
 
   const toggleFacet = useCallback((dim: keyof RecordSearchFilter, value: string) => {
     startTransition(() => {
+      setPageSize(20);
       setFilter((prev) => {
         const current = prev[dim] ?? [];
         const next = current.includes(value)
@@ -208,6 +213,7 @@ export function SearchPage() {
 
   const removeFacet = useCallback((dim: keyof RecordSearchFilter, value: string) => {
     startTransition(() => {
+      setPageSize(20);
       setFilter((prev) => {
         const next = (prev[dim] ?? []).filter((v) => v !== value);
         return { ...prev, [dim]: next.length > 0 ? next : undefined };
@@ -216,14 +222,11 @@ export function SearchPage() {
   }, []);
 
   const clearFilters = useCallback(() => {
-    startTransition(() => setFilter({}));
+    startTransition(() => { setFilter({}); setPageSize(20); });
   }, []);
 
-  const handleLoadMore = useCallback((_cursor: string | null | undefined) => {
-    // Load-more with cursor pagination — restart query with after cursor.
-    // For simplicity we expand the page size rather than appending; a full
-    // usePaginationFragment approach would require a connection directive on
-    // searchRecords (not implemented to keep the schema simple).
+  const handleLoadMore = useCallback(() => {
+    startTransition(() => setPageSize((n) => n + 20));
   }, []);
 
   if (!user) {
@@ -344,6 +347,7 @@ export function SearchPage() {
                 <SearchResults
                   query={committedQuery}
                   filter={filter}
+                  pageSize={pageSize}
                   onFacetsChange={setFacets}
                   onLoadMore={handleLoadMore}
                 />
