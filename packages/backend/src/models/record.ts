@@ -440,13 +440,16 @@ export class RecordRepository {
   ): Promise<SearchRecordsResult> {
     const collection = this.db.collection<RecordDocument>('records');
 
-    // Build compound filter clauses for active facet selections
-    const filterClauses: unknown[] = [];
-    if (filter.genre?.length)     filterClauses.push({ in: { path: 'releaseGenre',   value: filter.genre } });
-    if (filter.format?.length)    filterClauses.push({ in: { path: 'releaseFormat',  value: filter.format } });
-    if (filter.condition?.length) filterClauses.push({ in: { path: 'condition',      value: filter.condition } });
-    if (filter.location?.length)  filterClauses.push({ in: { path: 'location',       value: filter.location } });
-    if (filter.country?.length)   filterClauses.push({ in: { path: 'releaseCountry', value: filter.country } });
+    // Build a post-search $match for active facet selections.
+    // stringFacet fields can't be used as filter operators inside $search,
+    // so we apply them as a regular MongoDB $match after $search.
+    const matchFilter: Record<string, unknown> = {};
+    if (filter.genre?.length)     matchFilter.releaseGenre   = { $in: filter.genre };
+    if (filter.format?.length)    matchFilter.releaseFormat  = { $in: filter.format };
+    if (filter.condition?.length) matchFilter.condition      = { $in: filter.condition };
+    if (filter.location?.length)  matchFilter.location       = { $in: filter.location };
+    if (filter.country?.length)   matchFilter.releaseCountry = { $in: filter.country };
+    const hasMatchFilter = Object.keys(matchFilter).length > 0;
 
     // The search operator applied to text fields
     const searchOperator = query.trim()
@@ -463,12 +466,7 @@ export class RecordRepository {
       $search: {
         index: 'records_search',
         facet: {
-          operator: {
-            compound: {
-              must:   [searchOperator],
-              filter: filterClauses,
-            },
-          },
+          operator: searchOperator,
           facets: {
             genreFacet:     { type: 'string', path: 'releaseGenre',   numBuckets: 15 },
             formatFacet:    { type: 'string', path: 'releaseFormat',  numBuckets: 10 },
@@ -496,6 +494,7 @@ export class RecordRepository {
 
     const pipeline: unknown[] = [
       searchStage,
+      ...(hasMatchFilter ? [{ $match: matchFilter }] : []),
       { $skip: skip },
       { $limit: limit + 1 },
       {
