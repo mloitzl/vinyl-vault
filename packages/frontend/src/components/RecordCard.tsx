@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { TrackList } from './TrackList';
 
 type Track = {
@@ -44,14 +44,41 @@ export type Record = {
   owner: Owner;
 };
 
+/** Highlight occurrences of `terms` inside `text` with a yellow <mark>. */
+function hl(text: string, terms: string[]): ReactNode {
+  if (!terms.length) return text;
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const parts = text.split(regex);
+  if (parts.length === 1) return text;
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 === 1
+          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5 not-italic">{p}</mark>
+          : p
+      )}
+    </>
+  );
+}
+
 type RecordCardProps = {
   record: Record;
   onEdit?: (record: Record) => void;
   onDelete?: (record: Record) => void;
+  /** When provided, matching terms are highlighted in title, artist, and track titles. */
+  terms?: string[];
 };
 
-export function RecordCard({ record, onEdit, onDelete }: RecordCardProps) {
+export function RecordCard({ record, onEdit, onDelete, terms = [] }: RecordCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const matchingTracks = terms.length
+    ? (record.release.trackList ?? []).filter((t) =>
+        terms.some((term) => t.title.toLowerCase().includes(term.toLowerCase()))
+      )
+    : [];
+
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
@@ -85,8 +112,8 @@ export function RecordCard({ record, onEdit, onDelete }: RecordCardProps) {
 
           {/* Release Info */}
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg text-gray-900 truncate">{record.release.title}</h3>
-            <p className="text-gray-600 truncate">{record.release.artist}</p>
+            <h3 className="font-semibold text-lg text-gray-900 truncate">{hl(record.release.title, terms)}</h3>
+            <p className="text-gray-600 truncate">{hl(record.release.artist, terms)}</p>
             <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-500">
               {record.release.year && <span>{record.release.year}</span>}
               {record.release.format && (
@@ -102,6 +129,17 @@ export function RecordCard({ record, onEdit, onDelete }: RecordCardProps) {
                 </>
               )}
             </div>
+
+            {/* Matched tracks summary (shown when search terms are active and card is not expanded) */}
+            {!isExpanded && matchingTracks.length > 0 && (
+              <div className="mt-2 space-y-0.5">
+                {matchingTracks.map((t, i) => (
+                  <p key={i} className="text-xs text-gray-500 truncate">
+                    <span className="mr-1">🎵</span>{hl(t.title, terms)}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

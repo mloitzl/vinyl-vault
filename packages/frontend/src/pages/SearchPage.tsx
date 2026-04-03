@@ -1,7 +1,7 @@
-import { Suspense, useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchRecordsQuery, type RecordSearchFilter } from '../hooks/relay';
-import { type Record as VVRecord } from '../components/RecordCard';
+import { RecordCard, type Record as VVRecord } from '../components/RecordCard';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 // ---------- Types ----------
@@ -21,28 +21,23 @@ interface Facets {
   country:   FacetBucket[];
 }
 
-// ---------- Client-side highlighting ----------
+// ---------- Helpers ----------
 
 /**
- * Extract positive search terms from a query string (phrases, +must, plain words).
- * Skips -mustNot terms since we don't want to highlight excluded words.
+ * Extract positive terms from a query string for client-side highlighting.
+ * Phrases (quoted), +must, and plain words are included; -mustNot terms are skipped.
  */
 function extractSearchTerms(query: string): string[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
-
   const terms: string[] = [];
   let i = 0;
-
   while (i < trimmed.length) {
     while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
     if (i >= trimmed.length) break;
-
     const ch = trimmed[i];
-
     if (ch === '"' || ch === "'") {
-      const quote = ch;
-      i++;
+      const quote = ch; i++;
       const start = i;
       while (i < trimmed.length && trimmed[i] !== quote) i++;
       const phrase = trimmed.slice(start, i);
@@ -55,8 +50,8 @@ function extractSearchTerms(query: string): string[] {
       const term = trimmed.slice(start, i);
       if (term) terms.push(term);
     } else if (ch === '-') {
-      i++; // skip mustNot terms — don't highlight them
-      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+      i++;
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++; // skip mustNot
     } else {
       const start = i;
       while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
@@ -64,83 +59,7 @@ function extractSearchTerms(query: string): string[] {
       if (term) terms.push(term);
     }
   }
-
   return terms;
-}
-
-/** Split text into alternating [non-match, match, non-match, …] segments. */
-function applyHighlights(text: string, terms: string[]): ReactNode {
-  if (!text || terms.length === 0) return text;
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
-  const parts = text.split(regex);
-  if (parts.length === 1) return text;
-  return (
-    <>
-      {parts.map((part, i) =>
-        i % 2 === 1
-          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5 not-italic">{part}</mark>
-          : part
-      )}
-    </>
-  );
-}
-
-// ---------- SearchResultCard ----------
-
-function SearchResultCard({ record, terms }: { record: VVRecord; terms: string[] }) {
-  const matchingTracks = record.release.trackList?.filter((t) =>
-    terms.some((term) => t.title.toLowerCase().includes(term.toLowerCase()))
-  ) ?? [];
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
-      <div className="flex gap-4">
-        {/* Cover */}
-        {record.release.coverImageUrl ? (
-          <img
-            src={record.release.coverImageUrl}
-            alt={`${record.release.title} cover`}
-            className="w-16 h-16 rounded object-cover flex-shrink-0"
-          />
-        ) : (
-          <div className="w-16 h-16 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
-            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-            </svg>
-          </div>
-        )}
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 truncate">
-            {applyHighlights(record.release.title, terms)}
-          </h3>
-          <p className="text-sm text-gray-600 truncate">
-            {applyHighlights(record.release.artist, terms)}
-          </p>
-          <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-            {record.release.year && <span>{record.release.year}</span>}
-            {record.release.format && <><span>·</span><span>{record.release.format}</span></>}
-            {record.release.country && <><span>·</span><span>{record.release.country}</span></>}
-          </div>
-
-          {/* Matched tracks */}
-          {matchingTracks.length > 0 && (
-            <div className="mt-2 space-y-0.5">
-              {matchingTracks.map((t, i) => (
-                <p key={i} className="text-xs text-gray-500 truncate">
-                  <span className="mr-1">🎵</span>
-                  {applyHighlights(t.title, terms)}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ---------- Sub-components ----------
@@ -256,8 +175,7 @@ function SearchResults({
   const items = edges.map((e) => e.node as unknown as VVRecord);
   const terms = extractSearchTerms(query);
 
-  if (items.length === 0) {
-    return (
+  if (items.length === 0) {    return (
       <p className="text-center text-gray-400 text-sm py-16">
         <span>No records found for &ldquo;{query}&rdquo;</span>
         {Object.values(filter).some((v) => v && (v as string[]).length > 0) && (
@@ -274,7 +192,7 @@ function SearchResults({
       </p>
       <div className="space-y-3">
         {items.map((record) => (
-          <SearchResultCard key={record.id} record={record} terms={terms} />
+          <RecordCard key={record.id} record={record} terms={terms} />
         ))}
       </div>
       {pageInfo.hasNextPage && (
