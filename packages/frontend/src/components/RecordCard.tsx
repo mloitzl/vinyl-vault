@@ -236,7 +236,7 @@ export function RecordCard({ record, onEdit, onDelete, terms = [] }: RecordCardP
         {/* Notes (Always visible if set) */}
         {record.notes && (
           <div className="mt-3 p-3 bg-gray-50 rounded text-sm text-gray-700">
-            <strong>Notes:</strong> {record.notes}
+            <strong>Notes:</strong> {hl(record.notes, terms)}
           </div>
         )}
       </div>
@@ -252,7 +252,7 @@ export function RecordCard({ record, onEdit, onDelete, terms = [] }: RecordCardP
                 {record.release.label && (
                   <div>
                     <dt className="inline text-gray-500">Label: </dt>
-                    <dd className="inline text-gray-900">{record.release.label}</dd>
+                    <dd className="inline text-gray-900">{hl(record.release.label, terms)}</dd>
                   </div>
                 )}
                 {record.release.barcode && (
@@ -286,12 +286,12 @@ export function RecordCard({ record, onEdit, onDelete, terms = [] }: RecordCardP
                 <div className="flex flex-wrap gap-1">
                   {record.release.genre?.map((g) => (
                     <span key={g} className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">
-                      {g}
+                      {hl(g, terms)}
                     </span>
                   ))}
                   {record.release.style?.map((s) => (
                     <span key={s} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                      {s}
+                      {hl(s, terms)}
                     </span>
                   ))}
                 </div>
@@ -301,7 +301,7 @@ export function RecordCard({ record, onEdit, onDelete, terms = [] }: RecordCardP
             {/* Track List */}
             {record.release.trackList && record.release.trackList.length > 0 && (
               <div className="md:col-span-2">
-                <TrackList tracks={record.release.trackList} artist={record.release.artist} />
+                <TrackList tracks={record.release.trackList} artist={record.release.artist} terms={terms} />
               </div>
             )}
 
