@@ -56,16 +56,19 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
   let updated = 0;
   let skipped = 0;
 
-  for await (const record of records.find({}, { projection: { _id: 1, releaseId: 1, releaseArtist: 1 } })) {
-    // Skip if already populated (idempotency fast-path)
-    if (record.releaseArtist !== undefined) {
+  for await (const record of records.find({}, { projection: { _id: 1, releaseId: 1, releaseArtist: 1, releaseTrackTitles: 1 } })) {
+    // Skip if already fully populated (idempotency fast-path).
+    // releaseTrackTitles is checked separately so records created before this
+    // field was introduced (which have releaseArtist but no releaseTrackTitles)
+    // are still updated.
+    if (record.releaseArtist !== undefined && record.releaseTrackTitles !== undefined) {
       skipped++;
       continue;
     }
 
     const release = await releases.findOne(
       { _id: record.releaseId },
-      { projection: { artist: 1, title: 1, year: 1, format: 1, genre: 1, style: 1, label: 1, country: 1 } }
+      { projection: { artist: 1, title: 1, year: 1, format: 1, genre: 1, style: 1, label: 1, country: 1, trackList: 1 } }
     );
 
     if (!release) {
@@ -75,14 +78,15 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
     }
 
     const searchFields = {
-      releaseArtist:  release.artist,
-      releaseTitle:   release.title,
-      releaseYear:    release.year,
-      releaseFormat:  release.format,
-      releaseGenre:   release.genre,
-      releaseStyle:   release.style,
-      releaseLabel:   release.label,
-      releaseCountry: release.country,
+      releaseArtist:      release.artist,
+      releaseTitle:       release.title,
+      releaseYear:        release.year,
+      releaseFormat:      release.format,
+      releaseGenre:       release.genre,
+      releaseStyle:       release.style,
+      releaseLabel:       release.label,
+      releaseCountry:     release.country,
+      releaseTrackTitles: release.trackList?.map(t => t.title).filter(Boolean) ?? [],
     };
 
     if (!dryRun) {

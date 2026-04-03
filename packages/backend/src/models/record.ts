@@ -25,6 +25,7 @@ export interface RecordDocument {
   releaseStyle?: string[];
   releaseLabel?: string;
   releaseCountry?: string;
+  releaseTrackTitles?: string[];
 }
 
 /** Subset of release fields copied into a record document for search/faceting. */
@@ -37,6 +38,7 @@ export interface RecordSearchFields {
   releaseStyle?: string[];
   releaseLabel?: string;
   releaseCountry?: string;
+  releaseTrackTitles?: string[];
 }
 
 export interface CreateRecordInput {
@@ -595,8 +597,9 @@ export class RecordRepository {
                 { type: 'string',      analyzer: 'lucene.standard' },
                 { type: 'stringFacet' },
               ],
-              releaseLabel:  { type: 'string', analyzer: 'lucene.standard' },
-              notes:         { type: 'string', analyzer: 'lucene.standard' },
+              releaseLabel:       { type: 'string', analyzer: 'lucene.standard' },
+              notes:              { type: 'string', analyzer: 'lucene.standard' },
+              releaseTrackTitles: { type: 'string', analyzer: 'lucene.standard' },
               // Genre and style: both searchable (string) and facetable (stringFacet)
               releaseGenre: [
                 { type: 'string',      analyzer: 'lucene.standard' },
@@ -650,7 +653,7 @@ export class RecordRepository {
 
 const SEARCH_TEXT_PATHS = [
   'releaseArtist', 'releaseTitle', 'releaseLabel',
-  'releaseGenre', 'releaseStyle', 'notes',
+  'releaseGenre', 'releaseStyle', 'releaseTrackTitles', 'notes',
 ];
 
 const WILDCARD_ALL = {

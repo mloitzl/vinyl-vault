@@ -41,14 +41,17 @@ export async function createRecord(db: Db, input: CreateRecordInput): Promise<Re
 
   // Build embedded search fields from the release document
   const searchFields: RecordSearchFields = {
-    releaseArtist:  release.artist,
-    releaseTitle:   release.title,
-    releaseYear:    release.year,
-    releaseFormat:  release.format,
-    releaseGenre:   release.genre,
-    releaseStyle:   release.style,
-    releaseLabel:   release.label,
-    releaseCountry: release.country,
+    releaseArtist:      release.artist,
+    releaseTitle:       release.title,
+    releaseYear:        release.year,
+    releaseFormat:      release.format,
+    releaseGenre:       release.genre,
+    releaseStyle:       release.style,
+    releaseLabel:       release.label,
+    releaseCountry:     release.country,
+    releaseTrackTitles: release.trackList
+      ?.map((t: { title: string }) => t.title)
+      .filter(Boolean),
   };
 
   // Use the actual MongoDB _id for the releaseId in the record
