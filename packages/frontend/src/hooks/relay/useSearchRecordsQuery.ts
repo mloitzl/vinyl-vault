@@ -2,11 +2,13 @@ import { graphql, useLazyLoadQuery } from 'react-relay';
 import type { useSearchRecordsQuery as UseSearchRecordsQueryType } from '../../__generated__/useSearchRecordsQuery.graphql';
 
 export interface RecordSearchFilter {
-  genre?: string[];
-  format?: string[];
+  artist?:    string[];
+  title?:     string[];
+  genre?:     string[];
+  format?:    string[];
   condition?: string[];
-  location?: string[];
-  country?: string[];
+  location?:  string[];
+  country?:   string[];
 }
 
 const SearchRecordsQuery = graphql`
@@ -62,6 +64,8 @@ const SearchRecordsQuery = graphql`
       }
       totalCount
       facets {
+        artist    { value count }
+        title     { value count }
         genre     { value count }
         format    { value count }
         condition { value count }

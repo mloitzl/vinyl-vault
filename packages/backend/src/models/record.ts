@@ -72,6 +72,8 @@ export interface RecordFilter {
 }
 
 export interface RecordSearchFilter {
+  artist?:    string[];
+  title?:     string[];
   genre?:     string[];
   format?:    string[];
   condition?: string[];
@@ -85,6 +87,8 @@ export interface SearchFacetBucket {
 }
 
 export interface SearchFacets {
+  artist:    SearchFacetBucket[];
+  title:     SearchFacetBucket[];
   genre:     SearchFacetBucket[];
   format:    SearchFacetBucket[];
   condition: SearchFacetBucket[];
@@ -408,7 +412,7 @@ export class RecordRepository {
     filter: RecordSearchFilter = {},
     pagination: { first?: number; after?: string } = {}
   ): Promise<SearchRecordsResult> {
-    const emptyFacets: SearchFacets = { genre: [], format: [], condition: [], location: [], country: [] };
+    const emptyFacets: SearchFacets = { artist: [], title: [], genre: [], format: [], condition: [], location: [], country: [] };
     const limit = Math.min(pagination.first ?? 20, 100);
 
     try {
@@ -444,6 +448,8 @@ export class RecordRepository {
     // stringFacet fields can't be used as filter operators inside $search,
     // so we apply them as a regular MongoDB $match after $search.
     const matchFilter: Record<string, unknown> = {};
+    if (filter.artist?.length)    matchFilter.releaseArtist  = { $in: filter.artist };
+    if (filter.title?.length)     matchFilter.releaseTitle   = { $in: filter.title };
     if (filter.genre?.length)     matchFilter.releaseGenre   = { $in: filter.genre };
     if (filter.format?.length)    matchFilter.releaseFormat  = { $in: filter.format };
     if (filter.condition?.length) matchFilter.condition      = { $in: filter.condition };
@@ -472,6 +478,8 @@ export class RecordRepository {
         facet: {
           operator: searchOperator,
           facets: {
+            artistFacet:    { type: 'string', path: 'releaseArtist',  numBuckets: 20 },
+            titleFacet:     { type: 'string', path: 'releaseTitle',   numBuckets: 20 },
             genreFacet:     { type: 'string', path: 'releaseGenre',   numBuckets: 15 },
             formatFacet:    { type: 'string', path: 'releaseFormat',  numBuckets: 10 },
             conditionFacet: { type: 'string', path: 'condition',      numBuckets: 10 },
@@ -537,6 +545,8 @@ export class RecordRepository {
       (meta[facetKey]?.buckets ?? []).map((b: any) => ({ value: b._id as string, count: b.count as number }));
 
     const facets: SearchFacets = {
+      artist:    toBuckets('artistFacet'),
+      title:     toBuckets('titleFacet'),
       genre:     toBuckets('genreFacet'),
       format:    toBuckets('formatFacet'),
       condition: toBuckets('conditionFacet'),
@@ -586,9 +596,15 @@ export class RecordRepository {
           mappings: {
             dynamic: false,
             fields: {
-              // Full-text search fields
-              releaseArtist: { type: 'string', analyzer: 'lucene.standard' },
-              releaseTitle:  { type: 'string', analyzer: 'lucene.standard' },
+              // Full-text search + facet fields (dual-mapped)
+              releaseArtist: [
+                { type: 'string',      analyzer: 'lucene.standard' },
+                { type: 'stringFacet' },
+              ],
+              releaseTitle: [
+                { type: 'string',      analyzer: 'lucene.standard' },
+                { type: 'stringFacet' },
+              ],
               releaseLabel:  { type: 'string', analyzer: 'lucene.standard' },
               notes:         { type: 'string', analyzer: 'lucene.standard' },
               // Genre and style: both searchable (string) and facetable (stringFacet)

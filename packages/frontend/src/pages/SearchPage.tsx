@@ -12,6 +12,8 @@ interface FacetBucket {
 }
 
 interface Facets {
+  artist:    FacetBucket[];
+  title:     FacetBucket[];
   genre:     FacetBucket[];
   format:    FacetBucket[];
   condition: FacetBucket[];
@@ -73,7 +75,7 @@ function ActiveFilters({
 }) {
   const chips: { dim: keyof RecordSearchFilter; value: string; label: string }[] = [];
   const LABELS: { [K in keyof RecordSearchFilter]: string } = {
-    genre: 'Genre', format: 'Format', condition: 'Condition', location: 'Location', country: 'Country',
+    artist: 'Artist', title: 'Album', genre: 'Genre', format: 'Format', condition: 'Condition', location: 'Location', country: 'Country',
   };
   for (const dim of Object.keys(filter) as (keyof RecordSearchFilter)[]) {
     for (const v of filter[dim] ?? []) {
@@ -173,7 +175,7 @@ export function SearchPage() {
   const [inputValue, setInputValue] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
   const [filter, setFilter] = useState<RecordSearchFilter>({});
-  const [facets, setFacets] = useState<Facets>({ genre: [], format: [], condition: [], location: [], country: [] });
+  const [facets, setFacets] = useState<Facets>({ artist: [], title: [], genre: [], format: [], condition: [], location: [], country: [] });
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(20);
   const [, startTransition] = useTransition();
@@ -242,6 +244,8 @@ export function SearchPage() {
   const hasActiveFilters = Object.values(filter).some((v) => v && (v as string[]).length > 0);
 
   const hasFacets =
+    facets.artist.length > 0 ||
+    facets.title.length > 0 ||
     facets.genre.length > 0 ||
     facets.format.length > 0 ||
     facets.condition.length > 0 ||
@@ -250,6 +254,8 @@ export function SearchPage() {
 
   const facetPanel = (
     <div className="space-y-5">
+      <FacetGroup title="Artist"    buckets={facets.artist}    selected={filter.artist    ?? []} onToggle={(v) => toggleFacet('artist',    v)} />
+      <FacetGroup title="Album"     buckets={facets.title}     selected={filter.title     ?? []} onToggle={(v) => toggleFacet('title',     v)} />
       <FacetGroup title="Genre"     buckets={facets.genre}     selected={filter.genre     ?? []} onToggle={(v) => toggleFacet('genre',     v)} />
       <FacetGroup title="Format"    buckets={facets.format}    selected={filter.format    ?? []} onToggle={(v) => toggleFacet('format',    v)} />
       <FacetGroup title="Condition" buckets={facets.condition} selected={filter.condition ?? []} onToggle={(v) => toggleFacet('condition', v)} />
