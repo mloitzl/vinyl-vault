@@ -71,6 +71,39 @@ export interface RecordFilter {
   search?: string;
 }
 
+export interface RecordSearchFilter {
+  genre?:     string[];
+  format?:    string[];
+  condition?: string[];
+  location?:  string[];
+  country?:   string[];
+}
+
+export interface SearchFacetBucket {
+  value: string;
+  count: number;
+}
+
+export interface SearchFacets {
+  genre:     SearchFacetBucket[];
+  format:    SearchFacetBucket[];
+  condition: SearchFacetBucket[];
+  location:  SearchFacetBucket[];
+  country:   SearchFacetBucket[];
+}
+
+export interface SearchRecordsResult {
+  edges: Array<{ cursor: string; node: RecordDocument }>;
+  pageInfo: {
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+    startCursor?: string;
+    endCursor?: string;
+  };
+  totalCount: number;
+  facets: SearchFacets;
+}
+
 export interface PaginationOptions {
   first?: number;
   after?: string;
@@ -363,6 +396,175 @@ export class RecordRepository {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Full-text search using Atlas Search with faceted refiners.
+   * Falls back to a regex findMany() with empty facets on non-Atlas clusters.
+   */
+  async search(
+    userId: string,
+    query: string,
+    filter: RecordSearchFilter = {},
+    pagination: { first?: number; after?: string } = {}
+  ): Promise<SearchRecordsResult> {
+    const emptyFacets: SearchFacets = { genre: [], format: [], condition: [], location: [], country: [] };
+    const limit = Math.min(pagination.first ?? 20, 100);
+
+    try {
+      return await this._atlasSearch(userId, query, filter, limit, pagination.after);
+    } catch (err: any) {
+      // Atlas Search not available on this cluster — fall back to regex search.
+      if (
+        err?.codeName === 'AtlasError' ||
+        err?.message?.includes('$search') ||
+        err?.message?.includes('search index')
+      ) {
+        logger.warn({ err }, 'Atlas Search unavailable, falling back to regex search');
+        const fallback = await this.findMany(
+          { userId, search: query, genre: filter.genre?.[0], format: filter.format?.[0] },
+          { first: limit, after: pagination.after }
+        );
+        return { ...fallback, facets: emptyFacets };
+      }
+      throw err;
+    }
+  }
+
+  private async _atlasSearch(
+    userId: string,
+    query: string,
+    filter: RecordSearchFilter,
+    limit: number,
+    after?: string
+  ): Promise<SearchRecordsResult> {
+    const collection = this.db.collection<RecordDocument>('records');
+    const userObjectId = new ObjectId(userId);
+
+    // Build compound filter clauses for active facet selections
+    const filterClauses: unknown[] = [
+      { equals: { path: 'userId', value: userObjectId } },
+    ];
+    if (filter.genre?.length)     filterClauses.push({ in: { path: 'releaseGenre',   value: filter.genre } });
+    if (filter.format?.length)    filterClauses.push({ in: { path: 'releaseFormat',  value: filter.format } });
+    if (filter.condition?.length) filterClauses.push({ in: { path: 'condition',      value: filter.condition } });
+    if (filter.location?.length)  filterClauses.push({ in: { path: 'location',       value: filter.location } });
+    if (filter.country?.length)   filterClauses.push({ in: { path: 'releaseCountry', value: filter.country } });
+
+    // The search operator applied to text fields
+    const searchOperator = query.trim()
+      ? {
+          text: {
+            query,
+            path: ['releaseArtist', 'releaseTitle', 'releaseLabel', 'notes'],
+            fuzzy: { maxEdits: 1 },
+          },
+        }
+      : { wildcard: { query: '*', path: ['releaseArtist', 'releaseTitle'], allowAnalyzedField: true } };
+
+    const searchStage = {
+      $search: {
+        index: 'records_search',
+        facet: {
+          operator: {
+            compound: {
+              must:   [searchOperator],
+              filter: filterClauses,
+            },
+          },
+          facets: {
+            genreFacet:     { type: 'string', path: 'releaseGenre',   numBuckets: 15 },
+            formatFacet:    { type: 'string', path: 'releaseFormat',  numBuckets: 10 },
+            conditionFacet: { type: 'string', path: 'condition',      numBuckets: 10 },
+            locationFacet:  { type: 'string', path: 'location',       numBuckets: 20 },
+            countryFacet:   { type: 'string', path: 'releaseCountry', numBuckets: 20 },
+          },
+        },
+      },
+    };
+
+    // Resolve cursor offset — Atlas Search does not support keyset pagination;
+    // we use skip/limit which is acceptable for typical collection sizes.
+    let skip = 0;
+    if (after) {
+      // after is a base64-encoded offset ("cursor:N")
+      try {
+        const decoded = Buffer.from(after, 'base64').toString('utf8');
+        const match = decoded.match(/^cursor:(\d+)$/);
+        if (match) skip = parseInt(match[1], 10);
+      } catch {
+        // ignore invalid cursor
+      }
+    }
+
+    const pipeline: unknown[] = [
+      searchStage,
+      { $skip: skip },
+      { $limit: limit + 1 },
+      {
+        $project: {
+          _id: 1,
+          releaseId: 1,
+          userId: 1,
+          purchaseDate: 1,
+          price: 1,
+          condition: 1,
+          location: 1,
+          notes: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          releaseArtist: 1,
+          releaseTitle: 1,
+          releaseYear: 1,
+          releaseFormat: 1,
+          releaseGenre: 1,
+          releaseStyle: 1,
+          releaseLabel: 1,
+          releaseCountry: 1,
+          searchMeta: '$$SEARCH_META',
+        },
+      },
+    ];
+
+    const rows = await collection.aggregate<RecordDocument & { searchMeta?: any }>(pipeline as any[]).toArray();
+
+    const hasNextPage = rows.length > limit;
+    const pageItems = rows.slice(0, limit);
+
+    // Extract facet metadata from the first document (Atlas attaches it to every row)
+    const meta = rows[0]?.searchMeta?.facet ?? {};
+    const toBuckets = (facetKey: string): SearchFacetBucket[] =>
+      (meta[facetKey]?.buckets ?? []).map((b: any) => ({ value: b._id as string, count: b.count as number }));
+
+    const facets: SearchFacets = {
+      genre:     toBuckets('genreFacet'),
+      format:    toBuckets('formatFacet'),
+      condition: toBuckets('conditionFacet'),
+      location:  toBuckets('locationFacet'),
+      country:   toBuckets('countryFacet'),
+    };
+
+    // totalCount is stored in searchMeta.count.lowerBound (Atlas provides a lower bound estimate)
+    const totalCount: number = rows[0]?.searchMeta?.count?.lowerBound ?? pageItems.length;
+
+    const makeCursor = (offset: number) => Buffer.from(`cursor:${offset}`).toString('base64');
+
+    const edges = pageItems.map((record, i) => ({
+      cursor: makeCursor(skip + i + 1),
+      node: record,
+    }));
+
+    return {
+      edges,
+      pageInfo: {
+        hasNextPage,
+        hasPreviousPage: skip > 0,
+        startCursor: edges[0]?.cursor,
+        endCursor:   edges[edges.length - 1]?.cursor,
+      },
+      totalCount,
+      facets,
+    };
   }
 
   /**
