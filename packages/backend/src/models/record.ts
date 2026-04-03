@@ -457,20 +457,10 @@ export class RecordRepository {
     if (filter.country?.length)   matchFilter.releaseCountry = { $in: filter.country };
     const hasMatchFilter = Object.keys(matchFilter).length > 0;
 
-    // The search operator applied to text fields.
-    // Only apply fuzzy for queries longer than 4 chars; require first 2 chars
-    // to match exactly to avoid "ZZ" matching half the collection.
+    // Build the Atlas Search text operator from the query string.
+    // Supports plain text (fuzzy), "quoted phrases", +must, and -mustNot syntax.
     const trimmed = query.trim();
-    const useFuzzy = trimmed.length > 4;
-    const searchOperator = trimmed
-      ? {
-          text: {
-            query: trimmed,
-            path: ['releaseArtist', 'releaseTitle', 'releaseLabel', 'releaseGenre', 'releaseStyle', 'notes'],
-            ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
-          },
-        }
-      : { wildcard: { query: '*', path: ['releaseArtist', 'releaseTitle'], allowAnalyzedField: true } };
+    const searchOperator = buildAtlasSearchOperator(trimmed);
 
     const searchStage = {
       $search: {
@@ -653,3 +643,129 @@ export class RecordRepository {
     await collection.createIndex({ location: 1 }, { name: 'record_location' });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Atlas Search query builder
+// ---------------------------------------------------------------------------
+
+const SEARCH_TEXT_PATHS = [
+  'releaseArtist', 'releaseTitle', 'releaseLabel',
+  'releaseGenre', 'releaseStyle', 'notes',
+];
+
+const WILDCARD_ALL = {
+  wildcard: { query: '*', path: ['releaseArtist', 'releaseTitle'], allowAnalyzedField: true },
+};
+
+/**
+ * Build an Atlas Search operator from a user-supplied query string.
+ *
+ * Supported syntax:
+ *   "phrase"  – exact phrase (words in order)
+ *   +term     – term MUST appear
+ *   -term     – term MUST NOT appear
+ *   term      – plain word (at least one should match, with fuzzy for long tokens)
+ *
+ * Plain queries (no quotes / +/-) are passed straight through as a fuzzy
+ * `text` operator so behaviour is identical to before this change.
+ */
+export function buildAtlasSearchOperator(rawQuery: string): unknown {
+  const trimmed = rawQuery.trim();
+  if (!trimmed) return WILDCARD_ALL;
+
+  // Only enter advanced-parse mode when the query actually uses special syntax.
+  // This keeps plain queries exactly as before (single text operator + fuzzy).
+  const isAdvanced = /["']/.test(trimmed) || /(?:^|\s)[+-]\S/.test(trimmed);
+  if (!isAdvanced) {
+    const useFuzzy = trimmed.length > 4;
+    return {
+      text: {
+        query: trimmed,
+        path: SEARCH_TEXT_PATHS,
+        ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
+      },
+    };
+  }
+
+  const must: unknown[] = [];
+  const should: unknown[] = [];
+  const mustNot: unknown[] = [];
+
+  let i = 0;
+  while (i < trimmed.length) {
+    // skip whitespace
+    while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
+    if (i >= trimmed.length) break;
+
+    const ch = trimmed[i];
+
+    if (ch === '"' || ch === "'") {
+      // Quoted phrase → exact phrase that MUST appear
+      const quote = ch;
+      i++;
+      const start = i;
+      while (i < trimmed.length && trimmed[i] !== quote) i++;
+      const phrase = trimmed.slice(start, i);
+      if (i < trimmed.length) i++; // skip closing quote
+      if (phrase) must.push({ phrase: { query: phrase, path: SEARCH_TEXT_PATHS } });
+
+    } else if (ch === '+') {
+      // +term → MUST appear
+      i++;
+      const start = i;
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+      const term = trimmed.slice(start, i);
+      if (term) {
+        const useFuzzy = term.length > 4;
+        must.push({
+          text: {
+            query: term,
+            path: SEARCH_TEXT_PATHS,
+            ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
+          },
+        });
+      }
+
+    } else if (ch === '-') {
+      // -term → MUST NOT appear (only when - is at a token boundary)
+      i++;
+      const start = i;
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+      const term = trimmed.slice(start, i);
+      if (term) mustNot.push({ text: { query: term, path: SEARCH_TEXT_PATHS } });
+
+    } else {
+      // Plain word → SHOULD (boosts relevance, at least one required when no must)
+      const start = i;
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+      const term = trimmed.slice(start, i);
+      if (term) {
+        const useFuzzy = term.length > 4;
+        should.push({
+          text: {
+            query: term,
+            path: SEARCH_TEXT_PATHS,
+            ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
+          },
+        });
+      }
+    }
+  }
+
+  if (must.length === 0 && should.length === 0 && mustNot.length === 0) {
+    return WILDCARD_ALL;
+  }
+
+  // mustNot-only queries need a match-all anchor
+  if (must.length === 0 && should.length === 0) {
+    return { compound: { must: [WILDCARD_ALL], mustNot } };
+  }
+
+  const compound: Record<string, unknown[]> = {};
+  if (must.length > 0)   compound.must    = must;
+  if (should.length > 0) compound.should  = should;
+  if (mustNot.length > 0) compound.mustNot = mustNot;
+
+  return { compound };
+}
+
