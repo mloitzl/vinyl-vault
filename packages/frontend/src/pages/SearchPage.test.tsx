@@ -71,7 +71,14 @@ const AUTH_LOGGED_IN = {
 
 const AUTH_LOGGED_OUT: ReturnType<typeof useAuth> = { ...AUTH_LOGGED_IN, user: null };
 
-const EMPTY_FACETS = {
+interface FacetBucket { value: string; count: number }
+interface TestFacets {
+  artist: FacetBucket[]; title: FacetBucket[]; genre: FacetBucket[];
+  format: FacetBucket[]; condition: FacetBucket[]; location: FacetBucket[];
+  country: FacetBucket[];
+}
+
+const EMPTY_FACETS: TestFacets = {
   artist: [], title: [], genre: [], format: [],
   condition: [], location: [], country: [],
 };
@@ -189,7 +196,7 @@ describe('SearchPage — unauthenticated', () => {
     vi.mocked(useAuth).mockReturnValue(AUTH_LOGGED_OUT);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('shows a sign-in prompt', () => {
     render(<SearchPage />);
@@ -212,7 +219,7 @@ describe('SearchPage — authenticated, idle', () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(makeSearchData() as never);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('renders the search input', () => {
     render(<SearchPage />);
@@ -249,7 +256,7 @@ describe('SearchPage — search results', () => {
     vi.mocked(useAuth).mockReturnValue(AUTH_LOGGED_IN);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('shows an empty-state message when nothing matches', async () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(makeSearchData() as never);
@@ -314,7 +321,7 @@ describe('SearchPage — debounce', () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(makeSearchData() as never);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('does NOT fire the query before 350 ms have elapsed', () => {
     render(<SearchPage />);
@@ -382,7 +389,7 @@ describe('SearchPage — facets', () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(DATA_WITH_FACETS as never);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('renders facet group headings after a search', async () => {
     render(<SearchPage />);
@@ -458,7 +465,7 @@ describe('SearchPage — ActiveFilters', () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(DATA_WITH_GENRE_FACET as never);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('shows no chips and no "Clear all" before any facet is selected', async () => {
     render(<SearchPage />);
@@ -517,7 +524,7 @@ describe('SearchPage — load more', () => {
     vi.mocked(useAuth).mockReturnValue(AUTH_LOGGED_IN);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('shows the "Load more" button when hasNextPage is true', async () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(makeSearchData({
@@ -571,7 +578,7 @@ describe('SearchPage — mobile filter panel', () => {
     vi.mocked(useSearchRecordsQuery).mockReturnValue(DATA_WITH_FACETS as never);
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); });
 
   it('renders the Filters toggle button when facets exist', async () => {
     render(<SearchPage />);
