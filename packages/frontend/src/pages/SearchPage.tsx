@@ -27,7 +27,7 @@ interface Facets {
  * Extract positive terms from a query string for client-side highlighting.
  * Phrases (quoted), +must, and plain words are included; -mustNot terms are skipped.
  */
-function extractSearchTerms(query: string): string[] {
+export function extractSearchTerms(query: string): string[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const terms: string[] = [];
