@@ -698,15 +698,34 @@ export function buildAtlasSearchOperator(rawQuery: string): unknown {
   if (!trimmed) return WILDCARD_ALL;
 
   // Only enter advanced-parse mode when the query actually uses special syntax.
-  // This keeps plain queries exactly as before (single text operator + fuzzy).
   const isAdvanced = /["']/.test(trimmed) || /(?:^|\s)[+-]\S/.test(trimmed);
   if (!isAdvanced) {
-    const useFuzzy = trimmed.length > 4;
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+      const useFuzzy = words[0].length >= 5;
+      return {
+        text: {
+          query: words[0],
+          path: SEARCH_TEXT_PATHS,
+          ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
+        },
+      };
+    }
+    // Multi-word plain query: require ALL words to appear (AND semantics).
+    // Fuzzy is applied per-word so short tokens like "ZZ" or "Top" are matched
+    // exactly rather than being loosely fuzzied against unrelated short words.
     return {
-      text: {
-        query: trimmed,
-        path: SEARCH_TEXT_PATHS,
-        ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
+      compound: {
+        must: words.map((word) => {
+          const useFuzzy = word.length >= 5;
+          return {
+            text: {
+              query: word,
+              path: SEARCH_TEXT_PATHS,
+              ...(useFuzzy ? { fuzzy: { maxEdits: 1, prefixLength: 2 } } : {}),
+            },
+          };
+        }),
       },
     };
   }
@@ -740,7 +759,7 @@ export function buildAtlasSearchOperator(rawQuery: string): unknown {
       while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
       const term = trimmed.slice(start, i);
       if (term) {
-        const useFuzzy = term.length > 4;
+        const useFuzzy = term.length >= 5;
         must.push({
           text: {
             query: term,
@@ -764,7 +783,7 @@ export function buildAtlasSearchOperator(rawQuery: string): unknown {
       while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
       const term = trimmed.slice(start, i);
       if (term) {
-        const useFuzzy = term.length > 4;
+        const useFuzzy = term.length >= 5;
         should.push({
           text: {
             query: term,
