@@ -456,7 +456,7 @@ export class RecordRepository {
       ? {
           text: {
             query,
-            path: ['releaseArtist', 'releaseTitle', 'releaseLabel', 'notes'],
+            path: ['releaseArtist', 'releaseTitle', 'releaseLabel', 'releaseGenre', 'releaseStyle', 'notes'],
             fuzzy: { maxEdits: 1 },
           },
         }
@@ -587,14 +587,21 @@ export class RecordRepository {
               releaseTitle:  { type: 'string', analyzer: 'lucene.standard' },
               releaseLabel:  { type: 'string', analyzer: 'lucene.standard' },
               notes:         { type: 'string', analyzer: 'lucene.standard' },
-              // Facet fields (string)
+              // Genre and style: both searchable (string) and facetable (stringFacet)
+              releaseGenre: [
+                { type: 'string',      analyzer: 'lucene.standard' },
+                { type: 'stringFacet' },
+              ],
+              releaseStyle: [
+                { type: 'string',      analyzer: 'lucene.standard' },
+                { type: 'stringFacet' },
+              ],
+              // Facet-only fields
               releaseFormat:  { type: 'stringFacet' },
-              releaseGenre:   { type: 'stringFacet' },
-              releaseStyle:   { type: 'stringFacet' },
               releaseCountry: { type: 'stringFacet' },
               condition:      { type: 'stringFacet' },
               location:       { type: 'stringFacet' },
-              // Facet field (number)
+              // Numeric facet
               releaseYear: { type: 'numberFacet' },
             },
           },
