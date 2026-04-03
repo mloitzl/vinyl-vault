@@ -88,12 +88,14 @@ covers records created before the denormalization was introduced. Safe to re-run
 node scripts/admin/backfill-search-fields.mjs [--stage DEV|STAGING|DEMO] [--dry-run]
 ```
 
-Or with explicit URIs to keep credentials out of `ps`:
+Or with explicit URIs to keep credentials out of `ps` (same variable names as the backend `.env`):
 ```bash
-export VV_REGISTRY_URI="mongodb+srv://..."
-export VV_TENANT_URI="mongodb+srv://..."
+export MONGODB_REGISTRY_URI="mongodb+srv://..."
+export MONGODB_URI_BASE="mongodb+srv://..."    # base URI, no database name
 node scripts/admin/backfill-search-fields.mjs [--dry-run]
 ```
+
+On Atlas, both URIs typically point to the same cluster.
 Copy all Vinyl Vault databases (`vinylvault_registry`, `vv_*` tenant databases, `vinylvault_bff`) from one MongoDB cluster to another.  
 Each destination collection is wiped before copying, so the script is safe to re-run.  
 Atlas Search indexes must be created separately after migration.

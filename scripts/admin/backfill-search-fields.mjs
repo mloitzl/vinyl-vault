@@ -7,13 +7,19 @@
  * introduced. Safe to re-run: uses $set so already-populated fields are
  * overwritten with the same values (idempotent).
  *
- * Usage:
+ * Usage (stage-based — same as all other admin scripts):
  *   node scripts/admin/backfill-search-fields.mjs [--stage DEV|STAGING|DEMO] [--dry-run]
  *
- * Or with explicit connection strings (keeps credentials out of `ps`):
- *   export VV_REGISTRY_URI="mongodb+srv://..."
- *   export VV_TENANT_URI="mongodb+srv://..."
+ * Or with explicit connection strings to keep credentials out of `ps`
+ * (mirrors the backend .env variable names):
+ *   export MONGODB_REGISTRY_URI="mongodb+srv://..."
+ *   export MONGODB_URI_BASE="mongodb+srv://..."
  *   node scripts/admin/backfill-search-fields.mjs [--dry-run]
+ *
+ * MONGODB_REGISTRY_URI  – URI for vinylvault_registry (users, tenants, roles)
+ * MONGODB_URI_BASE      – Base URI for tenant databases (no database name;
+ *                         script appends vv_<hash> per tenant)
+ * On Atlas both typically point to the same cluster.
  */
 
 import { parseArgs } from 'node:util';
@@ -91,9 +97,12 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
 
 // ─── main ─────────────────────────────────────────────────────────────────────
 
-// Support explicit URIs (keeps secrets out of `ps`)
-const registryUri = process.env.VV_REGISTRY_URI;
-const tenantUri   = process.env.VV_TENANT_URI;
+// Support explicit URIs — use the same variable names as the backend .env
+// so you can source the same file without renaming anything.
+// MONGODB_REGISTRY_URI = registry database (vinylvault_registry)
+// MONGODB_URI_BASE     = base URI for tenant databases (no db name)
+const registryUri = process.env.MONGODB_REGISTRY_URI;
+const tenantUri   = process.env.MONGODB_URI_BASE;
 
 let registryClient;
 let tenantClient;
