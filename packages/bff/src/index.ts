@@ -92,6 +92,14 @@ async function main() {
     legacyHeaders: false,
   });
 
+  // /auth/me: generous — it's a single MongoDB session read on every page load
+  const sessionCheckLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 1000,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+  });
+
   const graphqlLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 400,
@@ -150,8 +158,23 @@ async function main() {
     })
   );
 
-  // Auth routes
-  app.use('/auth', authLimiter, authRouter);
+  // Auth routes — apply rate limiters per endpoint sensitivity (production only):
+  //   /auth/github* + /auth/logout + /auth/setup  → strict (OAuth flow, session mutation)
+  //   /auth/me                                    → generous (single MongoDB session read)
+  app.use(
+    '/auth',
+    (req, _res, next) => {
+      if (!config.isProduction) return next();
+      if (req.path.startsWith('/github') || req.path === '/logout' || req.path === '/setup') {
+        return authLimiter(req, _res, next);
+      }
+      if (req.path === '/me') {
+        return sessionCheckLimiter(req, _res, next);
+      }
+      next();
+    },
+    authRouter
+  );
 
   // Bind early so the health/readiness probe responds during schema stitching.
   // The /graphql route is wired up after stitching completes.
@@ -198,7 +221,7 @@ async function main() {
   // GraphQL middleware
   app.use(
     '/graphql',
-    graphqlLimiter,
+    ...(config.isProduction ? [graphqlLimiter] : []),
     expressMiddleware(apolloServer, {
       context: async ({ req, res }): Promise<GraphQLContext> => {
         const session = req.session;
