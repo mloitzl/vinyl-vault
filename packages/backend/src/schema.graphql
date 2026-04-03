@@ -361,6 +361,8 @@ type SearchFacetBucket {
 
 """Facet counts for all refinable dimensions."""
 type SearchFacets {
+  artist:    [SearchFacetBucket!]!
+  title:     [SearchFacetBucket!]!
   genre:     [SearchFacetBucket!]!
   format:    [SearchFacetBucket!]!
   condition: [SearchFacetBucket!]!
@@ -378,6 +380,8 @@ type SearchRecordsResult {
 
 """Active filter selections passed to searchRecords to narrow results."""
 input RecordSearchFilter {
+  artist:    [String!]
+  title:     [String!]
   genre:     [String!]
   format:    [String!]
   condition: [String!]
