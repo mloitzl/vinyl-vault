@@ -35,9 +35,9 @@ test.describe('Scan barcode', () => {
     while (toDelete > 0) {
       const heading = page.getByRole('heading', { name: TITLE, level: 3 }).first();
       if (!(await heading.isVisible({ timeout: 2_000 }).catch(() => false))) break;
-      const card = heading.locator('xpath=ancestor::div[@data-testid="record-card"]');
+      const card = page.getByRole('heading', { name: TITLE, level: 3 }).first().locator('../..');
       page.once('dialog', (d) => d.accept());
-      await card.getByTitle('Delete record').click();
+      await card.getByRole('button', { name: 'Delete record' }).click();
       await page.waitForTimeout(300);
       toDelete--;
     }
@@ -83,12 +83,12 @@ test.describe('Scan barcode', () => {
       initialCount + 1,
       { timeout: 15_000 }
     );
+    await page.waitForLoadState('networkidle');
 
     // ── 7. Delete the record ──────────────────────────────────────────────────
-    const heading = page.getByRole('heading', { name: TITLE, level: 3 }).first();
-    const recordCard = heading.locator('xpath=ancestor::div[@data-testid="record-card"]');
+    const recordCard = page.getByRole('heading', { name: TITLE, level: 3 }).first().locator('../..');
     page.once('dialog', (d) => d.accept());
-    await recordCard.getByTitle('Delete record').click();
+    await recordCard.getByRole('button', { name: 'Delete record' }).click();
 
     // ── 8. Confirm the count is back to what it was before the test ───────────
     await expect(page.getByRole('heading', { name: TITLE, level: 3 })).toHaveCount(initialCount, {
