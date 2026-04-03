@@ -541,13 +541,12 @@ export class RecordRepository {
           releaseStyle: 1,
           releaseLabel: 1,
           releaseCountry: 1,
-          searchMeta:       '$$SEARCH_META',
-          searchHighlights: '$$SEARCH_HIGHLIGHTS',
+          searchMeta: '$$SEARCH_META',
         },
       },
     ];
 
-    const rows = await collection.aggregate<RecordDocument & { searchMeta?: any; searchHighlights?: SearchHighlight[] }>(pipeline as any[]).toArray();
+    const rows = await collection.aggregate<RecordDocument & { searchMeta?: any }>(pipeline as any[]).toArray();
 
     const hasNextPage = rows.length > limit;
     const pageItems = rows.slice(0, limit);
@@ -575,7 +574,7 @@ export class RecordRepository {
     const edges = pageItems.map((record, i) => ({
       cursor: makeCursor(skip + i + 1),
       node: record,
-      highlights: record.searchHighlights ?? [],
+      highlights: (record as any).searchHighlights ?? [],
     }));
 
     return {

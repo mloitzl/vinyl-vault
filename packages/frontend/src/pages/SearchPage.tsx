@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchRecordsQuery, type RecordSearchFilter } from '../hooks/relay';
 import { type Record as VVRecord } from '../components/RecordCard';
@@ -21,25 +21,66 @@ interface Facets {
   country:   FacetBucket[];
 }
 
-interface HighlightTextSegment {
-  value: string;
-  type: string;
+// ---------- Client-side highlighting ----------
+
+/**
+ * Extract positive search terms from a query string (phrases, +must, plain words).
+ * Skips -mustNot terms since we don't want to highlight excluded words.
+ */
+function extractSearchTerms(query: string): string[] {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const terms: string[] = [];
+  let i = 0;
+
+  while (i < trimmed.length) {
+    while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
+    if (i >= trimmed.length) break;
+
+    const ch = trimmed[i];
+
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      i++;
+      const start = i;
+      while (i < trimmed.length && trimmed[i] !== quote) i++;
+      const phrase = trimmed.slice(start, i);
+      if (i < trimmed.length) i++;
+      if (phrase) terms.push(phrase);
+    } else if (ch === '+') {
+      i++;
+      const start = i;
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+      const term = trimmed.slice(start, i);
+      if (term) terms.push(term);
+    } else if (ch === '-') {
+      i++; // skip mustNot terms — don't highlight them
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+    } else {
+      const start = i;
+      while (i < trimmed.length && !/\s/.test(trimmed[i])) i++;
+      const term = trimmed.slice(start, i);
+      if (term) terms.push(term);
+    }
+  }
+
+  return terms;
 }
 
-interface SearchHighlight {
-  path: string;
-  texts: HighlightTextSegment[];
-}
-
-// ---------- HighlightedText ----------
-
-function HighlightedText({ texts }: { texts: HighlightTextSegment[] }) {
+/** Split text into alternating [non-match, match, non-match, …] segments. */
+function applyHighlights(text: string, terms: string[]): ReactNode {
+  if (!text || terms.length === 0) return text;
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const parts = text.split(regex);
+  if (parts.length === 1) return text;
   return (
     <>
-      {texts.map((t, i) =>
-        t.type === 'hit'
-          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5 not-italic">{t.value}</mark>
-          : <span key={i}>{t.value}</span>
+      {parts.map((part, i) =>
+        i % 2 === 1
+          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5 not-italic">{part}</mark>
+          : part
       )}
     </>
   );
@@ -47,13 +88,10 @@ function HighlightedText({ texts }: { texts: HighlightTextSegment[] }) {
 
 // ---------- SearchResultCard ----------
 
-function SearchResultCard({ record, highlights }: { record: VVRecord; highlights: SearchHighlight[] }) {
-  const byPath = (path: string) => highlights.find((h) => h.path === path);
-  const byPathAll = (path: string) => highlights.filter((h) => h.path === path);
-
-  const artistHL  = byPath('releaseArtist');
-  const titleHL   = byPath('releaseTitle');
-  const trackHLs  = byPathAll('releaseTrackTitles');
+function SearchResultCard({ record, terms }: { record: VVRecord; terms: string[] }) {
+  const matchingTracks = record.release.trackList?.filter((t) =>
+    terms.some((term) => t.title.toLowerCase().includes(term.toLowerCase()))
+  ) ?? [];
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
@@ -77,14 +115,10 @@ function SearchResultCard({ record, highlights }: { record: VVRecord; highlights
         {/* Info */}
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-900 truncate">
-            {titleHL
-              ? <HighlightedText texts={titleHL.texts} />
-              : record.release.title}
+            {applyHighlights(record.release.title, terms)}
           </h3>
           <p className="text-sm text-gray-600 truncate">
-            {artistHL
-              ? <HighlightedText texts={artistHL.texts} />
-              : record.release.artist}
+            {applyHighlights(record.release.artist, terms)}
           </p>
           <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
             {record.release.year && <span>{record.release.year}</span>}
@@ -93,12 +127,12 @@ function SearchResultCard({ record, highlights }: { record: VVRecord; highlights
           </div>
 
           {/* Matched tracks */}
-          {trackHLs.length > 0 && (
+          {matchingTracks.length > 0 && (
             <div className="mt-2 space-y-0.5">
-              {trackHLs.map((h, i) => (
+              {matchingTracks.map((t, i) => (
                 <p key={i} className="text-xs text-gray-500 truncate">
                   <span className="mr-1">🎵</span>
-                  <HighlightedText texts={h.texts} />
+                  {applyHighlights(t.title, terms)}
                 </p>
               ))}
             </div>
@@ -219,19 +253,17 @@ function SearchResults({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFacets]);
 
-  const items = edges.map((e) => ({
-    record: e.node as unknown as VVRecord,
-    highlights: ((e as any).highlights ?? []) as SearchHighlight[],
-  }));
+  const items = edges.map((e) => e.node as unknown as VVRecord);
+  const terms = extractSearchTerms(query);
 
   if (items.length === 0) {
     return (
-        <p className="text-center text-gray-400 text-sm py-16">
-          <span>No records found for &ldquo;{query}&rdquo;</span>
-          {Object.values(filter).some((v) => v && (v as string[]).length > 0) && (
-            <span className="block text-xs mt-1">Try removing some filters</span>
-          )}
-        </p>
+      <p className="text-center text-gray-400 text-sm py-16">
+        <span>No records found for &ldquo;{query}&rdquo;</span>
+        {Object.values(filter).some((v) => v && (v as string[]).length > 0) && (
+          <span className="block text-xs mt-1">Try removing some filters</span>
+        )}
+      </p>
     );
   }
 
@@ -241,9 +273,9 @@ function SearchResults({
         {totalCount} {totalCount === 1 ? 'record' : 'records'} found
       </p>
       <div className="space-y-3">
-          {items.map(({ record, highlights }) => (
-            <SearchResultCard key={record.id} record={record} highlights={highlights} />
-          ))}
+        {items.map((record) => (
+          <SearchResultCard key={record.id} record={record} terms={terms} />
+        ))}
       </div>
       {pageInfo.hasNextPage && (
         <div className="mt-6 text-center">
