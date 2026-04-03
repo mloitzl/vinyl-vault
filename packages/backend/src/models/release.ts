@@ -2,7 +2,6 @@
 // TODO: Implement release data access
 
 import { ObjectId } from 'mongodb';
-import { logger } from '../utils/logger.js';
 
 export interface Track {
   position?: string;
@@ -169,43 +168,6 @@ export class ReleaseRepository {
 
     const result = await this.db.collection<ReleaseDocument>('releases').bulkWrite(operations);
     return result.upsertedCount + result.modifiedCount;
-  }
-
-  /**
-   * Create Atlas Search index for full-text search and faceted filtering.
-   * Submitted asynchronously — Atlas builds it in the background.
-   * Safe to call on existing tenants: skipped if the index already exists.
-   */
-  async createSearchIndexes(): Promise<void> {
-    const collection = this.db.collection<ReleaseDocument>('releases');
-    const INDEX_NAME = 'releases_search';
-
-    try {
-      const existing = await collection.listSearchIndexes(INDEX_NAME).toArray();
-      if (existing.length > 0) return;
-
-      await collection.createSearchIndex({
-        name: INDEX_NAME,
-        definition: {
-          mappings: {
-            dynamic: false,
-            fields: {
-              artist:  { type: 'string', analyzer: 'lucene.standard' },
-              title:   { type: 'string', analyzer: 'lucene.standard' },
-              format:  { type: 'stringFacet' },
-              genre:   { type: 'stringFacet' },
-              style:   { type: 'stringFacet' },
-              label:   { type: 'stringFacet' },
-              country: { type: 'stringFacet' },
-              year:    { type: 'numberFacet' },
-            },
-          },
-        },
-      });
-      logger.info({ collection: 'releases' }, 'Atlas Search index submitted');
-    } catch (error) {
-      logger.warn({ err: error }, 'Could not create Atlas Search index for releases (non-Atlas cluster?)');
-    }
   }
 
   /**

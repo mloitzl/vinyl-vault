@@ -83,11 +83,11 @@ export async function initializeTenantIndexes(tenantDb: Db, tenantId: string): P
     initializedTenants.add(tenantId);
     logger.info({ tenantId }, 'Database indexes created successfully');
 
-    // Atlas Search indexes and counter reconciliation are submitted/run
-    // asynchronously — building happens in the background on Atlas.
+    // Atlas Search index (unified on records collection) is submitted fire-and-forget.
+    // The releases collection no longer needs a search index — all searchable release
+    // fields are embedded in record documents at write time.
     Promise.all([
       recordRepo.createSearchIndexes(),
-      releaseRepo.createSearchIndexes(),
     ]).catch((error) => {
       logger.error({ tenantId, err: error }, 'Error submitting Atlas Search indexes');
     });

@@ -16,6 +16,27 @@ export interface RecordDocument {
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
+  // Embedded release fields for single-collection Atlas Search (populated at write time)
+  releaseArtist?: string;
+  releaseTitle?: string;
+  releaseYear?: number;
+  releaseFormat?: string;
+  releaseGenre?: string[];
+  releaseStyle?: string[];
+  releaseLabel?: string;
+  releaseCountry?: string;
+}
+
+/** Subset of release fields copied into a record document for search/faceting. */
+export interface RecordSearchFields {
+  releaseArtist?: string;
+  releaseTitle?: string;
+  releaseYear?: number;
+  releaseFormat?: string;
+  releaseGenre?: string[];
+  releaseStyle?: string[];
+  releaseLabel?: string;
+  releaseCountry?: string;
 }
 
 export interface CreateRecordInput {
@@ -26,6 +47,7 @@ export interface CreateRecordInput {
   condition?: string;
   location?: string;
   notes?: string;
+  searchFields?: RecordSearchFields;
 }
 
 export interface UpdateRecordInput {
@@ -35,6 +57,7 @@ export interface UpdateRecordInput {
   condition?: string;
   location?: string;
   notes?: string;
+  searchFields?: RecordSearchFields;
 }
 
 export interface RecordFilter {
@@ -91,6 +114,7 @@ export class RecordRepository {
       notes: input.notes,
       createdAt: now,
       updatedAt: now,
+      ...input.searchFields,
     };
 
     const result = await this.db.collection<RecordDocument>('records').insertOne(record as any);
@@ -151,22 +175,13 @@ export class RecordRepository {
       query.$text = { $search: filter.search };
     }
 
-    // Release-level filters (artist, title, year, format, genre) require a join.
-    // Fetch matching release IDs first, then constrain records.releaseId.
-    if (filter.artist || filter.title || filter.year || filter.format || filter.genre) {
-      const releaseQuery: any = {};
-      if (filter.artist) releaseQuery.artist = { $regex: filter.artist, $options: 'i' };
-      if (filter.title) releaseQuery.title = { $regex: filter.title, $options: 'i' };
-      if (filter.year) releaseQuery.year = filter.year;
-      if (filter.format) releaseQuery.format = filter.format;
-      // release.genre is an array; MongoDB matches if the value is contained in it
-      if (filter.genre) releaseQuery.genre = filter.genre;
-      const matchingReleases = await this.db
-        .collection('releases')
-        .find(releaseQuery, { projection: { _id: 1 } })
-        .toArray();
-      query.releaseId = { $in: matchingReleases.map((r) => r._id) };
-    }
+    // Release-level filters — query embedded fields directly (no join needed).
+    if (filter.artist) query.releaseArtist = { $regex: filter.artist, $options: 'i' };
+    if (filter.title)  query.releaseTitle  = { $regex: filter.title,  $options: 'i' };
+    if (filter.year)   query.releaseYear   = filter.year;
+    if (filter.format) query.releaseFormat = filter.format;
+    // releaseGenre is an array; MongoDB matches if the value is an element of it
+    if (filter.genre)  query.releaseGenre  = filter.genre;
 
     // Forward pagination: records after cursor
     let afterCursorApplied = false;
@@ -286,6 +301,7 @@ export class RecordRepository {
       if (input.condition !== undefined) updateData.condition = input.condition;
       if (input.location !== undefined) updateData.location = input.location;
       if (input.notes !== undefined) updateData.notes = input.notes;
+      if (input.searchFields) Object.assign(updateData, input.searchFields);
 
       const result = await this.db
         .collection<RecordDocument>('records')
@@ -368,9 +384,20 @@ export class RecordRepository {
           mappings: {
             dynamic: false,
             fields: {
-              notes:     { type: 'string', analyzer: 'lucene.standard' },
-              condition: { type: 'stringFacet' },
-              location:  { type: 'stringFacet' },
+              // Full-text search fields
+              releaseArtist: { type: 'string', analyzer: 'lucene.standard' },
+              releaseTitle:  { type: 'string', analyzer: 'lucene.standard' },
+              releaseLabel:  { type: 'string', analyzer: 'lucene.standard' },
+              notes:         { type: 'string', analyzer: 'lucene.standard' },
+              // Facet fields (string)
+              releaseFormat:  { type: 'stringFacet' },
+              releaseGenre:   { type: 'stringFacet' },
+              releaseStyle:   { type: 'stringFacet' },
+              releaseCountry: { type: 'stringFacet' },
+              condition:      { type: 'stringFacet' },
+              location:       { type: 'stringFacet' },
+              // Facet field (number)
+              releaseYear: { type: 'numberFacet' },
             },
           },
         },

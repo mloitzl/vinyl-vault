@@ -9,6 +9,7 @@ import {
   type PaginationOptions,
   type RecordDocument,
   type RecordConnection,
+  type RecordSearchFields,
 } from '../models/record.js';
 import { ReleaseRepository } from '../models/release.js';
 
@@ -38,10 +39,23 @@ export async function createRecord(db: Db, input: CreateRecordInput): Promise<Re
     throw new Error(`Release with ID ${input.releaseId} not found in tenant database`);
   }
 
+  // Build embedded search fields from the release document
+  const searchFields: RecordSearchFields = {
+    releaseArtist:  release.artist,
+    releaseTitle:   release.title,
+    releaseYear:    release.year,
+    releaseFormat:  release.format,
+    releaseGenre:   release.genre,
+    releaseStyle:   release.style,
+    releaseLabel:   release.label,
+    releaseCountry: release.country,
+  };
+
   // Use the actual MongoDB _id for the releaseId in the record
-  const recordInput = {
+  const recordInput: CreateRecordInput = {
     ...input,
     releaseId: release._id.toString(),
+    searchFields,
   };
 
   // Create the record
