@@ -82,7 +82,16 @@ export async function initializeTenantIndexes(tenantDb: Db, tenantId: string): P
     // Mark as initialized
     initializedTenants.add(tenantId);
     logger.info({ tenantId }, 'Database indexes created successfully');
-    
+
+    // Atlas Search indexes and counter reconciliation are submitted/run
+    // asynchronously — building happens in the background on Atlas.
+    Promise.all([
+      recordRepo.createSearchIndexes(),
+      releaseRepo.createSearchIndexes(),
+    ]).catch((error) => {
+      logger.error({ tenantId, err: error }, 'Error submitting Atlas Search indexes');
+    });
+
     // Reconcile counters asynchronously (fire-and-forget)
     // This ensures counters are accurate from the first login
     counterRepo.reconcile().catch((error) => {

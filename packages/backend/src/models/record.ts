@@ -350,6 +350,38 @@ export class RecordRepository {
   }
 
   /**
+   * Create Atlas Search index for full-text search and faceted filtering.
+   * Submitted asynchronously — Atlas builds it in the background.
+   * Safe to call on existing tenants: skipped if the index already exists.
+   */
+  async createSearchIndexes(): Promise<void> {
+    const collection = this.db.collection<RecordDocument>('records');
+    const INDEX_NAME = 'records_search';
+
+    try {
+      const existing = await collection.listSearchIndexes(INDEX_NAME).toArray();
+      if (existing.length > 0) return;
+
+      await collection.createSearchIndex({
+        name: INDEX_NAME,
+        definition: {
+          mappings: {
+            dynamic: false,
+            fields: {
+              notes:     { type: 'string', analyzer: 'lucene.standard' },
+              condition: { type: 'stringFacet' },
+              location:  { type: 'stringFacet' },
+            },
+          },
+        },
+      });
+      logger.info({ collection: 'records' }, 'Atlas Search index submitted');
+    } catch (error) {
+      logger.warn({ err: error }, 'Could not create Atlas Search index for records (non-Atlas cluster?)');
+    }
+  }
+
+  /**
    * Create text index for search functionality.
    * Should be called during tenant database initialization.
    */
