@@ -159,12 +159,13 @@ async function main() {
     })
   );
 
-  // Auth routes — apply rate limiters per endpoint sensitivity:
+  // Auth routes — apply rate limiters per endpoint sensitivity (production only):
   //   /auth/github* + /auth/logout + /auth/setup  → strict (OAuth flow, session mutation)
   //   /auth/me                                    → generous (single MongoDB session read)
   app.use(
     '/auth',
     (req, _res, next) => {
+      if (!config.isProduction) return next();
       if (req.path.startsWith('/github') || req.path === '/logout' || req.path === '/setup') {
         return authLimiter(req, _res, next);
       }
@@ -221,7 +222,7 @@ async function main() {
   // GraphQL middleware
   app.use(
     '/graphql',
-    graphqlLimiter,
+    ...(config.isProduction ? [graphqlLimiter] : []),
     expressMiddleware(apolloServer, {
       context: async ({ req, res }): Promise<GraphQLContext> => {
         const session = req.session;
