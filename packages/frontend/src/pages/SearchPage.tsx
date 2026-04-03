@@ -172,6 +172,7 @@ export function SearchPage() {
   const [committedQuery, setCommittedQuery] = useState('');
   const [filter, setFilter] = useState<RecordSearchFilter>({});
   const [facets, setFacets] = useState<Facets>({ genre: [], format: [], condition: [], location: [], country: [] });
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -237,6 +238,23 @@ export function SearchPage() {
 
   const hasActiveFilters = Object.values(filter).some((v) => v && (v as string[]).length > 0);
 
+  const hasFacets =
+    facets.genre.length > 0 ||
+    facets.format.length > 0 ||
+    facets.condition.length > 0 ||
+    facets.location.length > 0 ||
+    facets.country.length > 0;
+
+  const facetPanel = (
+    <div className="space-y-5">
+      <FacetGroup title="Genre"     buckets={facets.genre}     selected={filter.genre     ?? []} onToggle={(v) => toggleFacet('genre',     v)} />
+      <FacetGroup title="Format"    buckets={facets.format}    selected={filter.format    ?? []} onToggle={(v) => toggleFacet('format',    v)} />
+      <FacetGroup title="Condition" buckets={facets.condition} selected={filter.condition ?? []} onToggle={(v) => toggleFacet('condition', v)} />
+      <FacetGroup title="Location"  buckets={facets.location}  selected={filter.location  ?? []} onToggle={(v) => toggleFacet('location',  v)} />
+      <FacetGroup title="Country"   buckets={facets.country}   selected={filter.country   ?? []} onToggle={(v) => toggleFacet('country',   v)} />
+    </div>
+  );
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Header + search input */}
@@ -274,39 +292,64 @@ export function SearchPage() {
           <p>Enter a search term to find records</p>
         </div>
       ) : (
-        <div className="flex-1 flex overflow-hidden">
-          {/* Facet sidebar */}
-          {(facets.genre.length > 0 ||
-            facets.format.length > 0 ||
-            facets.condition.length > 0 ||
-            facets.location.length > 0 ||
-            facets.country.length > 0) && (
-            <aside className="hidden sm:block w-52 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto p-4 space-y-5">
-              <FacetGroup title="Genre"     buckets={facets.genre}     selected={filter.genre     ?? []} onToggle={(v) => toggleFacet('genre',     v)} />
-              <FacetGroup title="Format"    buckets={facets.format}    selected={filter.format    ?? []} onToggle={(v) => toggleFacet('format',    v)} />
-              <FacetGroup title="Condition" buckets={facets.condition} selected={filter.condition ?? []} onToggle={(v) => toggleFacet('condition', v)} />
-              <FacetGroup title="Location"  buckets={facets.location}  selected={filter.location  ?? []} onToggle={(v) => toggleFacet('location',  v)} />
-              <FacetGroup title="Country"   buckets={facets.country}   selected={filter.country   ?? []} onToggle={(v) => toggleFacet('country',   v)} />
-            </aside>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Mobile: filters toggle bar */}
+          {hasFacets && (
+            <div className="sm:hidden flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white">
+              <button
+                onClick={() => setMobileFiltersOpen((o) => !o)}
+                className="flex items-center gap-2 text-sm font-medium text-gray-700"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                </svg>
+                Filters
+                {hasActiveFilters && (
+                  <span className="inline-flex items-center justify-center w-4 h-4 text-xs bg-gray-900 text-white rounded-full">
+                    {Object.values(filter).reduce((n, v) => n + (v?.length ?? 0), 0)}
+                  </span>
+                )}
+              </button>
+              {mobileFiltersOpen && (
+                <button onClick={() => setMobileFiltersOpen(false)} className="text-xs text-gray-500 underline">
+                  Done
+                </button>
+              )}
+            </div>
           )}
 
-          {/* Results */}
-          <main className="flex-1 overflow-y-auto p-4">
-            {/* Mobile facet chips when active */}
-            {hasActiveFilters && (
-              <div className="sm:hidden mb-3">
-                <ActiveFilters filter={filter} onRemove={removeFacet} onClear={clearFilters} />
-              </div>
+          <div className="flex-1 flex overflow-hidden">
+            {/* Desktop sidebar / Mobile collapsible panel */}
+            {hasFacets && (
+              <>
+                {/* Desktop */}
+                <aside className="hidden sm:block w-52 flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto p-4">
+                  {facetPanel}
+                </aside>
+
+                {/* Mobile collapsible */}
+                {mobileFiltersOpen && (
+                  <aside className="sm:hidden absolute inset-x-0 z-10 bg-white border-b border-gray-200 p-4 overflow-y-auto max-h-[60vh] shadow-md"
+                    style={{ top: 'auto' }}>
+                    {facetPanel}
+                  </aside>
+                )}
+              </>
             )}
-            <Suspense fallback={<div className="flex justify-center py-10"><LoadingSpinner /></div>}>
-              <SearchResults
-                query={committedQuery}
-                filter={filter}
-                onFacetsChange={setFacets}
-                onLoadMore={handleLoadMore}
-              />
-            </Suspense>
-          </main>
+
+            {/* Results */}
+            <main className="flex-1 overflow-y-auto p-4">
+              <Suspense fallback={<div className="flex justify-center py-10"><LoadingSpinner /></div>}>
+                <SearchResults
+                  query={committedQuery}
+                  filter={filter}
+                  onFacetsChange={setFacets}
+                  onLoadMore={handleLoadMore}
+                />
+              </Suspense>
+            </main>
+          </div>
         </div>
       )}
     </div>
