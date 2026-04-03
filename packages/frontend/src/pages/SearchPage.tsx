@@ -121,14 +121,11 @@ function SearchResults({
   const data = useSearchRecordsQuery({ query, first: 20, filter });
   const { edges, pageInfo, totalCount, facets } = data.searchRecords;
 
-  // Push facets up once per render so the sidebar can show them even when query
-  // changes and this component re-suspends.
-  const prevFacetsRef = useRef<Facets | null>(null);
   const currentFacets = facets as unknown as Facets;
-  if (prevFacetsRef.current !== currentFacets) {
-    prevFacetsRef.current = currentFacets;
+  useEffect(() => {
     onFacetsChange(currentFacets);
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFacets]);
 
   const records = edges.map((e) => e.node as unknown as VVRecord);
 
