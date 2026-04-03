@@ -432,19 +432,16 @@ export class RecordRepository {
   }
 
   private async _atlasSearch(
-    userId: string,
+    _userId: string,
     query: string,
     filter: RecordSearchFilter,
     limit: number,
     after?: string
   ): Promise<SearchRecordsResult> {
     const collection = this.db.collection<RecordDocument>('records');
-    const userObjectId = new ObjectId(userId);
 
     // Build compound filter clauses for active facet selections
-    const filterClauses: unknown[] = [
-      { equals: { path: 'userId', value: userObjectId } },
-    ];
+    const filterClauses: unknown[] = [];
     if (filter.genre?.length)     filterClauses.push({ in: { path: 'releaseGenre',   value: filter.genre } });
     if (filter.format?.length)    filterClauses.push({ in: { path: 'releaseFormat',  value: filter.format } });
     if (filter.condition?.length) filterClauses.push({ in: { path: 'condition',      value: filter.condition } });
