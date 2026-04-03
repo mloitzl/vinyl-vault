@@ -262,6 +262,7 @@ export const resolvers = {
       return {
         edges: result.edges.map((edge) => ({
           cursor: edge.cursor,
+          highlights: edge.highlights,
           node: {
             id: edge.node._id.toString(),
             releaseId: edge.node.releaseId.toString(),

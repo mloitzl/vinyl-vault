@@ -21,6 +21,10 @@ const SearchRecordsQuery = graphql`
     searchRecords(query: $query, first: $first, after: $after, filter: $filter) {
       edges {
         cursor
+        highlights {
+          path
+          texts { value type }
+        }
         node {
           id
           purchaseDate

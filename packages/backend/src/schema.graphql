@@ -370,9 +370,30 @@ type SearchFacets {
   country:   [SearchFacetBucket!]!
 }
 
+"""One text segment in an Atlas Search highlight: a matched hit or surrounding context."""
+type SearchHighlightText {
+  value: String!
+  """Either "hit" (matched term) or "text" (surrounding context)."""
+  type: String!
+}
+
+"""Highlight entry for a single field: contains matched text segments."""
+type SearchHighlight {
+  path:   String!
+  texts:  [SearchHighlightText!]!
+  score:  Float
+}
+
+"""Search result edge — record plus per-field highlights."""
+type SearchRecordEdge {
+  cursor:     String!
+  node:       Record!
+  highlights: [SearchHighlight!]!
+}
+
 """Result of searchRecords — paginated edges plus facet refiners."""
 type SearchRecordsResult {
-  edges:      [RecordEdge!]!
+  edges:      [SearchRecordEdge!]!
   pageInfo:   PageInfo!
   totalCount: Int!
   facets:     SearchFacets!

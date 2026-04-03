@@ -98,8 +98,19 @@ export interface SearchFacets {
   country:   SearchFacetBucket[];
 }
 
+export interface SearchHighlightText {
+  value: string;
+  type: 'hit' | 'text';
+}
+
+export interface SearchHighlight {
+  path: string;
+  texts: SearchHighlightText[];
+  score?: number;
+}
+
 export interface SearchRecordsResult {
-  edges: Array<{ cursor: string; node: RecordDocument }>;
+  edges: Array<{ cursor: string; node: RecordDocument; highlights: SearchHighlight[] }>;
   pageInfo: {
     hasNextPage: boolean;
     hasPreviousPage: boolean;
@@ -431,7 +442,12 @@ export class RecordRepository {
           { userId, search: query, genre: filter.genre?.[0], format: filter.format?.[0] },
           { first: limit, after: pagination.after }
         );
-        return { ...fallback, facets: emptyFacets };
+        return {
+          edges: fallback.edges.map((e) => ({ ...e, highlights: [] })),
+          pageInfo: fallback.pageInfo,
+          totalCount: fallback.totalCount,
+          facets: emptyFacets,
+        };
       }
       throw err;
     }
@@ -467,6 +483,10 @@ export class RecordRepository {
     const searchStage = {
       $search: {
         index: 'records_search',
+        // Highlights supported for text/phrase/compound operators (not wildcard match-all).
+        ...(trimmed ? {
+          highlight: { path: ['releaseArtist', 'releaseTitle', 'releaseTrackTitles'] },
+        } : {}),
         facet: {
           operator: searchOperator,
           facets: {
@@ -521,12 +541,13 @@ export class RecordRepository {
           releaseStyle: 1,
           releaseLabel: 1,
           releaseCountry: 1,
-          searchMeta: '$$SEARCH_META',
+          searchMeta:       '$$SEARCH_META',
+          searchHighlights: '$$SEARCH_HIGHLIGHTS',
         },
       },
     ];
 
-    const rows = await collection.aggregate<RecordDocument & { searchMeta?: any }>(pipeline as any[]).toArray();
+    const rows = await collection.aggregate<RecordDocument & { searchMeta?: any; searchHighlights?: SearchHighlight[] }>(pipeline as any[]).toArray();
 
     const hasNextPage = rows.length > limit;
     const pageItems = rows.slice(0, limit);
@@ -554,6 +575,7 @@ export class RecordRepository {
     const edges = pageItems.map((record, i) => ({
       cursor: makeCursor(skip + i + 1),
       node: record,
+      highlights: record.searchHighlights ?? [],
     }));
 
     return {

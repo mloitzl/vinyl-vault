@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchRecordsQuery, type RecordSearchFilter } from '../hooks/relay';
-import { RecordCard, type Record as VVRecord } from '../components/RecordCard';
+import { type Record as VVRecord } from '../components/RecordCard';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 // ---------- Types ----------
@@ -19,6 +19,94 @@ interface Facets {
   condition: FacetBucket[];
   location:  FacetBucket[];
   country:   FacetBucket[];
+}
+
+interface HighlightTextSegment {
+  value: string;
+  type: string;
+}
+
+interface SearchHighlight {
+  path: string;
+  texts: HighlightTextSegment[];
+}
+
+// ---------- HighlightedText ----------
+
+function HighlightedText({ texts }: { texts: HighlightTextSegment[] }) {
+  return (
+    <>
+      {texts.map((t, i) =>
+        t.type === 'hit'
+          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5 not-italic">{t.value}</mark>
+          : <span key={i}>{t.value}</span>
+      )}
+    </>
+  );
+}
+
+// ---------- SearchResultCard ----------
+
+function SearchResultCard({ record, highlights }: { record: VVRecord; highlights: SearchHighlight[] }) {
+  const byPath = (path: string) => highlights.find((h) => h.path === path);
+  const byPathAll = (path: string) => highlights.filter((h) => h.path === path);
+
+  const artistHL  = byPath('releaseArtist');
+  const titleHL   = byPath('releaseTitle');
+  const trackHLs  = byPathAll('releaseTrackTitles');
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+      <div className="flex gap-4">
+        {/* Cover */}
+        {record.release.coverImageUrl ? (
+          <img
+            src={record.release.coverImageUrl}
+            alt={`${record.release.title} cover`}
+            className="w-16 h-16 rounded object-cover flex-shrink-0"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 truncate">
+            {titleHL
+              ? <HighlightedText texts={titleHL.texts} />
+              : record.release.title}
+          </h3>
+          <p className="text-sm text-gray-600 truncate">
+            {artistHL
+              ? <HighlightedText texts={artistHL.texts} />
+              : record.release.artist}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+            {record.release.year && <span>{record.release.year}</span>}
+            {record.release.format && <><span>·</span><span>{record.release.format}</span></>}
+            {record.release.country && <><span>·</span><span>{record.release.country}</span></>}
+          </div>
+
+          {/* Matched tracks */}
+          {trackHLs.length > 0 && (
+            <div className="mt-2 space-y-0.5">
+              {trackHLs.map((h, i) => (
+                <p key={i} className="text-xs text-gray-500 truncate">
+                  <span className="mr-1">🎵</span>
+                  <HighlightedText texts={h.texts} />
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------- Sub-components ----------
@@ -131,16 +219,19 @@ function SearchResults({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFacets]);
 
-  const records = edges.map((e) => e.node as unknown as VVRecord);
+  const items = edges.map((e) => ({
+    record: e.node as unknown as VVRecord,
+    highlights: ((e as any).highlights ?? []) as SearchHighlight[],
+  }));
 
-  if (records.length === 0) {
+  if (items.length === 0) {
     return (
-      <div className="text-center text-gray-400 text-sm py-16">
-        <p>No records found for &ldquo;{query}&rdquo;</p>
-        {Object.values(filter).some((v) => v && (v as string[]).length > 0) && (
-          <p className="text-xs mt-1">Try removing some filters</p>
-        )}
-      </div>
+        <p className="text-center text-gray-400 text-sm py-16">
+          <span>No records found for &ldquo;{query}&rdquo;</span>
+          {Object.values(filter).some((v) => v && (v as string[]).length > 0) && (
+            <span className="block text-xs mt-1">Try removing some filters</span>
+          )}
+        </p>
     );
   }
 
@@ -150,9 +241,9 @@ function SearchResults({
         {totalCount} {totalCount === 1 ? 'record' : 'records'} found
       </p>
       <div className="space-y-3">
-        {records.map((record) => (
-          <RecordCard key={record.id} record={record} />
-        ))}
+          {items.map(({ record, highlights }) => (
+            <SearchResultCard key={record.id} record={record} highlights={highlights} />
+          ))}
       </div>
       {pageInfo.hasNextPage && (
         <div className="mt-6 text-center">
