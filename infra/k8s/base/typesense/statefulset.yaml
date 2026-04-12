@@ -30,7 +30,7 @@ spec:
           args:
             - --data-dir=/data
             - --api-key=$(TYPESENSE_API_KEY)
-            - --nodes=typesense-0.typesense-headless:8107:8108,typesense-1.typesense-headless:8107:8108,typesense-2.typesense-headless:8107:8108
+            - --nodes=/etc/typesense/nodes
             - --peering-port=8107
             - --api-port=8108
           env:
@@ -68,6 +68,12 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: typesense-nodes
+              mountPath: /etc/typesense
+      volumes:
+        - name: typesense-nodes
+          configMap:
+            name: typesense-nodes
   volumeClaimTemplates:
     - metadata:
         name: data

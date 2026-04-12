@@ -23,6 +23,7 @@ resources:
   # Typesense search cluster
   - typesense/statefulset.yaml
   - typesense/services.yaml
+  - typesense/nodes-configmap.yaml
 
   # Sync worker
   - sync-worker/deployment.yaml
