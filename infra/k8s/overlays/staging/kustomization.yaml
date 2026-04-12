@@ -23,6 +23,8 @@ images:
     newTag: latest-staging
   - name: ghcr.io/mloitzl/vinylvault-frontend
     newTag: latest-staging
+  - name: ghcr.io/mloitzl/vinylvault-sync-worker
+    newTag: latest-staging
 
 # ConfigMap for staging-specific configuration
 configMapGenerator:

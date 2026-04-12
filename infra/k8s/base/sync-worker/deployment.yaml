@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: sync-worker
-          image: ghcr.io/mloitzl/vinyl-vault-sync-worker
+          image: ghcr.io/mloitzl/vinylvault-sync-worker:latest
           env:
             - name: MONGODB_URI_BASE
               valueFrom:
