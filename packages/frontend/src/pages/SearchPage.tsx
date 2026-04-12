@@ -175,7 +175,8 @@ function SearchResults({
   const items = edges.map((e) => e.node as unknown as VVRecord);
   const terms = extractSearchTerms(query);
 
-  if (items.length === 0) {    return (
+  if (items.length === 0) {
+    return (
       <p className="text-center text-gray-400 text-sm py-16">
         <span>No records found for &ldquo;{query}&rdquo;</span>
         {Object.values(filter).some((v) => v && (v as string[]).length > 0) && (

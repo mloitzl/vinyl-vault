@@ -4,16 +4,17 @@
 // Startup sequence:
 //   1. Connect to MongoDB (tenant base + registry)
 //   2. Ensure Typesense collection exists
-//   3. If collection is empty → run full initial sync across all tenants
-//   4. Load resume token from registry (if any)
-//   5. Open change stream and process events indefinitely
+//   3. If collection is empty → capture cluster timestamp, run full initial sync,
+//      then open change stream from that timestamp (avoids missing writes during sync)
+//   4. Otherwise load the saved resume token and open change stream from there
 
 import { MongoClient } from 'mongodb';
+import type { Timestamp } from 'mongodb';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { getRegistryDb, closeRegistryDb } from '../db/registry.js';
 import { ensureCollection, isCollectionEmpty } from '../services/typesense.js';
-import { loadResumeToken, saveResumeToken } from './token-store.js';
+import { loadResumeToken } from './token-store.js';
 import { runInitialSync } from './initial-sync.js';
 import { startChangeStreamListener } from './change-stream-listener.js';
 
@@ -34,32 +35,25 @@ async function main() {
   // --- Typesense collection ------------------------------------------------
   await ensureCollection();
 
-  // --- Initial sync if needed ----------------------------------------------
+  // --- Initial sync if needed, otherwise load resume token -----------------
+  let resumeToken = null;
+  let startAtOperationTime: Timestamp | null = null;
+
   if (await isCollectionEmpty()) {
+    // Capture the cluster timestamp BEFORE starting the bulk sync so that the
+    // change stream can replay any writes that arrive during the sync window.
+    const pingResult = await tenantBaseClient.db().admin().command({ ping: 1 });
+    startAtOperationTime = (pingResult.operationTime as Timestamp) ?? null;
+
     logger.info('Typesense collection is empty — running initial sync');
     await runInitialSync(tenantBaseClient, registryDb);
-
-    // Capture the current change stream token AFTER initial sync so we don't
-    // re-process events that were generated during the sync itself.
-    const cursor = tenantBaseClient.watch([{ $match: { 'ns.db': /^vv_/ } }]);
-    // Advance once to get the first token (we don't process any event here).
-    const firstEvent = await Promise.race([
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-      new Promise<unknown>((resolve) => cursor.once('change', resolve)),
-    ]);
-    const token = (firstEvent as any)?._id ?? null;
-    await cursor.close();
-    if (token) {
-      await saveResumeToken(registryDb, token);
-      logger.info('Saved initial resume token after full sync');
-    }
+    logger.info('Initial sync complete — change stream will resume from pre-sync timestamp');
+  } else {
+    resumeToken = await loadResumeToken(registryDb);
   }
 
-  // --- Resume token --------------------------------------------------------
-  const resumeToken = await loadResumeToken(registryDb);
-
   // --- Change stream listener (runs forever) -------------------------------
-  await startChangeStreamListener(tenantBaseClient, registryDb, resumeToken);
+  await startChangeStreamListener(tenantBaseClient, registryDb, resumeToken, startAtOperationTime);
 }
 
 // Graceful shutdown
@@ -67,7 +61,7 @@ async function shutdown(signal: string) {
   logger.info({ signal }, 'Sync worker shutting down');
   try {
     await closeRegistryDb();
-  } catch (_) { /* ignore */ }
+  } catch { /* ignore */ }
   process.exit(0);
 }
 

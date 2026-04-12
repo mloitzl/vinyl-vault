@@ -56,12 +56,19 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
   let updated = 0;
   let skipped = 0;
 
-  for await (const record of records.find({}, { projection: { _id: 1, releaseId: 1, releaseArtist: 1, releaseTrackTitles: 1 } })) {
-    // Skip if already fully populated (idempotency fast-path).
-    // releaseTrackTitles is checked separately so records created before this
-    // field was introduced (which have releaseArtist but no releaseTrackTitles)
-    // are still updated.
-    if (record.releaseArtist !== undefined && record.releaseTrackTitles !== undefined) {
+  for await (const record of records.find({}, { projection: { _id: 1, releaseId: 1, releaseArtist: 1, releaseTitle: 1, releaseYear: 1, releaseFormat: 1, releaseGenre: 1, releaseStyle: 1, releaseLabel: 1, releaseCountry: 1, releaseTrackTitles: 1 } })) {
+    // Skip only when ALL embedded search fields are present.
+    if (
+      record.releaseArtist      !== undefined &&
+      record.releaseTitle       !== undefined &&
+      record.releaseYear        !== undefined &&
+      record.releaseFormat      !== undefined &&
+      record.releaseGenre       !== undefined &&
+      record.releaseStyle       !== undefined &&
+      record.releaseLabel       !== undefined &&
+      record.releaseCountry     !== undefined &&
+      record.releaseTrackTitles !== undefined
+    ) {
       skipped++;
       continue;
     }

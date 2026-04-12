@@ -19,8 +19,6 @@
  */
 
 import { parseArgs } from 'node:util';
-import { createHash } from 'node:crypto';
-import { MongoClient } from 'mongodb';
 import Typesense from 'typesense';
 import { connect, parseStage } from './lib/connect.mjs';
 import { getTenantDbName } from './lib/tenant.mjs';
@@ -81,7 +79,7 @@ const SCHEMA = {
 // ─── document mapping ─────────────────────────────────────────────────────────
 
 function toTypesenseDoc(tenantId, record) {
-  return {
+  const doc = {
     id:                 record._id.toString(),
     tenantId,
     releaseArtist:      record.releaseArtist      ?? '',
@@ -92,12 +90,14 @@ function toTypesenseDoc(tenantId, record) {
     releaseTrackTitles: record.releaseTrackTitles  ?? [],
     releaseFormat:      record.releaseFormat       ?? '',
     releaseCountry:     record.releaseCountry      ?? '',
-    releaseYear:        record.releaseYear         ?? 0,
     condition:          record.condition           ?? '',
     location:           record.location            ?? '',
     notes:              record.notes               ?? '',
     updatedAt:          record.updatedAt ? record.updatedAt.getTime() : Date.now(),
   };
+  // Omit releaseYear when unknown — avoids a bogus year=0 bucket in facets
+  if (record.releaseYear != null) doc.releaseYear = record.releaseYear;
+  return doc;
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
@@ -178,7 +178,13 @@ async function main() {
         const batch = await db.collection('records').find().skip(skip).limit(BATCH_SIZE).toArray();
         const docs = batch.map((r) => toTypesenseDoc(tenantId, r));
 
-        await tsClient.collections(COLLECTION_NAME).documents().import(docs, { action: 'upsert' });
+        const results = await tsClient.collections(COLLECTION_NAME).documents().import(docs, { action: 'upsert' });
+        const failures = results.filter(r => !r.success);
+        if (failures.length > 0) {
+          process.stderr.write(`\n    ⚠️  ${failures.length} document(s) failed to import\n`);
+          failures.forEach(f => process.stderr.write(`      ${f.error ?? JSON.stringify(f)}\n`));
+        }
+
         synced += docs.length;
         skip += docs.length;
         process.stdout.write(`\r  ▸ ${name ?? tenantId} — ${synced}/${count} records`);

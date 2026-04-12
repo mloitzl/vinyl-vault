@@ -31,6 +31,4 @@ COPY --from=builder /app/packages/backend/src/register.mjs ./dist/register.mjs
 
 RUN pnpm install --prod
 
-EXPOSE 8109
-
 CMD ["node", "--import", "./dist/register.mjs", "--import", "./dist/instrumentation.js", "dist/sync-worker/index.js"]

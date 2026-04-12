@@ -37,7 +37,7 @@ export interface TypesenseRecord {
   releaseTrackTitles: string[];
   releaseFormat: string;
   releaseCountry: string;
-  releaseYear: number;
+  releaseYear?: number;    // optional — omitted when unknown to avoid a bogus year=0 facet bucket
   condition: string;
   location: string;
   notes: string;
@@ -135,7 +135,7 @@ export async function isCollectionEmpty(): Promise<boolean> {
 
 /** Map a MongoDB RecordDocument to a Typesense document. */
 export function toTypesenseDoc(tenantId: string, record: RecordDocument): TypesenseRecord {
-  return {
+  const doc: TypesenseRecord = {
     id:                 record._id!.toString(),
     tenantId,
     releaseArtist:      record.releaseArtist      ?? '',
@@ -146,18 +146,34 @@ export function toTypesenseDoc(tenantId: string, record: RecordDocument): Typese
     releaseTrackTitles: record.releaseTrackTitles  ?? [],
     releaseFormat:      record.releaseFormat       ?? '',
     releaseCountry:     record.releaseCountry      ?? '',
-    releaseYear:        record.releaseYear         ?? 0,
     condition:          record.condition           ?? '',
     location:           record.location            ?? '',
     notes:              record.notes               ?? '',
     updatedAt:          record.updatedAt ? new Date(record.updatedAt).getTime() : Date.now(),
   };
+  // Omit releaseYear when unknown — avoids a bogus year=0 bucket in facets
+  if (record.releaseYear != null) doc.releaseYear = record.releaseYear;
+  return doc;
 }
 
 export async function upsertRecord(tenantId: string, record: RecordDocument): Promise<void> {
   await ensureCollection();
   const doc = toTypesenseDoc(tenantId, record);
   await getTypesenseClient().collections(COLLECTION_NAME).documents().upsert(doc as any);
+}
+
+/** Bulk-import a batch of records using the Typesense import API. Logs import failures. */
+export async function importRecords(tenantId: string, records: RecordDocument[]): Promise<void> {
+  await ensureCollection();
+  const docs = records.map((r) => toTypesenseDoc(tenantId, r));
+  const results = await getTypesenseClient()
+    .collections(COLLECTION_NAME)
+    .documents()
+    .import(docs as any[], { action: 'upsert' }) as any[];
+  const failures = results.filter((r: any) => !r.success);
+  if (failures.length > 0) {
+    logger.warn({ count: failures.length, tenantId }, 'Some documents failed to import into Typesense');
+  }
 }
 
 export async function deleteRecord(mongoId: string): Promise<void> {

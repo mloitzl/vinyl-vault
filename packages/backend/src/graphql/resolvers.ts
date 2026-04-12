@@ -243,7 +243,7 @@ export const resolvers = {
         query: string;
         first?: number;
         after?: string;
-        filter?: { genre?: string[]; format?: string[]; condition?: string[]; location?: string[]; country?: string[] };
+        filter?: { artist?: string[]; title?: string[]; genre?: string[]; format?: string[]; condition?: string[]; location?: string[]; country?: string[] };
       },
       context: GraphQLContext
     ) => {

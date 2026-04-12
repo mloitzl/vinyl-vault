@@ -1,10 +1,10 @@
 // Full initial sync: reads all records from every tenant DB and upserts to Typesense.
 // Called by the sync worker when the Typesense collection is empty (first run or after wipe).
 
-import type { Db, MongoClient } from 'mongodb';
+import type { Db, MongoClient, ObjectId, Filter } from 'mongodb';
 import { logger } from '../utils/logger.js';
 import { getTenantDbName } from '../db/connection.js';
-import { upsertRecord } from '../services/typesense.js';
+import { importRecords } from '../services/typesense.js';
 import type { RecordDocument } from '../models/record.js';
 
 const BATCH_SIZE = 500;
@@ -16,7 +16,8 @@ interface TenantEntry {
 
 /**
  * Read all tenants from the registry and bulk-upsert their records into Typesense.
- * Each record is processed in batches of BATCH_SIZE to limit memory usage.
+ * Uses _id-range cursor pagination (instead of skip) to avoid O(n²) cost on large
+ * collections, and sends records in batches via the Typesense bulk import API.
  */
 export async function runInitialSync(
   tenantBaseClient: MongoClient,
@@ -46,20 +47,27 @@ export async function runInitialSync(
 
     logger.info({ tenantId, total }, 'Syncing tenant records to Typesense');
 
-    let skip = 0;
-    while (skip < total) {
+    // Cursor-based pagination: sort by _id and use $gt to avoid skip
+    let lastId: ObjectId | null = null;
+    let synced = 0;
+
+    for (;;) {
+      const filter: Filter<RecordDocument> = lastId ? { _id: { $gt: lastId } } : {};
       const batch = await collection
-        .find()
-        .skip(skip)
+        .find(filter)
+        .sort({ _id: 1 })
         .limit(BATCH_SIZE)
         .toArray();
 
-      await Promise.all(batch.map((doc) => upsertRecord(tenantId, doc)));
-      skip += batch.length;
+      if (batch.length === 0) break;
+
+      await importRecords(tenantId, batch);
+      synced += batch.length;
       totalUpserted += batch.length;
+      lastId = batch[batch.length - 1]._id!;
     }
 
-    logger.info({ tenantId, synced: Math.min(skip, total) }, 'Tenant sync complete');
+    logger.info({ tenantId, synced }, 'Tenant sync complete');
   }
 
   logger.info({ totalUpserted }, 'Initial Typesense sync complete');
