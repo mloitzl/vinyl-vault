@@ -38,6 +38,7 @@ jobs:
           - backend
           - bff
           - frontend
+          - sync-worker
 
     steps:
       - name: Checkout code

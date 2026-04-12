@@ -93,6 +93,26 @@ spec:
             configMapKeyRef:
               name: otel-config
               key: OTEL_RESOURCE_ATTRIBUTES
+        - name: TYPESENSE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: TYPESENSE_HOST
+        - name: TYPESENSE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: TYPESENSE_PORT
+        - name: TYPESENSE_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: TYPESENSE_PROTOCOL
+        - name: TYPESENSE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: TYPESENSE_API_KEY
         resources:
           requests:
             memory: "256Mi"

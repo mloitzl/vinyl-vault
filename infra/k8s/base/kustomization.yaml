@@ -20,6 +20,13 @@ resources:
   # Ingress
   - ingress/ingress.yaml
   
+  # Typesense search cluster
+  - typesense/statefulset.yaml
+  - typesense/services.yaml
+
+  # Sync worker
+  - sync-worker/deployment.yaml
+  
   # ConfigMaps only (Secrets must be created manually via kubectl)
   - configmaps/app-config.yaml
   - configmaps/otel-config.yaml

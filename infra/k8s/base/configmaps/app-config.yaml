@@ -17,3 +17,8 @@ data:
   
   # Feature flags
   ENABLE_DISCOGS_INTEGRATION: "false"
+
+  # Typesense — self-hosted cluster (override per overlay for Typesense Cloud)
+  TYPESENSE_HOST: "typesense"
+  TYPESENSE_PORT: "8108"
+  TYPESENSE_PROTOCOL: "http"

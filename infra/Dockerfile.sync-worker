@@ -1,0 +1,36 @@
+# Sync Worker Dockerfile
+# Shares the backend build; different entrypoint (sync-worker/index.js).
+FROM node:20-slim AS builder
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+WORKDIR /app
+
+RUN corepack enable
+
+COPY . .
+
+RUN pnpm install --frozen-lockfile
+
+RUN pnpm -r build
+
+# Production stage
+FROM node:20-slim
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+WORKDIR /app
+
+RUN corepack enable
+
+COPY --from=builder /app/packages/backend/dist ./dist
+COPY --from=builder /app/packages/backend/package.json ./
+COPY --from=builder /app/packages/backend/src/register.mjs ./dist/register.mjs
+
+RUN pnpm install --prod
+
+EXPOSE 8109
+
+CMD ["node", "--import", "./dist/register.mjs", "--import", "./dist/instrumentation.js", "dist/sync-worker/index.js"]
