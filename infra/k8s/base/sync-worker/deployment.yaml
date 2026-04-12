@@ -59,6 +59,28 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: TYPESENSE_API_KEY
+            - name: OTEL_SERVICE_NAME
+              value: "vv-sync-worker"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: otel-config
+                  key: OTEL_EXPORTER_OTLP_ENDPOINT
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              valueFrom:
+                configMapKeyRef:
+                  name: otel-config
+                  key: OTEL_EXPORTER_OTLP_PROTOCOL
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  name: otel-secrets
+                  key: OTEL_EXPORTER_OTLP_HEADERS
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: otel-config
+                  key: OTEL_RESOURCE_ATTRIBUTES
           resources:
             requests:
               memory: "128Mi"
