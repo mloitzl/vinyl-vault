@@ -96,6 +96,31 @@ node scripts/admin/backfill-search-fields.mjs [--dry-run]
 ```
 
 On Atlas, both URIs typically point to the same cluster.
+
+---
+
+### `typesense-full-sync.mjs`
+Wipe and fully re-index all tenant records in Typesense from MongoDB.  
+Use this for disaster recovery or after a Typesense collection schema change.  
+The sync worker's change-stream resume token is cleared so it resumes cleanly from the current position after the script finishes.
+
+```bash
+node scripts/admin/typesense-full-sync.mjs [--stage DEV|STAGING|DEMO] [--dry-run]
+```
+
+Or with explicit credentials to keep secrets out of `ps`:
+```bash
+export MONGODB_REGISTRY_URI="mongodb+srv://..."
+export MONGODB_URI_BASE="mongodb+srv://..."
+export TYPESENSE_HOST="xxx.a1.typesense.net"
+export TYPESENSE_PORT="443"
+export TYPESENSE_PROTOCOL="https"
+export TYPESENSE_API_KEY="your-api-key"
+node scripts/admin/typesense-full-sync.mjs [--dry-run]
+```
+
+---
+
 Copy all Vinyl Vault databases (`vinylvault_registry`, `vv_*` tenant databases, `vinylvault_bff`) from one MongoDB cluster to another.  
 Each destination collection is wiped before copying, so the script is safe to re-run.  
 Atlas Search indexes must be created separately after migration.

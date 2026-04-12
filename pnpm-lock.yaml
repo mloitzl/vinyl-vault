@@ -362,6 +362,9 @@ importers:
       mongodb:
         specifier: ^6.0.0
         version: 6.21.0
+      typesense:
+        specifier: ^1.8.0
+        version: 1.8.2(@babel/runtime@7.28.4)
 
 packages:
 

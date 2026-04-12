@@ -119,6 +119,16 @@ export async function ensureCollection(): Promise<void> {
   logger.info({ collection: COLLECTION_NAME }, 'Typesense collection created');
 }
 
+/** Returns true when the Typesense collection has zero documents (triggers initial sync). */
+export async function isCollectionEmpty(): Promise<boolean> {
+  try {
+    const info = await getTypesenseClient().collections(COLLECTION_NAME).retrieve() as any;
+    return (info?.num_documents ?? 0) === 0;
+  } catch {
+    return true;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Document operations
 // ---------------------------------------------------------------------------
