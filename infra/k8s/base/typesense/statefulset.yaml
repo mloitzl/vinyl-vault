@@ -5,6 +5,7 @@ metadata:
 spec:
   serviceName: typesense-headless
   replicas: 3
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app: typesense

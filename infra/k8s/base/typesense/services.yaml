@@ -6,6 +6,7 @@ metadata:
   name: typesense-headless
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: typesense
   ports:
