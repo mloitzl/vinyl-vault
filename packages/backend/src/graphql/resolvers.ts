@@ -256,7 +256,8 @@ export const resolvers = {
         context.userId,
         _args.query,
         _args.filter ?? {},
-        { first: _args.first, after: _args.after }
+        { first: _args.first, after: _args.after },
+        context.tenantId ?? '',
       );
 
       return {
