@@ -301,7 +301,8 @@ export class RecordRepository {
 
     // Try to use cached counters, fallback to countDocuments for complex queries
     let totalCount: number;
-    const cachedCount = await this.counterRepo.getCount({
+    const hasReleaseFilter = !!(filter.artist || filter.title || filter.year || filter.format || filter.genre);
+    const cachedCount = hasReleaseFilter ? null : await this.counterRepo.getCount({
       userId: filter.userId,
       location: filter.location,
       isRegexLocation,
