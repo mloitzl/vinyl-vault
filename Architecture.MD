@@ -63,6 +63,21 @@ Main components:
   - Implements blended scoring system for release aggregation into Albums.
   - Provides detailed score breakdowns for transparency and debugging.
   - Caches release metadata per tenant to ensure data isolation.
+  - Executes faceted full-text search via Typesense: two-step lookup (Typesense for ranking + facets → MongoDB for full document fetch), enforcing tenant isolation server-side on every query.
+
+- **Typesense** (Full-Text Search)
+  - Self-hosted 3-node Raft cluster on k3s (staging/production) or Typesense Cloud free tier (demo/Koyeb).
+  - Single shared collection `records` with a `tenantId` field; the backend appends `filter_by: tenantId:=<id>` to every query — the browser never accesses Typesense directly.
+  - Supports faceted search: counts by artist, title, genre, format, condition, location, country.
+  - Highlight snippets surfaced as `SearchHighlight[]` (same GraphQL shape as the previous Atlas Search implementation).
+  - Local dev: single-node container via `docker-compose.yml` on port 8108.
+
+- **Sync Worker** (`packages/backend/src/sync-worker/`)
+  - Standalone Node process (separate Kubernetes Deployment, `replicas: 1`, `strategy: Recreate`).
+  - Opens a single `MongoClient.watch()` cursor across **all** tenant databases using a regex namespace filter (`ns.db: /^vv_/`) so one cursor covers all tenants.
+  - On first run (Typesense collection empty), performs a full initial sync by reading all tenant records from MongoDB in batches.
+  - Persists the change-stream resume token in the central registry DB (`sync_state` collection) so restarts resume without data loss.
+  - Handles `insert`/`update`/`replace` → Typesense upsert, `delete` → Typesense delete, `dropDatabase` → delete all tenant records.
 
 - **MongoDB** (Multiple Instances)
   - **BFF MongoDB** (`MONGODB_URI`): Stores only session information via `connect-mongo`.
@@ -72,7 +87,7 @@ Main components:
     - Stores tenant-specific data: users, records, and releases.
     - Complete logical and physical isolation between tenants.
     - Users can be members of multiple organization tenants.
-  - **Central Registry** (`MONGODB_REGISTRY_URI`): Stores user-tenant-role mappings and tenant metadata.
+  - **Central Registry** (`MONGODB_REGISTRY_URI`): Stores user-tenant-role mappings, tenant metadata, and sync worker resume token (`sync_state` collection).
   - Running via Docker for development (see `infra/docker-compose.yml`).
 
 - **External APIs**
@@ -93,6 +108,8 @@ Three active environments exist; RPi 5 remains the production target.
 - Kubernetes cluster, namespace `vinylvault-staging`, managed via kubectl + Kustomize (`infra/k8s/`).
 - Kubernetes Secrets hold MongoDB passwords.
 - StatefulSets for MongoDB: `mongodb-bff` and `mongodb-backend`.
+- Typesense: 3-node Raft StatefulSet (`infra/k8s/base/typesense/`) with headless Service for Raft peer DNS and ClusterIP Service for API queries.
+- Sync worker: single-replica Deployment (`infra/k8s/base/sync-worker/`) with `strategy: Recreate`.
 - Images pushed to GHCR: `ghcr.io/mloitzl/vinylvault-*:latest-staging`.
 - GitHub Actions CI/CD with a self-hosted runner; build/push/deploy scripts in `scripts/`.
 - Frontend served as pre-built static assets.
@@ -102,6 +119,8 @@ Three active environments exist; RPi 5 remains the production target.
 - Deployed via `infra/Dockerfile.demoserver`.
 - Frontend built with `pnpm build` and deployed to Vercel.
 - Build pipeline: `generate-schema.mjs` → `pnpm relay` → `vite build`.
+- Full-text search uses **Typesense Cloud** free tier (100k documents). MongoDB Atlas M0 is a replica set, so change streams are supported and the sync worker runs as a separate Koyeb service.
+- Required env vars: `TYPESENSE_HOST`, `TYPESENSE_PORT=443`, `TYPESENSE_PROTOCOL=https`, `TYPESENSE_API_KEY`.
 
 ### Production Target (Raspberry Pi 5)
 - Reverse proxy (Caddy) terminates TLS (Let’s Encrypt) and routes `/graphql` and `/auth/*` to the BFF; serves static frontend assets.
@@ -665,10 +684,68 @@ erDiagram
 - All secrets stored in `.env` file (not committed to git).
 - See `docs/GITHUB_OAUTH_SETUP.md` for OAuth setup guide.
 - Multi-tenant MongoDB configuration:
-  - `MONGODB_URI_BASE` - Base connection string for tenant databases (Backend)
-  - `MONGODB_REGISTRY_URI` - Connection string for registry database (Backend)
+  - `MONGODB_URI_BASE` - Base connection string for tenant databases (Backend + sync worker)
+  - `MONGODB_REGISTRY_URI` - Connection string for registry database (Backend + sync worker)
   - `MONGODB_URI` - Connection string for BFF session storage
 - External API tokens: `DISCOGS_API_TOKEN`, `MUSICBRAINZ_USER_AGENT`.
+- Typesense: `TYPESENSE_HOST`, `TYPESENSE_PORT`, `TYPESENSE_PROTOCOL`, `TYPESENSE_API_KEY`.
+
+### 5.6 Full-Text Search (Typesense)
+
+**Overview:**
+
+Faceted full-text search is powered by [Typesense](https://typesense.org) — an open-source, typo-tolerant search engine with native 3-node Raft clustering. It replaces a previous MongoDB Atlas Search implementation (which hit the 3-index free-tier limit).
+
+**Collection schema (`records`):**
+
+| Field | Type | Facet | Notes |
+|---|---|---|---|
+| `id` | string | — | MongoDB `_id.toString()` — globally unique |
+| `tenantId` | string | ✓ | Always filtered server-side; never from the browser |
+| `releaseArtist` | string | ✓ | |
+| `releaseTitle` | string | ✓ | |
+| `releaseLabel` | string | — | Searchable |
+| `releaseGenre` | string[] | ✓ | |
+| `releaseStyle` | string[] | — | Searchable |
+| `releaseTrackTitles` | string[] | — | Searchable |
+| `releaseFormat` | string | ✓ | LP, 7", CD, etc. |
+| `releaseCountry` | string | ✓ | |
+| `releaseYear` | int32 | ✓ | |
+| `condition` | string | ✓ | Mint, VG+, etc. |
+| `location` | string | ✓ | Storage shelf/box |
+| `notes` | string | — | Searchable |
+| `updatedAt` | int64 | — | Unix ms; default sort field |
+
+**Search flow (two-step):**
+1. Backend calls `typesenseService.search()` with the user query, active facet filters, and a mandatory `filter_by: tenantId:=<id>` clause.
+2. Typesense returns ranked document IDs, highlight snippets, and facet counts.
+3. Backend fetches full `RecordDocument` objects from MongoDB by those IDs, preserving rank order.
+4. Response follows the same `SearchRecordsResult` GraphQL shape as before — frontend and BFF have zero changes.
+
+**Query syntax supported:**
+- Plain words: `Beatles Abbey Road` — typo-tolerant (≥5-char tokens get 1 edit allowed)
+- Quoted phrase: `"dark side of the moon"` — exact phrase match
+- `+term` — term is required (must appear)
+- `-term` — term is excluded (dropped; Typesense has no cross-field NOT operator in `q`)
+
+**Tenant isolation:**
+- The backend always appends `filter_by: tenantId:=\`<id>\`` before executing any Typesense query.
+- Facet filter values are backtick-quoted to handle special characters (e.g. `Folk, World, & Country`).
+- No per-tenant collections or API keys are needed.
+
+**Sync worker:**
+- A separate process (`packages/backend/src/sync-worker/`) keeps Typesense in sync via a single `MongoClient.watch()` cursor filtered to `ns.db: /^vv_/`.
+- Resume token is stored in the registry DB `sync_state` collection for crash-safe restarts.
+- Initial sync runs automatically when the Typesense collection is empty.
+- `scripts/admin/typesense-full-sync.mjs` can wipe and re-index from scratch (for disaster recovery or schema changes).
+
+**Deployment topology:**
+
+| Environment | Typesense | Sync Worker |
+|---|---|---|
+| Local dev | Single-node Docker container (port 8108) | Docker service |
+| k3s staging/prod | 3-node Raft StatefulSet, headless Service for peer DNS | `replicas: 1`, `strategy: Recreate` Deployment |
+| Demo (Koyeb) | Typesense Cloud free tier (100k docs) | Separate Koyeb service |
 
 ## 6. Quality Attributes
 
@@ -723,22 +800,32 @@ vinylvault/
 │   │       ├── db/            # MongoDB connection and collections
 │   │       ├── graphql/       # GraphQL schema and resolvers
 │   │       ├── models/        # Data models
-│   │       └── services/      # Business logic
-│   │           ├── discogs.ts     # Discogs API client
-│   │           ├── musicbrainz.ts # MusicBrainz API client
-│   │           ├── releasesCache.ts # Release caching
-│   │           ├── users.ts       # User management
-│   │           └── scoring/       # Blended scoring module
-│   │               ├── types.ts
-│   │               ├── config.ts
-│   │               ├── normalize.ts
-│   │               ├── score.ts
-│   │               ├── aggregate.ts
-│   │               ├── orchestrator.ts
-│   │               └── index.ts
+│   │       ├── services/      # Business logic
+│   │       │   ├── typesense.ts           # Typesense client, upsert/delete/search
+│   │       │   ├── typesense-query.ts     # Query builder (phrase/must/mustNot/facets)
+│   │       │   ├── typesense-highlights.ts # <mark> snippet → SearchHighlight[]
+│   │       │   ├── discogs.ts             # Discogs API client
+│   │       │   ├── musicbrainz.ts         # MusicBrainz API client
+│   │       │   ├── releasesCache.ts       # Release caching
+│   │       │   ├── users.ts               # User management
+│   │       │   └── scoring/               # Blended scoring module
+│   │       │       ├── types.ts
+│   │       │       ├── config.ts
+│   │       │       ├── normalize.ts
+│   │       │       ├── score.ts
+│   │       │       ├── aggregate.ts
+│   │       │       ├── orchestrator.ts
+│   │       │       └── index.ts
+│   │       └── sync-worker/   # MongoDB→Typesense change-stream sync worker
+│   │           ├── index.ts                  # Entry point
+│   │           ├── change-stream-listener.ts # watch() cursor + event handlers
+│   │           ├── initial-sync.ts           # Full initial sync across all tenants
+│   │           └── token-store.ts            # Resume token persistence (registry DB)
 │   └── demo-server/       # Koyeb orchestrator (forks BFF + Backend, port 8080)
 ├── scripts/
-│   └── admin/             # Admin management scripts (list-users, add-user-to-tenant, etc.)
+│   └── admin/             # Admin management scripts
+│       ├── typesense-full-sync.mjs  # Wipe + re-index all records in Typesense
+│       └── ...                      # list-users, add-user-to-tenant, etc.
 ├── infra/
 │   ├── docker-compose.yml     # Local DEV service orchestration
 │   ├── Caddyfile              # Reverse proxy configuration
@@ -746,7 +833,11 @@ vinylvault/
 │   ├── Dockerfile.backend     # Backend container
 │   ├── Dockerfile.frontend    # Frontend container
 │   ├── Dockerfile.demoserver  # Demo server container (Koyeb)
+│   ├── Dockerfile.sync-worker # Sync worker container
 │   └── k8s/               # Kubernetes manifests (Kustomize, staging)
+│       └── base/
+│           ├── typesense/         # 3-node Raft StatefulSet + headless Service
+│           └── sync-worker/       # Sync worker Deployment (replicas: 1, Recreate)
 ├── docs/                  # Setup guides
 ├── generate-schema.mjs    # Merges BFF + Backend SDL → packages/frontend/schema.graphql
 ├── .env                   # Environment variables (not in git)
