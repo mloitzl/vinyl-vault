@@ -173,9 +173,10 @@ FR-4 Record Management ✅ IMPLEMENTED
 FR-5 Collection Browsing ✅ IMPLEMENTED
 - The system shall allow users to:
   - List records with pagination. ✅ Cursor-based pagination with "Load More" button
-  - Filter records by artist, title, year, format, or location. ✅ Search and location filters implemented
-  - Search records using a free-text search field (e.g., artist/title). ✅ MongoDB text search on notes/condition/location
-- Implementation: RecordRepository with pagination/filtering, records query (backend), records query proxy (BFF), CollectionPage with RecordCard components (frontend).
+  - Filter records by artist, title, year, format, genre, condition, location. ✅ Facet-driven sidebar (desktop) and slide-in panel (mobile)
+  - Search records using full-text search with advanced query syntax. ✅ Typesense-powered; supports plain, phrase (`"..."`), `+must`, `-mustNot`
+  - View highlighted search term matches within results. ✅ Client-side `<mark>` highlighting on title, artist, label, notes, genre, track titles
+- Implementation: Typesense search adapter (backend), MongoDB→Typesense sync worker, RecordRepository two-step search (Typesense ranks → MongoDB fetch), SearchPage with RecordCard components (frontend).
 
 FR-6 Authentication via GitHub ✅ IMPLEMENTED
 - The system shall authenticate users using GitHub OAuth Web Application Flow.
@@ -340,6 +341,7 @@ QR-04: Robustness to incomplete data
 - ✅ Complete CRUD operations - Create (scan), Read (list/detail), Update (modal), Delete (confirmation)
 - ✅ Hashed tenant database names - `vv_<12-char-SHA256>` format enforced across backend
 - ✅ Betterstack Logs (OTLP) + LogRocket monitoring configured
+- ✅ Faceted full-text search (FR-5) — Typesense-powered with 7 facet dimensions, advanced query syntax, client-side highlighting, and real-time MongoDB sync worker
 
 ## 7. Open Issues
 

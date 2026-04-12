@@ -95,6 +95,20 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `@apollo/server` - GraphQL server
 - `mongodb` - Database driver
 - `jsonwebtoken` - JWT verification
+- `typesense` - Typesense client (search adapter + sync worker)
+
+**Search Services (`src/services/`):**
+- `typesense.ts` - Typesense client singleton, collection schema, upsert/delete/two-step search
+- `typesense-query.ts` - Query builder: user query string → Typesense `SearchParams` (phrase, must, mustNot, facets)
+- `typesense-highlights.ts` - Maps Typesense `<mark>` snippets to `SearchHighlight[]` GraphQL type
+
+**Sync Worker (`src/sync-worker/`):**
+- `index.ts` - Entry point; startup sequence and graceful shutdown
+- `change-stream-listener.ts` - Single `client.watch()` on all `vv_*` namespaces; real-time MongoDB→Typesense sync
+- `initial-sync.ts` - Full bulk-upsert on first start (batches of 500)
+- `token-store.ts` - Resume token persistence in registry DB `sync_state` collection
+
+Run locally with: `pnpm --filter @vinylvault/backend sync-worker`
 
 **Responsibilities:**
 
@@ -141,7 +155,7 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 
 ## 5. Database
 
-- **DBMS:** MongoDB 7 (running via Docker)
+- **DBMS:** MongoDB 8 (replica set required for change streams)
 - **Docker:** Configured in `infra/docker-compose.yml`
 - **Architecture:** Multi-tenant database-per-tenant with central registry
 - **Connection:** 
@@ -156,9 +170,12 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 - `user_tenant_roles` - Mapping of users to tenants with roles (admin, member, viewer)
 
 **Tenant Databases (`vv_<12-char-SHA256-hash-of-tenantId>`, e.g., `vv_a1b2c3d4e5f6`):**
-- `records` - Physical owned items for this tenant
+- `records` - Physical owned items for this tenant (includes denormalized release fields for search)
 - `releases` - Cached external metadata for this tenant
 - `scoring_configs` - Custom scoring configuration for this tenant (optional override)
+
+**Registry Database — additional collections:**
+- `sync_state` - Typesense change-stream resume token (managed by sync worker)
 
 **Important:** The multi-tenant architecture uses:
 - **Registry database:** Central user-tenant-role mappings and session storage
@@ -268,27 +285,31 @@ This document summarizes the technology choices for Vinyl Vault across frontend,
 Three active environments:
 
 **Local DEV:**
-- Docker Compose + MongoDB on localhost.
-- `pnpm dev` runs all services in parallel (Vite :3000, BFF :3001, Backend :4000).
+- Docker Compose + MongoDB (replica set) + Typesense on localhost.
+- `pnpm dev` runs all app services in parallel (Vite :3000, BFF :3001, Backend :4000).
+- `pnpm --filter @vinylvault/backend sync-worker` runs the change-stream sync worker (separate terminal).
 
 **Staging (Kubernetes):**
 - Namespace `vinylvault-staging`; manifests in `infra/k8s/` (kubectl + Kustomize).
-- StatefulSets for `mongodb-bff` and `mongodb-backend`; Kubernetes Secrets for passwords.
+- StatefulSets for `mongodb-bff`, `mongodb-backend`, and Typesense (3-node Raft).
+- Sync-worker Deployment (`replicas: 1`, `Recreate` strategy).
 - Images pushed to GHCR (`ghcr.io/mloitzl/vinylvault-*:latest-staging`).
 - GitHub Actions CI/CD with self-hosted runner; build/push/deploy scripts in `scripts/`.
 
 **Demo (Koyeb):**
 - `packages/demo-server` orchestrates BFF + Backend as child processes; listens on port 8080.
 - Deployed via `infra/Dockerfile.demoserver`. Frontend on Vercel.
+- Uses Typesense Cloud free tier for search; sync worker deployed as a separate Koyeb service.
 
 **Infrastructure Files (`infra/`):**
-- `docker-compose.yml` - Local DEV service orchestration
+- `infra/docker-compose.yml` - Local DEV service orchestration (MongoDB replica set + Typesense)
 - `Caddyfile` - Reverse proxy configuration
 - `Dockerfile.bff` - BFF container
 - `Dockerfile.backend` - Backend container
 - `Dockerfile.frontend` - Frontend container
+- `Dockerfile.sync-worker` - Sync worker container (shares backend build, different entrypoint)
 - `Dockerfile.demoserver` - Demo server container (Koyeb)
-- `k8s/` - Kubernetes manifests (Kustomize, staging)
+- `k8s/` - Kubernetes manifests (Kustomize, staging + production)
 
 **Process Management:**
 - Docker restart policies for production.
@@ -320,7 +341,10 @@ Three active environments:
 
 **Admin Scripts (`scripts/admin/`):**
 - Registered as `@vinylvault/admin-scripts` in pnpm workspace.
-- Operations: `list-users`, `list-tenants`, `add-user-to-tenant`, `remove-user-from-tenant`, `remove-tenant`, `force-logout-user`, `statistics`.
+- Operations: `list-users`, `list-tenants`, `add-user-to-tenant`, `remove-user-from-tenant`, `remove-tenant`, `force-logout-user`, `statistics`, `migrate-cluster`.
+- `backfill-search-fields.mjs` — Populates denormalized release fields on existing records across all tenant DBs; idempotent; supports `--dry-run`.
+- `typesense-full-sync.mjs` — Wipes Typesense collection and re-indexes all tenants from scratch; supports `--stage DEV|STAGING|DEMO` and `--dry-run`.
+- `migrate-cluster.mjs` — Copies all Vinyl Vault databases between two MongoDB clusters.
 - Support `DEV`/`STAGING`/`DEMO` environments; `STAGING` auto-handles kubectl port-forward.
 
 **Code Quality:**
@@ -340,6 +364,12 @@ Three active environments:
 MONGODB_URI_BASE=mongodb://localhost:27017              # Base URI for tenant databases (Backend)
 MONGODB_REGISTRY_URI=mongodb://localhost:27017/vinylvault_registry  # Registry database (Backend)
 MONGODB_URI=mongodb://localhost:27017/vinylvault_bff    # BFF session storage
+
+# Typesense (Full-Text Search)
+TYPESENSE_HOST=localhost                # 'typesense' inside Docker, cluster.typesense.net for Cloud
+TYPESENSE_PORT=8108                     # 443 for Typesense Cloud
+TYPESENSE_PROTOCOL=http                 # 'https' for Typesense Cloud
+TYPESENSE_API_KEY=local-dev-key         # generate with: openssl rand -hex 32
 
 # GitHub OAuth
 GITHUB_CLIENT_ID=your_client_id
