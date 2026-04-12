@@ -22,6 +22,8 @@ spec:
         - name: sync-worker
           image: ghcr.io/mloitzl/vinylvault-sync-worker:latest
           env:
+            - name: NODE_ENV
+              value: production
             - name: MONGODB_URI_BASE
               valueFrom:
                 secretKeyRef:
