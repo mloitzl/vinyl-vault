@@ -1,13 +1,13 @@
 /**
  * Typesense query builder.
  *
- * Translates the user-facing query string (which may contain Atlas-style special
- * syntax) and the active RecordSearchFilter into Typesense SearchParams.
+ * Translates the user-facing query string and the active RecordSearchFilter into Typesense SearchParams.
  *
  * Supported query syntax:
  *   "phrase"   – exact phrase match (words must appear in order)
  *   +term      – term is required (mapped to inclusion in q)
- *   -term      – term is excluded (dropped; Typesense has no cross-field NOT operator)
+ *   -term      – term is dropped from the query; no true exclusion semantics
+ *                (Typesense has no cross-field NOT operator in q)
  *   word       – plain word; short words (< 5 chars) get no typo tolerance
  */
 

@@ -39,8 +39,12 @@ const DRY_RUN = values['dry-run'];
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+const BATCH_SIZE = 200;
+
 /**
  * Backfill one tenant database.
+ * Processes records in batches: collects BATCH_SIZE records, fetches their releases
+ * in one $in query, then submits a single bulkWrite — avoiding the N+1 query pattern.
  * Returns { updated, skipped, total }.
  */
 async function backfillTenant(tenantClient, dbName, dryRun) {
@@ -55,6 +59,50 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
 
   let updated = 0;
   let skipped = 0;
+
+  let batch = [];
+
+  async function processBatch(recordBatch) {
+    // Fetch all releases for this batch in one round-trip
+    const releaseIds = recordBatch.map(r => r.releaseId);
+    const releaseDocs = await releases
+      .find({ _id: { $in: releaseIds } }, { projection: { artist: 1, title: 1, year: 1, format: 1, genre: 1, style: 1, label: 1, country: 1, trackList: 1 } })
+      .toArray();
+    const releaseMap = new Map(releaseDocs.map(r => [r._id.toString(), r]));
+
+    const bulkOps = [];
+    for (const record of recordBatch) {
+      const release = releaseMap.get(record.releaseId.toString());
+      if (!release) {
+        console.warn(`    ⚠️  No release found for record ${record._id} (releaseId: ${record.releaseId})`);
+        skipped++;
+        continue;
+      }
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: record._id },
+          update: {
+            $set: {
+              releaseArtist:      release.artist,
+              releaseTitle:       release.title,
+              releaseYear:        release.year,
+              releaseFormat:      release.format,
+              releaseGenre:       release.genre,
+              releaseStyle:       release.style,
+              releaseLabel:       release.label,
+              releaseCountry:     release.country,
+              releaseTrackTitles: release.trackList?.map(t => t.title).filter(Boolean) ?? [],
+            },
+          },
+        },
+      });
+    }
+
+    if (!dryRun && bulkOps.length > 0) {
+      await records.bulkWrite(bulkOps, { ordered: false });
+    }
+    updated += bulkOps.length;
+  }
 
   for await (const record of records.find({}, { projection: { _id: 1, releaseId: 1, releaseArtist: 1, releaseTitle: 1, releaseYear: 1, releaseFormat: 1, releaseGenre: 1, releaseStyle: 1, releaseLabel: 1, releaseCountry: 1, releaseTrackTitles: 1 } })) {
     // Skip only when ALL embedded search fields are present.
@@ -73,36 +121,20 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
       continue;
     }
 
-    const release = await releases.findOne(
-      { _id: record.releaseId },
-      { projection: { artist: 1, title: 1, year: 1, format: 1, genre: 1, style: 1, label: 1, country: 1, trackList: 1 } }
-    );
-
-    if (!release) {
-      console.warn(`    ⚠️  No release found for record ${record._id} (releaseId: ${record.releaseId})`);
-      skipped++;
-      continue;
+    batch.push(record);
+    if (batch.length >= BATCH_SIZE) {
+      await processBatch(batch);
+      batch = [];
     }
-
-    const searchFields = {
-      releaseArtist:      release.artist,
-      releaseTitle:       release.title,
-      releaseYear:        release.year,
-      releaseFormat:      release.format,
-      releaseGenre:       release.genre,
-      releaseStyle:       release.style,
-      releaseLabel:       release.label,
-      releaseCountry:     release.country,
-      releaseTrackTitles: release.trackList?.map(t => t.title).filter(Boolean) ?? [],
-    };
-
-    if (!dryRun) {
-      await records.updateOne({ _id: record._id }, { $set: searchFields });
-    }
-
-    updated++;
   }
 
+  // Flush remaining records
+  if (batch.length > 0) {
+    await processBatch(batch);
+  }
+
+  return { updated, skipped, total };
+}
   return { updated, skipped, total };
 }
 

@@ -27,15 +27,13 @@ export async function loadResumeToken(registryDb: Db): Promise<Document | null> 
 }
 
 export async function saveResumeToken(registryDb: Db, token: Document): Promise<void> {
-  try {
-    await registryDb.collection<SyncStateDoc>(COLLECTION).updateOne(
-      { _id: DOC_ID },
-      { $set: { resumeToken: token, updatedAt: new Date() } },
-      { upsert: true },
-    );
-  } catch (err) {
-    logger.warn({ err }, 'Could not save resume token');
-  }
+  await registryDb.collection<SyncStateDoc>(COLLECTION).updateOne(
+    { _id: DOC_ID },
+    { $set: { resumeToken: token, updatedAt: new Date() } },
+    { upsert: true },
+  );
+  // Errors propagate to the caller — it is the caller's responsibility to decide
+  // whether to retry, log, or exit when the token cannot be persisted.
 }
 
 export async function clearResumeToken(registryDb: Db): Promise<void> {

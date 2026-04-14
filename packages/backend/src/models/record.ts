@@ -17,7 +17,7 @@ export interface RecordDocument {
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
-  // Embedded release fields for single-collection Atlas Search (populated at write time)
+  // Embedded release fields for Typesense search and faceting (populated at write time)
   releaseArtist?: string;
   releaseTitle?: string;
   releaseYear?: number;
