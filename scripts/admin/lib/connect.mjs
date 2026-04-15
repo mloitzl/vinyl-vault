@@ -121,10 +121,13 @@ async function stagingUris() {
   activePortForwards.push(pfBackend, pfBff);
   console.log('✅  Port-forwards ready (backend→27018, bff→27019)');
 
+  // directConnection bypasses replica-set topology discovery, which would
+  // otherwise redirect the driver to internal hostnames unresolvable from
+  // outside the cluster.
   return {
-    registryUri: `mongodb://root:${encBackend}@localhost:27018/vinylvault_registry?authSource=admin`,
-    uriBase:     `mongodb://root:${encBackend}@localhost:27018?authSource=admin`,
-    bffUri:      `mongodb://root:${encBff}@localhost:27019/vinylvault_bff?authSource=admin`,
+    registryUri: `mongodb://root:${encBackend}@localhost:27018/vinylvault_registry?authSource=admin&directConnection=true`,
+    uriBase:     `mongodb://root:${encBackend}@localhost:27018?authSource=admin&directConnection=true`,
+    bffUri:      `mongodb://root:${encBff}@localhost:27019/vinylvault_bff?authSource=admin&directConnection=true`,
   };
 }
 

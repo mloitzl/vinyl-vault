@@ -10,6 +10,7 @@ import {
   updateRecord,
   deleteRecord,
 } from '../services/records.js';
+import { RecordRepository } from '../models/record.js';
 import { ReleaseRepository } from '../models/release.js';
 import {
   createPersonalTenant,
@@ -235,6 +236,53 @@ export const resolvers = {
         totalCount: result.totalCount,
       };
     },
+
+    searchRecords: async (
+      _parent: unknown,
+      _args: {
+        query: string;
+        first?: number;
+        after?: string;
+        filter?: { artist?: string[]; title?: string[]; genre?: string[]; format?: string[]; condition?: string[]; location?: string[]; country?: string[] };
+      },
+      context: GraphQLContext
+    ) => {
+      if (!canRead(context)) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+      if (!context.db) throw new Error('Tenant database connection not available');
+      if (!context.userId) throw new GraphQLError('Not authenticated', { extensions: { code: 'UNAUTHENTICATED' } });
+
+      const repo = new RecordRepository(context.db);
+      const result = await repo.search(
+        context.userId,
+        _args.query,
+        _args.filter ?? {},
+        { first: _args.first, after: _args.after },
+        context.tenantId ?? '',
+      );
+
+      return {
+        edges: result.edges.map((edge) => ({
+          cursor: edge.cursor,
+          highlights: edge.highlights,
+          node: {
+            id: edge.node._id.toString(),
+            releaseId: edge.node.releaseId.toString(),
+            userId: edge.node.userId.toString(),
+            purchaseDate: edge.node.purchaseDate?.toISOString(),
+            price: edge.node.price,
+            condition: edge.node.condition,
+            location: edge.node.location,
+            notes: edge.node.notes,
+            createdAt: edge.node.createdAt.toISOString(),
+            updatedAt: edge.node.updatedAt.toISOString(),
+          },
+        })),
+        pageInfo: result.pageInfo,
+        totalCount: result.totalCount,
+        facets: result.facets,
+      };
+    },
+
     userTenants: async (_parent: unknown, _args: { userId: string }) => {
       const { userId } = _args;
 

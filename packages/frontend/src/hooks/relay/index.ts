@@ -8,3 +8,5 @@ export { useUpdateRecordMutation } from './useUpdateRecordMutation';
 export { useDeleteRecordMutation } from './useDeleteRecordMutation';
 export { useScanBarcodeMutation } from './useScanBarcodeMutation';
 export { useSwitchTenantMutation } from './useSwitchTenantMutation';
+export { useSearchRecordsQuery } from './useSearchRecordsQuery';
+export type { RecordSearchFilter } from './useSearchRecordsQuery';

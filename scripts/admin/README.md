@@ -79,6 +79,88 @@ Platform-wide statistics: users, tenants, role assignments, active sessions, and
 node scripts/admin/statistics.mjs [--stage DEV]
 ```
 
+### `backfill-search-fields.mjs`
+Populate embedded release search fields (`releaseArtist`, `releaseTitle`, `releaseYear`, etc.)
+on all existing record documents. New records receive these fields automatically; this script
+covers records created before the denormalization was introduced. Safe to re-run.
+
+```bash
+node scripts/admin/backfill-search-fields.mjs [--stage DEV|STAGING|DEMO] [--dry-run]
+```
+
+Or with explicit URIs to keep credentials out of `ps` (same variable names as the backend `.env`):
+```bash
+export MONGODB_REGISTRY_URI="mongodb+srv://..."
+export MONGODB_URI_BASE="mongodb+srv://..."    # base URI, no database name
+node scripts/admin/backfill-search-fields.mjs [--dry-run]
+```
+
+On Atlas, both URIs typically point to the same cluster.
+
+---
+
+### `typesense-full-sync.mjs`
+Wipe and fully re-index all tenant records in Typesense from MongoDB.  
+Use this for disaster recovery or after a Typesense collection schema change.  
+The sync worker's change-stream resume token is cleared so it resumes cleanly from the current position after the script finishes.
+
+```bash
+node scripts/admin/typesense-full-sync.mjs [--stage DEV|STAGING|DEMO] [--dry-run]
+```
+
+Or with explicit credentials to keep secrets out of `ps`:
+```bash
+export MONGODB_REGISTRY_URI="mongodb+srv://..."
+export MONGODB_URI_BASE="mongodb+srv://..."
+export TYPESENSE_HOST="xxx.a1.typesense.net"
+export TYPESENSE_PORT="443"
+export TYPESENSE_PROTOCOL="https"
+export TYPESENSE_API_KEY="your-api-key"
+node scripts/admin/typesense-full-sync.mjs [--dry-run]
+```
+
+---
+
+Copy all Vinyl Vault databases (`vinylvault_registry`, `vv_*` tenant databases, `vinylvault_bff`) from one MongoDB cluster to another.  
+Each destination collection is wiped before copying, so the script is safe to re-run.  
+Atlas Search indexes must be created separately after migration.
+
+```bash
+node scripts/admin/migrate-cluster.mjs \
+  --src  <source-mongodb-uri> \
+  --dst  <destination-mongodb-uri> \
+  [--batch-size 1000]   # documents per insert batch (default: 1000)
+  [--skip-bff]          # omit vinylvault_bff (sessions)
+  [--dry-run]           # preview what would be migrated without writing
+  [-y]                  # skip the confirmation prompt
+```
+
+**Keeping secrets out of `ps`** — pass the URIs via environment variables instead of
+CLI arguments so they never appear in the process list:
+
+```bash
+export VV_SRC_URI="mongodb://localhost:27017"
+export VV_DST_URI="mongodb+srv://user:pass@cluster.mongodb.net"
+node scripts/admin/migrate-cluster.mjs [--batch-size 1000] [--skip-bff] [--dry-run] [-y]
+```
+
+Or inline for a one-off run (variables are scoped to the child process, not exported to the shell):
+
+```bash
+VV_SRC_URI="mongodb://localhost:27017" \
+VV_DST_URI="mongodb+srv://user:pass@cluster.mongodb.net" \
+  node scripts/admin/migrate-cluster.mjs --dry-run
+```
+
+You can also use `--src` / `--dst` directly; `VV_SRC_URI` / `VV_DST_URI` are just the recommended alternative to avoid exposing credentials in `ps`.
+
+Examples:
+```bash
+# Preview first, then run
+node scripts/admin/migrate-cluster.mjs --dry-run
+node scripts/admin/migrate-cluster.mjs -y
+```
+
 ---
 
 ## Stage Configuration

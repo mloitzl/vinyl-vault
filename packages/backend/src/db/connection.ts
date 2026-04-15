@@ -82,7 +82,7 @@ export async function initializeTenantIndexes(tenantDb: Db, tenantId: string): P
     // Mark as initialized
     initializedTenants.add(tenantId);
     logger.info({ tenantId }, 'Database indexes created successfully');
-    
+
     // Reconcile counters asynchronously (fire-and-forget)
     // This ensures counters are accurate from the first login
     counterRepo.reconcile().catch((error) => {

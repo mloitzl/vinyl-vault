@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "mongodb": "^6.0.0"
+    "mongodb": "^6.0.0",
+    "typesense": "^1.8.0"
   }
 }

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --import ./src/register.mjs --import tsx/esm --import ./src/instrumentation.ts --watch src/index.ts",
+    "sync-worker": "node --import ./src/register.mjs --import tsx/esm src/sync-worker/index.ts",
     "build": "tsc",
     "start": "node --import ./dist/register.mjs dist/index.js",
     "lint": "eslint src --ext ts",
@@ -30,7 +31,8 @@
     "graphql": "^16.8.0",
     "jsonwebtoken": "^9.0.0",
     "mongodb": "^6.3.0",
-    "pino": "^10.1.0"
+    "pino": "^10.1.0",
+    "typesense": "^1.8.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

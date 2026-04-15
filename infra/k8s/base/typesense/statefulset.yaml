@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: typesense
+spec:
+  serviceName: typesense-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: typesense
+  template:
+    metadata:
+      labels:
+        app: typesense
+    spec:
+      # Spread pods across nodes — no node names needed, topologyKey is automatic.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: "kubernetes.io/hostname"
+                labelSelector:
+                  matchLabels:
+                    app: typesense
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: typesense
+          image: typesense/typesense:26.0
+          args:
+            - --data-dir=/data
+            - --api-key=$(TYPESENSE_API_KEY)
+            - --nodes=/etc/typesense/nodes
+            - --peering-port=8107
+            - --api-port=8108
+          env:
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: TYPESENSE_API_KEY
+          ports:
+            - name: api
+              containerPort: 8108
+            - name: peering
+              containerPort: 8107
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: typesense-nodes
+              mountPath: /etc/typesense
+      volumes:
+        - name: typesense-nodes
+          configMap:
+            name: typesense-nodes
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

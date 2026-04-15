@@ -23,6 +23,8 @@ images:
     newTag: latest-staging
   - name: ghcr.io/mloitzl/vinylvault-frontend
     newTag: latest-staging
+  - name: ghcr.io/mloitzl/vinylvault-sync-worker
+    newTag: latest-staging
 
 # ConfigMap for staging-specific configuration
 configMapGenerator:
@@ -36,6 +38,9 @@ configMapGenerator:
       - GITHUB_CALLBACK_URL=https://vinylvault.antisocializer.org/auth/github/callback
       - ENABLE_DISCOGS_INTEGRATION=true
       - ENABLE_TENANT_FEATURES=true
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
   - name: otel-config
     behavior: merge
     literals:

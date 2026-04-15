@@ -6,8 +6,10 @@ A web application for managing a personal vinyl record collection. Scan barcodes
 
 - 📀 Barcode scanning for quick record lookup
 - 🔍 Automatic metadata retrieval from Discogs/MusicBrainz
+- 🔎 Faceted full-text search (artist, title, genre, format, condition, location, track titles)
 - 🔐 GitHub OAuth authentication
-- 👥 Role-based access (Admin/Contributor/Reader)
+- 👥 Role-based access (Admin/Member/Viewer)
+- 🏢 Multi-tenant: personal and GitHub organization collections
 - 📱 Responsive design for mobile and desktop
 
 ## Architecture
@@ -15,8 +17,9 @@ A web application for managing a personal vinyl record collection. Scan barcodes
 - **Frontend**: React + Relay + Tailwind CSS (Vite SPA)
 - **BFF (Backend-for-Frontend)**: Express + Apollo Server
 - **Domain Backend**: Apollo Server + MongoDB
-- **Database**: MongoDB
-- **Infrastructure**: Docker + Caddy (reverse proxy)
+- **Search**: Typesense (self-hosted cluster or Typesense Cloud)
+- **Database**: MongoDB 8 (replica set required for change streams)
+- **Infrastructure**: Docker + Kubernetes (k3s)
 
 See [Architecture.MD](./Architecture.MD) for detailed architecture documentation.
 
@@ -24,7 +27,8 @@ See [Architecture.MD](./Architecture.MD) for detailed architecture documentation
 
 - Node.js 20+ (LTS)
 - pnpm 8+
-- MongoDB 7+ (or Docker)
+- MongoDB 8+ with replica set (required for change streams; `docker-compose` sets this up automatically)
+- Docker (for Typesense and MongoDB in local dev)
 - GitHub OAuth App (for authentication)
 
 ## Getting Started
@@ -53,32 +57,22 @@ Required environment variables:
 - `JWT_SECRET` - Secret for signing JWTs (generate with `openssl rand -base64 32`)
 - `SESSION_SECRET` - Secret for session cookies (generate with `openssl rand -base64 32`)
 
-### 3. Start MongoDB
+### 3. Start MongoDB and Typesense
 
-Using Docker:
 ```bash
-docker-compose -f infra/docker-compose.yml up -d mongodb
+docker compose -f infra/docker-compose.yml up mongodb mongo-rs-init typesense -d
 ```
 
-Or use a local MongoDB installation.
+This starts MongoDB as a single-node replica set (required for the sync worker change stream) and a local Typesense instance on port 8108.
 
 ### 4. Start Development Servers
 
 ```bash
-# Start all services in development mode
+# Terminal 1 — all app services
 pnpm dev
-```
 
-Or start individually:
-```bash
-# Terminal 1 - Backend
-cd packages/backend && pnpm dev
-
-# Terminal 2 - BFF
-cd packages/bff && pnpm dev
-
-# Terminal 3 - Frontend
-cd packages/frontend && pnpm dev
+# Terminal 2 — sync worker (indexes records into Typesense; auto-runs initial sync on first start)
+pnpm --filter @vinylvault/backend sync-worker
 ```
 
 ### 5. Access the Application
@@ -110,8 +104,10 @@ vinylvault/
 │           ├── db/
 │           ├── graphql/
 │           ├── models/
-│           └── services/
-├── infra/                # Docker & deployment configs
+│           ├── services/         # incl. typesense*.ts adapters
+│           └── sync-worker/      # MongoDB→Typesense change-stream worker
+├── infra/                # Docker & Kubernetes deployment configs
+├── scripts/admin/        # Admin CLI scripts
 ├── Architecture.MD
 ├── Requirements.MD
 ├── Techstack.MD
@@ -127,6 +123,7 @@ vinylvault/
 | `pnpm lint` | Lint all packages |
 | `pnpm test` | Run tests in all packages |
 | `pnpm clean` | Clean build artifacts |
+| `pnpm --filter @vinylvault/backend sync-worker` | Run the Typesense sync worker locally |
 
 ## Environments
 
@@ -138,10 +135,11 @@ A self-hosted Kubernetes setup running on a local Raspberry Pi 5 cluster using K
 
 **Architecture:**
 - **Compute**: K3s cluster on Raspberry Pi 5
-- **Database**: MongoDB running in Kubernetes (separate StatefulSets for BFF and Backend)
+- **Database**: MongoDB 8 (replica set StatefulSets for BFF and Backend)
+- **Search**: Typesense 3-node Raft StatefulSet (`typesense-{0,1,2}`)
+- **Sync Worker**: MongoDB→Typesense change-stream worker (1 replica, `Recreate` strategy)
 - **Storage**: NFS provisioner for persistent volumes
 - **Ingress**: Traefik reverse proxy
-- **Frontend**: Deployed as Kubernetes Deployment (static SPA)
 - **Services**: Backend and BFF deployed as separate Kubernetes Deployments with auto-scaling (HPA)
 
 **Environments:**
@@ -174,8 +172,9 @@ See [infra/k8s/README.md](./infra/k8s/README.md) for detailed Kubernetes setup a
 A lightweight, cost-optimized demo environment running on free-tier services using a unified deployment strategy.
 
 **Architecture:**
-- **Hosting**: Vercel (frontend) + Koyeb (backend/BFF)
-- **Database**: MongoDB Atlas (free tier)
+- **Hosting**: Vercel (frontend) + Koyeb (backend/BFF + sync worker)
+- **Database**: MongoDB Atlas (free tier M0 — supports change streams)
+- **Search**: Typesense Cloud (free tier, 100k docs)
 - **Unified Endpoint**: Demo Server orchestrator running both Backend and BFF in a single process
 
 **Key Innovation - Demo Server Orchestrator:**
