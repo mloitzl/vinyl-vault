@@ -17,7 +17,7 @@ export class SearchPage extends AppPage {
 
   // The search input has no <label>, so we identify it by placeholder text
   get searchInput(): Locator {
-    return this.page.getByPlaceholder('Search by artist, album, or barcode...');
+    return this.page.getByPlaceholder('Search: Pink Floyd  "Wish You Were Here"  +Rock -Jazz');
   }
 
   get resultHeadings(): Locator {
