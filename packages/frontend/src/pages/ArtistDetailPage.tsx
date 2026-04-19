@@ -28,21 +28,20 @@ function ArtistRecords({
 
   // Derive artist cover image and genres from records
   const artistThumbnailUrls = [
-    ...new Set(
-      records.flatMap((r: any) => r.release?.artistThumbnailUrls ?? [])
-    ),
-  ] as string[];
-  const coverImageUrl = records.find((r: any) => r.release?.coverImageUrl)?.release?.coverImageUrl;
+    ...new Set(records.flatMap((r) => r.release?.artistThumbnailUrls ?? [])),
+  ];
+  const coverImageUrl = records.find((r) => r.release?.coverImageUrl)?.release?.coverImageUrl;
   const genres = [
-    ...new Set(records.flatMap((r: any) => r.release?.genre ?? [])),
-  ].slice(0, 5) as string[];
+    ...new Set(records.flatMap((r) => r.release?.genre ?? [])),
+  ].slice(0, 5);
 
   const [thumbnailIndex, setThumbnailIndex] = useState(0);
   useEffect(() => {
+    setThumbnailIndex(0);
     if (artistThumbnailUrls.length <= 1) return;
     const id = setInterval(() => setThumbnailIndex((i) => (i + 1) % artistThumbnailUrls.length), 5000);
     return () => clearInterval(id);
-  }, [artistThumbnailUrls.length]);
+  }, [artistName, artistThumbnailUrls.length]);
 
   const imageSrc = artistThumbnailUrls[thumbnailIndex] ?? coverImageUrl ?? null;
 

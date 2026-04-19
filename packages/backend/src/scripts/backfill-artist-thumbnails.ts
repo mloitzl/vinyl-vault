@@ -51,7 +51,7 @@ async function main() {
 
     let totalProcessed = 0;
     let totalUpdated = 0;
-    const totalSkipped = 0;
+    let totalSkipped = 0;
     let totalErrors = 0;
 
     for (const tenant of tenants) {
@@ -108,7 +108,11 @@ async function main() {
             { tenantId: tenant.tenantId, externalId, count: artistThumbnailUrls.length },
             'Updated release artist thumbnails'
           );
-          totalUpdated++;
+          if (artistThumbnailUrls.length === 0) {
+            totalSkipped++;
+          } else {
+            totalUpdated++;
+          }
         } catch (err: any) {
           logger.error({ tenantId: tenant.tenantId, externalId, err: err?.message }, 'Failed to fetch/update release');
           totalErrors++;
