@@ -24,7 +24,7 @@ function ArtistRecords({
 }) {
   const navigate = useNavigate();
   const { data, loadNext, hasNext, isLoadingNext } = useRecordListPagination(fragmentRef);
-  const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
+  const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record) as Record[];
 
   // Derive artist cover image and genres from records
   const artistThumbnailUrls = [
