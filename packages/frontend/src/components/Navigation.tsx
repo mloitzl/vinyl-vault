@@ -38,20 +38,6 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    path: '/collection',
-    label: 'Collection',
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-        />
-      </svg>
-    ),
-  },
-  {
     path: '/browse',
     label: 'Browse',
     icon: (
@@ -102,13 +88,9 @@ interface DesktopNavigationProps {
 
 export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigationProps) {
   const location = useLocation();
-  const { user, activeTenant } = useAuth();
+  const { activeTenant } = useAuth();
   const notificationCount = useNotificationCount();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
-  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
-  const collectionLabel = isForeignTenant
-    ? `${activeTenant!.name.split(' ')[0]}'s Collection`
-    : 'My Collection';
   const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
@@ -136,7 +118,7 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
                 )}
               </span>
               <span className="font-medium">
-                {item.path === '/collection' ? collectionLabel : item.label}
+                {item.label}
               </span>
             </Link>
           );
@@ -162,14 +144,9 @@ export function DesktopNavigation({ recordCount, artistCount }: DesktopNavigatio
 
 export function MobileNavigation() {
   const location = useLocation();
-  const { user, activeTenant } = useAuth();
+  const { activeTenant } = useAuth();
   const notificationCount = useNotificationCount();
   const canMutate = !!activeTenant && activeTenant.role !== 'VIEWER';
-  const isForeignTenant = !!(user && activeTenant && activeTenant.id !== `user_${user.id}`);
-  // Mobile: keep it short — "[First name]'s" fits in the tab
-  const collectionLabel = isForeignTenant
-    ? `${activeTenant!.name.split(' ')[0]}'s`
-    : 'Collection';
   const visibleItems = canMutate ? navItems : navItems.filter((i) => i.path !== '/scan');
 
   return (
@@ -197,7 +174,7 @@ export function MobileNavigation() {
                 )}
               </span>
               <span className="text-xs mt-1">
-                {item.path === '/collection' ? collectionLabel : item.label}
+                {item.label}
               </span>
             </Link>
           );

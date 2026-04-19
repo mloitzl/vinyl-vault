@@ -164,7 +164,7 @@ function SocialPageContent({ fetchKey }: { fetchKey: number }) {
     const tenantId = `user_${friendId}`;
     try {
       await switchTenant(tenantId);
-      navigate('/collection');
+      navigate('/browse');
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Failed to switch to friend collection');
     }
