@@ -135,8 +135,6 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
 
   return { updated, skipped, total };
 }
-  return { updated, skipped, total };
-}
 
 // ─── main ─────────────────────────────────────────────────────────────────────
 
