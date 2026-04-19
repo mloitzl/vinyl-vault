@@ -1,4 +1,4 @@
-import { useEffect, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { RecordCard, type Record } from '../components/RecordCard';
 import { RecordEditModal } from '../components/RecordEditModal';
@@ -27,10 +27,24 @@ function ArtistRecords({
   const records = data.records.edges.map((edge: RecordEdge) => edge.node as unknown as Record);
 
   // Derive artist cover image and genres from records
+  const artistThumbnailUrls = [
+    ...new Set(
+      records.flatMap((r: any) => r.release?.artistThumbnailUrls ?? [])
+    ),
+  ] as string[];
   const coverImageUrl = records.find((r: any) => r.release?.coverImageUrl)?.release?.coverImageUrl;
   const genres = [
     ...new Set(records.flatMap((r: any) => r.release?.genre ?? [])),
   ].slice(0, 5) as string[];
+
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
+  useEffect(() => {
+    if (artistThumbnailUrls.length <= 1) return;
+    const id = setInterval(() => setThumbnailIndex((i) => (i + 1) % artistThumbnailUrls.length), 5000);
+    return () => clearInterval(id);
+  }, [artistThumbnailUrls.length]);
+
+  const imageSrc = artistThumbnailUrls[thumbnailIndex] ?? coverImageUrl ?? null;
 
   if (records.length === 0) {
     return (
@@ -52,8 +66,8 @@ function ArtistRecords({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 shadow">
-              {coverImageUrl ? (
-                <img src={coverImageUrl} alt={artistName} className="w-full h-full object-cover" />
+              {imageSrc ? (
+                <img src={imageSrc} alt={artistName} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-500 to-emerald-700">
                   <span className="text-3xl font-bold text-white">
