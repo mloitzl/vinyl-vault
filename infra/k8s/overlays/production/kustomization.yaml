@@ -34,6 +34,9 @@ configMapGenerator:
       - BACKEND_URL=http://backend.vinylvault-production.svc.cluster.local:4000/graphql
       - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault/installations/new
       - ENABLE_DISCOGS_INTEGRATION=true
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
   - name: otel-config
     behavior: merge
     literals:

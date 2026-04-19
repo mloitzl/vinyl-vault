@@ -42,6 +42,24 @@ services:
     networks:
       - vinylvault-network
 
+  typesense:
+    image: typesense/typesense:26.0
+    container_name: vinylvault-typesense
+    restart: unless-stopped
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense_data:/data
+    command: --data-dir=/data --api-key=${TYPESENSE_API_KEY:-local-dev-key} --enable-cors
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8108/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - vinylvault-network
+
   backend:
     build:
       context: ..
@@ -52,13 +70,43 @@ services:
       - "4000:4000"
     environment:
       - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_URI_BASE=${MONGODB_URI_BASE:-mongodb://mongodb:27017}
+      - MONGODB_REGISTRY_URI=${MONGODB_REGISTRY_URI:-mongodb://mongodb:27017/vinylvault_registry}
       - BACKEND_PORT=${BACKEND_PORT}
       - JWT_SECRET=${JWT_SECRET}
       - DISCOGS_API_TOKEN=${DISCOGS_API_TOKEN}
       - MUSICBRAINZ_USER_AGENT=${MUSICBRAINZ_USER_AGENT}
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-local-dev-key}
     depends_on:
       mongo-rs-init:
         condition: service_completed_successfully
+      typesense:
+        condition: service_healthy
+    networks:
+      - vinylvault-network
+
+  sync-worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.sync-worker
+    container_name: vinylvault-sync-worker
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI_BASE=${MONGODB_URI_BASE:-mongodb://mongodb:27017}
+      - MONGODB_REGISTRY_URI=${MONGODB_REGISTRY_URI:-mongodb://mongodb:27017/vinylvault_registry}
+      - JWT_SECRET=${JWT_SECRET}
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-local-dev-key}
+    depends_on:
+      mongo-rs-init:
+        condition: service_completed_successfully
+      typesense:
+        condition: service_healthy
     networks:
       - vinylvault-network
 
@@ -100,6 +148,7 @@ services:
 
 volumes:
   mongodb_data:
+  typesense_data:
 
 networks:
   vinylvault-network:

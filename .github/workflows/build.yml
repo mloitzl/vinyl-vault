@@ -6,6 +6,11 @@ on:
       - main
       - develop
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
     branches:
       - main
       - develop
@@ -38,6 +43,7 @@ jobs:
           - backend
           - bff
           - frontend
+          - sync-worker
 
     steps:
       - name: Checkout code

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { SpotifyPreviewButton } from './SpotifyPreviewButton';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -11,6 +12,7 @@ interface Track {
 interface TrackListProps {
   tracks: Track[];
   artist?: string;
+  terms?: string[];
 }
 
 interface SpotifyPlaybackPayload {
@@ -19,7 +21,17 @@ interface SpotifyPlaybackPayload {
   duration?: number;
 }
 
-export function TrackList({ tracks, artist }: TrackListProps) {
+function hl(text: string, terms: string[]): ReactNode {
+  if (!terms.length) return text;
+  const pattern = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  const parts = text.split(pattern);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <mark key={i} className="bg-yellow-200 rounded-sm px-0.5">{part}</mark> : part
+  );
+}
+
+export function TrackList({ tracks, artist, terms = [] }: TrackListProps) {
   const { user } = useAuth();
   const spotifyEnabled = user?.settings?.spotifyPreview === true;
   const [activeEmbed, setActiveEmbed] = useState<{ index: number; trackId: string } | null>(null);
@@ -100,7 +112,7 @@ export function TrackList({ tracks, artist }: TrackListProps) {
               <span className="w-8 text-gray-400 text-xs flex-shrink-0">
                 {track.position ?? index + 1}
               </span>
-              <span className="flex-1 truncate text-gray-700">{track.title}</span>
+              <span className="flex-1 truncate text-gray-700">{hl(track.title, terms)}</span>
               {track.duration && <span className="text-gray-400 text-xs ml-2">{track.duration}</span>}
             </div>
           );

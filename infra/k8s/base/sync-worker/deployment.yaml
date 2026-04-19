@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-worker
+spec:
+  # Must be 1 — multiple instances would each open a change stream cursor,
+  # causing duplicate writes. Add leader election before increasing.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sync-worker
+  strategy:
+    # Recreate ensures the old pod stops before the new one starts,
+    # so there is never a window with two active change stream listeners.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: sync-worker
+    spec:
+      containers:
+        - name: sync-worker
+          image: ghcr.io/mloitzl/vinylvault-sync-worker:latest
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: MONGODB_URI_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_URI_BASE
+            - name: MONGODB_REGISTRY_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_REGISTRY_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: JWT_SECRET
+            - name: TYPESENSE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: TYPESENSE_HOST
+            - name: TYPESENSE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: TYPESENSE_PORT
+            - name: TYPESENSE_PROTOCOL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: TYPESENSE_PROTOCOL
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: TYPESENSE_API_KEY
+            - name: OTEL_SERVICE_NAME
+              value: "vv-sync-worker"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: otel-config
+                  key: OTEL_EXPORTER_OTLP_ENDPOINT
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              valueFrom:
+                configMapKeyRef:
+                  name: otel-config
+                  key: OTEL_EXPORTER_OTLP_PROTOCOL
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  name: otel-secrets
+                  key: OTEL_EXPORTER_OTLP_HEADERS
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: otel-config
+                  key: OTEL_RESOURCE_ATTRIBUTES
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"

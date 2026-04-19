@@ -1,0 +1,31 @@
+# Headless service — provides stable DNS for Raft peer discovery.
+# Pod DNS: typesense-{0,1,2}.typesense-headless.<namespace>.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: typesense-headless
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: typesense
+  ports:
+    - name: api
+      port: 8108
+      targetPort: api
+    - name: peering
+      port: 8107
+      targetPort: peering
+---
+# Regular ClusterIP service — used by backend and sync-worker to query Typesense.
+apiVersion: v1
+kind: Service
+metadata:
+  name: typesense
+spec:
+  selector:
+    app: typesense
+  ports:
+    - name: api
+      port: 8108
+      targetPort: api

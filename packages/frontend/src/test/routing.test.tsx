@@ -66,7 +66,7 @@ describe('Routing', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByPlaceholderText(/search by artist/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Pink Floyd/)).toBeInTheDocument();
   });
 
   it('renders NotFoundPage for unknown paths', () => {

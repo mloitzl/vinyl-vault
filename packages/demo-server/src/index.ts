@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // We go up two levels: dist -> packages -> root
 const BACKEND_PATH = path.resolve(__dirname, '../../backend/dist/index.js');
 const BFF_PATH = path.resolve(__dirname, '../../bff/dist/index.js');
+const SYNC_WORKER_PATH = path.resolve(__dirname, '../../backend/dist/sync-worker/index.js');
 
 // Both register.mjs (ESM module hook) and instrumentation.js must be loaded in
 // the child process — this mirrors the CMD in Dockerfile.backend / Dockerfile.bff:
@@ -61,6 +62,17 @@ const bff = fork(BFF_PATH, {
   execArgv: ['--import', BFF_REGISTER, '--import', BFF_OTEL],
 });
 
+// Sync worker keeps Typesense in sync with MongoDB via change streams.
+// Shares the backend's OTel register/instrumentation modules.
+const syncWorker = fork(SYNC_WORKER_PATH, {
+  env: {
+    ...process.env,
+    NODE_ENV: 'production',
+    OTEL_SERVICE_NAME: 'vv-sync-worker',
+  },
+  execArgv: ['--import', BACKEND_REGISTER, '--import', BACKEND_OTEL],
+});
+
 // 2. Gateway Routes
 app.use(
   createProxyMiddleware({
@@ -102,5 +114,6 @@ app.listen(PORT, () => console.log(`[Gateway]: Unified endpoint ready on port ${
 process.on('SIGTERM', () => {
   backend.kill();
   bff.kill();
+  syncWorker.kill();
   process.exit(0);
 });
