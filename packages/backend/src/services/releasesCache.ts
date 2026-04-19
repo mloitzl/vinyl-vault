@@ -13,6 +13,7 @@ export interface CachedRelease {
   label?: string | null;
   country?: string | null;
   coverImageUrl?: string | null;
+  artistThumbnailUrls?: string[];
   trackList?: any[];
   externalId?: string | null;
   source?: string | null;

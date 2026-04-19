@@ -841,6 +841,7 @@ type ArtistView implements Node {
   name: String!
   recordCount: Int!
   coverImageUrl: String
+  artistThumbnailUrls: [String!]!
   genres: [String!]!
 }
 

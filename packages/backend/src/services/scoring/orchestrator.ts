@@ -145,6 +145,7 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
       let style: string[] = [];
       let trackList: Track[] = [];
       let catalogNumber: string | undefined;
+      let artistThumbnailUrls: string[] = [];
 
       try {
         const details = await discogs.getReleaseDetails(externalId);
@@ -169,6 +170,12 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
           // Extract catalog number from labels
           if (Array.isArray(details.labels) && details.labels[0]) {
             catalogNumber = details.labels[0].catno;
+          }
+          // Extract thumbnail URLs for all contributing artists
+          if (Array.isArray(details.artists)) {
+            artistThumbnailUrls = details.artists
+              .map((a: any) => a?.thumbnail_url)
+              .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0);
           }
         }
       } catch (err: any) {
@@ -197,6 +204,7 @@ async function fetchDiscogsReleases(barcode: string): Promise<{
         externalId,
         source,
         catalogNumber,
+        artistThumbnailUrls,
         createdAt: now,
         updatedAt: now,
       });

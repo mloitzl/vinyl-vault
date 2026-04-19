@@ -10,6 +10,7 @@ export const ArtistsQuery = graphql`
           name
           recordCount
           coverImageUrl
+          artistThumbnailUrls
           genres
         }
       }

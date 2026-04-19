@@ -12,6 +12,18 @@ type ArtistNode = useArtistsQuery$data['artists']['edges'][number]['node'];
 function ArtistCard({ artist }: { artist: ArtistNode }) {
   const navigate = useNavigate();
   const initials = artist.name.slice(0, 2).toUpperCase();
+  const thumbnails = artist.artistThumbnailUrls ?? [];
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
+
+  useEffect(() => {
+    if (thumbnails.length <= 1) return;
+    const interval = setInterval(() => {
+      setThumbnailIndex((i) => (i + 1) % thumbnails.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [thumbnails.length]);
+
+  const imageSrc = thumbnails[thumbnailIndex] ?? artist.coverImageUrl ?? null;
 
   return (
     <button
@@ -20,9 +32,9 @@ function ArtistCard({ artist }: { artist: ArtistNode }) {
     >
       {/* Cover image */}
       <div className="aspect-square w-full bg-gray-100 overflow-hidden">
-        {artist.coverImageUrl ? (
+        {imageSrc ? (
           <img
-            src={artist.coverImageUrl}
+            src={imageSrc}
             alt={artist.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
