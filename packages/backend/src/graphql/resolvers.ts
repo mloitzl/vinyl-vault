@@ -466,7 +466,7 @@ export const resolvers = {
 
       const lookupMatch: Record<string, unknown> = {};
       if (_args.filter?.artist) {
-        lookupMatch['release.artist'] = { $regex: _args.filter.artist, $options: 'i' };
+        lookupMatch['release.artist'] = { $regex: `^${_args.filter.artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' };
       }
       if (_args.filter?.search) {
         lookupMatch['$or'] = [
