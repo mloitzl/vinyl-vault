@@ -17,6 +17,7 @@ type Release = {
   label?: string | null;
   country?: string | null;
   coverImageUrl?: string | null;
+  artistThumbnailUrls?: string[];
   externalId?: string | null;
   source?: string;
   genre?: string[];

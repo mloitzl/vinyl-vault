@@ -50,6 +50,8 @@ export interface RawRelease {
   country?: string;
   /** URL to cover art image */
   coverImageUrl?: string;
+  /** Thumbnail URLs for all contributing artists (from Discogs artists[].thumbnail_url) */
+  artistThumbnailUrls?: string[];
   /** Track listing */
   trackList: Track[];
   /** External ID from the source API */

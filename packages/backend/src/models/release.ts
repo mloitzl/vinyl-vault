@@ -21,6 +21,7 @@ export interface ReleaseDocument {
   label?: string;
   country?: string;
   coverImageUrl?: string;
+  artistThumbnailUrls?: string[];
   trackList?: Track[];
   externalId?: string;
   source: 'DISCOGS' | 'MUSICBRAINZ' | 'MANUAL';
@@ -39,6 +40,7 @@ export interface CreateReleaseInput {
   label?: string;
   country?: string;
   coverImageUrl?: string;
+  artistThumbnailUrls?: string[];
   trackList?: Track[];
   externalId?: string;
   source: 'DISCOGS' | 'MUSICBRAINZ' | 'MANUAL';
@@ -64,6 +66,7 @@ export class ReleaseRepository {
       label: input.label,
       country: input.country,
       coverImageUrl: input.coverImageUrl,
+      artistThumbnailUrls: input.artistThumbnailUrls || [],
       trackList: input.trackList || [],
       externalId: input.externalId,
       source: input.source,

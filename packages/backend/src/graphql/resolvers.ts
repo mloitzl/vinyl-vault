@@ -150,6 +150,7 @@ export const resolvers = {
         label: release.label,
         country: release.country,
         coverImageUrl: release.coverImageUrl,
+        artistThumbnailUrls: release.artistThumbnailUrls || [],
         trackList: release.trackList || [],
         externalId: release.externalId,
         source: release.source,
@@ -188,6 +189,7 @@ export const resolvers = {
         label: release.label,
         country: release.country,
         coverImageUrl: release.coverImageUrl,
+        artistThumbnailUrls: release.artistThumbnailUrls || [],
         trackList: release.trackList || [],
         externalId: release.externalId,
         source: release.source,
@@ -398,7 +400,19 @@ export const resolvers = {
             _id: '$release.artist',
             recordCount: { $sum: 1 },
             coverImageUrl: { $first: '$release.coverImageUrl' },
+            thumbnailSets: { $push: '$release.artistThumbnailUrls' },
             genres: { $addToSet: '$release.genre' },
+          },
+        },
+        {
+          $addFields: {
+            artistThumbnailUrls: {
+              $reduce: {
+                input: '$thumbnailSets',
+                initialValue: [],
+                in: { $setUnion: ['$$value', { $ifNull: ['$$this', []] }] },
+              },
+            },
           },
         },
         { $sort: { _id: 1 } },
@@ -424,7 +438,7 @@ export const resolvers = {
         const id = Buffer.from(`artist:${row._id as string}`).toString('base64');
         return {
           cursor: id,
-          node: { id, name: row._id as string, recordCount: row.recordCount as number, coverImageUrl: (row.coverImageUrl as string | null) || null, genres },
+          node: { id, name: row._id as string, recordCount: row.recordCount as number, coverImageUrl: (row.coverImageUrl as string | null) || null, artistThumbnailUrls: (row.artistThumbnailUrls as string[]) || [], genres },
         };
       });
 
@@ -1111,6 +1125,7 @@ export const resolvers = {
         label: release.label,
         country: release.country,
         coverImageUrl: release.coverImageUrl,
+        artistThumbnailUrls: release.artistThumbnailUrls || [],
         trackList: release.trackList || [],
         externalId: release.externalId,
         source: release.source,
@@ -1144,6 +1159,7 @@ function toGraphQLRelease(release: RawRelease, barcode: string) {
     label: release.label,
     country: release.country,
     coverImageUrl: release.coverImageUrl,
+    artistThumbnailUrls: release.artistThumbnailUrls || [],
     trackList: release.trackList || [],
     externalId: release.externalId,
     source,
