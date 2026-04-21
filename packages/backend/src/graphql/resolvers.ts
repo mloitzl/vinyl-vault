@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.js';
+import { escapeRegex } from '../utils/regex.js';
 import { upsertReleases } from '../services/releasesCache.js';
 import { findUserById, upsertUser, updateUserSettings } from '../services/users.js';
 import type { UserSettings } from '../models/user.js';
@@ -466,7 +467,7 @@ export const resolvers = {
 
       const lookupMatch: Record<string, unknown> = {};
       if (_args.filter?.artist) {
-        lookupMatch['release.artist'] = { $regex: _args.filter.artist, $options: 'i' };
+        lookupMatch['release.artist'] = { $regex: escapeRegex(_args.filter.artist), $options: 'i' };
       }
       if (_args.filter?.search) {
         lookupMatch['$or'] = [
