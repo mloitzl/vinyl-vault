@@ -41,12 +41,13 @@ describe('Navigation Components - Phase 2.2 Refactoring Documentation', () => {
     });
 
     describe('Navigation Items Structure', () => {
-      it('should render all four navigation items', () => {
+      it('should render all navigation items', () => {
         // Navigation structure:
         // 1. Home (/) - House icon
         // 2. Scan (/scan) - Barcode icon
-        // 3. Collection (/collection) - Archive box icon
+        // 3. Browse (/browse) - Lines icon
         // 4. Search (/search) - Magnifying glass icon
+        // 5. Friends (/social) - People icon
         //
         // All icons are consistent size (w-5 h-5 or w-6 h-6)
 
@@ -322,12 +323,13 @@ describe('Navigation Components - Phase 2.2 Refactoring Documentation', () => {
       expect(true).toBe(true);
     });
 
-    it('should define four core navigation routes', () => {
+    it('should define core navigation routes', () => {
       // Navigation routes:
       // - / (Home)
       // - /scan (Scan)
-      // - /collection (Collection)
+      // - /browse (Browse)
       // - /search (Search)
+      // - /social (Friends)
       //
       // Core app functionality accessible from any page
 

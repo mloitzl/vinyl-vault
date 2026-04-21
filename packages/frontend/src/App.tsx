@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { RelayEnvironmentProvider, useLazyLoadQuery, graphql } from 'react-relay';
 import { RelayEnvironment } from './relay/environment';
 import { AuthProvider, useAuth, ToastProvider, LoadingProvider } from './contexts';
@@ -16,9 +16,7 @@ import { Alert } from './components/ui/Alert';
 import {
   HomePage,
   ScanPage,
-  CollectionPage,
   SearchPage,
-  RecordDetailPage,
   NotFoundPage,
   BrowsePage,
   ArtistDetailPage,
@@ -60,8 +58,7 @@ function AuthedContent() {
                 element={<HomePage recordCount={recordCount} artistCount={artistCount} />}
               />
               <Route path="/scan" element={<ScanPage />} />
-              <Route path="/collection" element={<CollectionPage />} />
-              <Route path="/collection/:recordId" element={<RecordDetailPage />} />
+              <Route path="/collection" element={<Navigate to="/browse" replace />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/artists/:name" element={<ArtistDetailPage />} />

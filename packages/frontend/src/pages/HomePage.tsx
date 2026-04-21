@@ -90,7 +90,7 @@ export function HomePage({ recordCount, artistCount }: HomePageProps) {
 
         {/* Collection Card */}
         <button
-          onClick={() => navigate('/collection')}
+          onClick={() => navigate('/browse')}
           className="w-full bg-white border border-gray-200 rounded-xl p-5 text-left hover:border-gray-300 hover:shadow-sm transition-all"
         >
           <div className="flex items-center gap-4">
