@@ -7,9 +7,12 @@
     "dev": "pnpm -r --parallel run dev",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
-    "test": "pnpm -r run test",
+    "test": "pnpm -r --filter '!@vinylvault/e2e' run test",
     "clean": "pnpm -r run clean",
-    "klogs": "node scripts/klogs.mjs"
+    "klogs": "node scripts/klogs.mjs",
+    "e2e": "pnpm --filter @vinylvault/e2e test",
+    "e2e:ui": "pnpm --filter @vinylvault/e2e test:ui",
+    "e2e:report": "pnpm --filter @vinylvault/e2e report"
   },
   "keywords": [
     "vinyl",

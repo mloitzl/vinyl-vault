@@ -241,6 +241,10 @@ kubectl run -it --rm debug --image=mongo:4.4.6 --restart=Never -n vinylvault-sta
 # Check DNS resolution
 kubectl run -it --rm debug --image=busybox --restart=Never -n vinylvault-staging -- \
   nslookup mongodb-bff-0.mongodb-bff.vinylvault-staging.svc.cluster.local
+```
+
+### Repair MongoDB
+
 ```bash
 # 1. Stop application pods
 kubectl scale deployment <app> -n vinylvault-staging --replicas=0
@@ -250,10 +254,6 @@ kubectl exec -it mongodb-backend-0 -n vinylvault-staging -- \
    sh -c 'mongo -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.repairDatabase()"'
 
 # 3. Restart MongoDB
-kubectl delete pod mongodb-backend-0 -n vinylvault-staging
-
-# 4. Restore application
-```
 kubectl delete pod mongodb-backend-0 -n vinylvault-staging
 
 # 4. Restore application

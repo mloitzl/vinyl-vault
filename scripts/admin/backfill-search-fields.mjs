@@ -136,6 +136,7 @@ async function backfillTenant(tenantClient, dbName, dryRun) {
   return { updated, skipped, total };
 }
 
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 // Support explicit URIs — use the same variable names as the backend .env

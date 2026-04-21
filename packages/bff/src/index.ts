@@ -85,6 +85,7 @@ async function main() {
   );
 
   // Basic rate limiting for public-facing routes
+  // OAuth endpoints: strict — these trigger GitHub API calls and session writes
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 100,
@@ -94,7 +95,7 @@ async function main() {
 
   // /auth/me: generous — it's a single MongoDB session read on every page load
   const sessionCheckLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 1000,
     standardHeaders: 'draft-7',
     legacyHeaders: false,

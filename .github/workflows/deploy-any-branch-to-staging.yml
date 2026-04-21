@@ -1,0 +1,131 @@
+name: Deploy Any Branch to Staging
+
+on:
+    workflow_dispatch:
+        inputs:
+            branch:
+                description: "Branch to deploy (leave empty for current branch)"
+                required: false
+                type: string
+            imageTag:
+                description: "Specific image tag (leave empty to auto-detect from branch)"
+                required: false
+                type: string
+
+env:
+    REGISTRY: ghcr.io
+    NAMESPACE: vinylvault-staging
+    OWNER: mloitzl
+
+jobs:
+    deploy:
+        name: Deploy to Staging
+        runs-on: self-hosted
+        permissions:
+            contents: read
+            packages: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.branch || github.ref }}
+
+            - name: Determine image tag
+              id: image-tag
+              run: |
+                  # Use explicit tag if provided
+                  if [ -n "${{ github.event.inputs.imageTag }}" ]; then
+                    IMAGE_TAG="${{ github.event.inputs.imageTag }}"
+                    echo "Using explicitly provided image tag: ${IMAGE_TAG}"
+                  else
+                    # Auto-detect based on branch
+                    BRANCH="${{ github.event.inputs.branch }}"
+                    if [ -z "$BRANCH" ]; then
+                      BRANCH=$(git branch --show-current)
+                    fi
+                    
+                    COMMIT_SHA=$(git rev-parse --short HEAD)
+                    
+                    if [ "$BRANCH" = "main" ]; then
+                      IMAGE_TAG="latest-production"
+                    elif [ "$BRANCH" = "develop" ]; then
+                      IMAGE_TAG="latest-staging"
+                    else
+                      IMAGE_TAG="$COMMIT_SHA"
+                    fi
+                    
+                    echo "Branch: ${BRANCH}"
+                    echo "Auto-detected image tag: ${IMAGE_TAG}"
+                  fi
+
+                  echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+            - name: Verify images exist
+              run: |
+                  TAG="${{ steps.image-tag.outputs.tag }}"
+                  echo "Verifying images exist with tag: ${TAG}"
+
+                  # Check if images are accessible (optional - can be removed if you trust the tag exists)
+                  docker manifest inspect ${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-backend:${TAG} || echo "Warning: backend image may not exist"
+                  docker manifest inspect ${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-bff:${TAG} || echo "Warning: bff image may not exist"
+                  docker manifest inspect ${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-frontend:${TAG} || echo "Warning: frontend image may not exist"
+
+            - name: Set up kubectl
+              run: |
+                  kubectl cluster-info
+                  kubectl get namespace ${{ env.NAMESPACE }}
+
+            - name: Deploy to Kubernetes
+              run: |
+                  TAG="${{ steps.image-tag.outputs.tag }}"
+
+                  echo "🚀 Deploying images with tag: ${TAG}"
+                  echo ""
+
+                  # Update backend
+                  echo "→ Updating backend..."
+                  kubectl set image deployment/backend \
+                    backend=${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-backend:${TAG} \
+                    -n ${{ env.NAMESPACE }}
+
+                  # Update BFF
+                  echo "→ Updating BFF..."
+                  kubectl set image deployment/bff \
+                    bff=${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-bff:${TAG} \
+                    -n ${{ env.NAMESPACE }}
+
+                  # Update frontend
+                  echo "→ Updating frontend..."
+                  kubectl set image deployment/frontend \
+                    frontend=${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-frontend:${TAG} \
+                    -n ${{ env.NAMESPACE }}
+
+            - name: Wait for rollout
+              run: |
+                  echo "⏳ Waiting for deployments to complete..."
+                  kubectl rollout status deployment/backend -n ${{ env.NAMESPACE }} --timeout=10m
+                  kubectl rollout status deployment/bff -n ${{ env.NAMESPACE }} --timeout=10m
+                  kubectl rollout status deployment/frontend -n ${{ env.NAMESPACE }} --timeout=10m
+
+            - name: Verify deployment
+              run: |
+                  echo ""
+                  echo "=== Deployment Status ==="
+                  kubectl get pods -n ${{ env.NAMESPACE }}
+                  echo ""
+                  echo "✅ Deployment complete!"
+                  echo "🌐 Visit: https://vinylvault.antisocializer.org"
+
+            - name: Post summary
+              run: |
+                  echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "**Image Tag:** \`${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+                  echo "**Branch:** \`${{ github.event.inputs.branch || github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+                  echo "**Environment:** https://vinylvault.antisocializer.org" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "**Services Deployed:**" >> $GITHUB_STEP_SUMMARY
+                  echo "- Backend: \`${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-backend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+                  echo "- BFF: \`${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-bff:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+                  echo "- Frontend: \`${{ env.REGISTRY }}/${{ env.OWNER }}/vinylvault-frontend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
