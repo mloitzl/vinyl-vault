@@ -9,9 +9,12 @@ import type { useArtistsQuery$data } from '../../__generated__/useArtistsQuery.g
 
 type ArtistNode = useArtistsQuery$data['artists']['edges'][number]['node'];
 
-function ArtistCard({ artist }: { artist: ArtistNode }) {
+function ArtistCard({ artist, tick }: { artist: ArtistNode; tick: number }) {
   const navigate = useNavigate();
   const initials = artist.name.slice(0, 2).toUpperCase();
+  const thumbnails = artist.artistThumbnailUrls ?? [];
+  const thumbnailIndex = thumbnails.length > 1 ? tick % thumbnails.length : 0;
+  const imageSrc = thumbnails[thumbnailIndex] ?? artist.coverImageUrl ?? null;
 
   return (
     <button
@@ -20,9 +23,9 @@ function ArtistCard({ artist }: { artist: ArtistNode }) {
     >
       {/* Cover image */}
       <div className="aspect-square w-full bg-gray-100 overflow-hidden">
-        {artist.coverImageUrl ? (
+        {imageSrc ? (
           <img
-            src={artist.coverImageUrl}
+            src={imageSrc}
             alt={artist.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
@@ -58,6 +61,12 @@ function ArtistCard({ artist }: { artist: ArtistNode }) {
 
 function ArtistsGrid({ queryRef, onLoadMore }: { queryRef: any; onLoadMore: (cursor: string) => void }) {
   const artists = useArtistsQueryPreloaded(queryRef);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (artists.edges.length === 0) {
     return (
@@ -75,7 +84,7 @@ function ArtistsGrid({ queryRef, onLoadMore }: { queryRef: any; onLoadMore: (cur
     <>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
         {artists.edges.map(({ node }) => (
-          <ArtistCard key={node.id} artist={node} />
+          <ArtistCard key={node.id} artist={node} tick={tick} />
         ))}
       </div>
       {artists.pageInfo.hasNextPage && artists.pageInfo.endCursor && (

@@ -4,6 +4,7 @@
 import { ObjectId } from 'mongodb';
 import { CounterRepository } from './counter.js';
 import { logger } from '../utils/logger.js';
+import { escapeRegex } from '../utils/regex.js';
 import * as typesenseService from '../services/typesense.js';
 
 export interface RecordDocument {
@@ -227,7 +228,7 @@ export class RecordRepository {
     }
 
     // Release-level filters — query embedded fields directly (no join needed).
-    if (filter.artist) query.releaseArtist = { $regex: filter.artist, $options: 'i' };
+    if (filter.artist) query.releaseArtist = { $regex: `^${escapeRegex(filter.artist)}$`, $options: 'i' };
     if (filter.title)  query.releaseTitle  = { $regex: filter.title,  $options: 'i' };
     if (filter.year)   query.releaseYear   = filter.year;
     if (filter.format) query.releaseFormat = filter.format;

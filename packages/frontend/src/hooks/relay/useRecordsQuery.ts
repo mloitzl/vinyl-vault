@@ -57,6 +57,7 @@ export const RecordListFragment = graphql`
             label
             country
             coverImageUrl
+            artistThumbnailUrls
             externalId
             source
             genre
