@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  labels:
+    app: mongodb
+spec:
+  serviceName: mongodb-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: mongodb
+          image: mongo
+          args:
+            - --replSet
+            - rs0
+            - --bind_ip_all
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
+                  $MONGOSH --quiet --eval "db.adminCommand('ping').ok" | grep -q 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
+                  $MONGOSH --quiet --eval "db.adminCommand('ping').ok" | grep -q 1
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

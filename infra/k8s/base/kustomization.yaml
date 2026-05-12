@@ -27,6 +27,11 @@ resources:
 
   # Sync worker
   - sync-worker/deployment.yaml
+
+  # MongoDB
+  - mongodb/statefulset.yaml
+  - mongodb/service.yaml
+  - mongodb/rs-init-job.yaml
   
   # ConfigMaps only (Secrets must be created manually via kubectl)
   - configmaps/app-config.yaml

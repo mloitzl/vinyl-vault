@@ -1,0 +1,117 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vinylvault
+
+resources:
+  - ../../base
+
+replicas:
+  - name: backend
+    count: 1
+  - name: bff
+    count: 1
+  - name: frontend
+    count: 1
+
+images:
+  - name: ghcr.io/mloitzl/vinylvault-backend
+    newTag: latest-production
+  - name: ghcr.io/mloitzl/vinylvault-bff
+    newTag: latest-production
+  - name: ghcr.io/mloitzl/vinylvault-frontend
+    newTag: latest-production
+  - name: ghcr.io/mloitzl/vinylvault-sync-worker
+    newTag: latest-production
+  - name: mongo
+    newTag: "8.0"
+
+configMapGenerator:
+  - name: app-config
+    behavior: replace
+    literals:
+      - FRONTEND_URL=https://vinylvault.cloudforge.cc
+      - BFF_URL=http://bff.vinylvault.svc.cluster.local:3000
+      - BACKEND_URL=http://backend.vinylvault.svc.cluster.local:4000/graphql
+      - GITHUB_APP_INSTALLATION_URL=https://github.com/apps/vinyl-vault-multiuser/installations/new
+      - GITHUB_CALLBACK_URL=https://vinylvault.cloudforge.cc/auth/github/callback
+      - ENABLE_DISCOGS_INTEGRATION=true
+      - ENABLE_TENANT_FEATURES=true
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+  - name: otel-config
+    behavior: merge
+    literals:
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
+
+patches:
+  # Switch ingress to nginx + vinylvault.cloudforge.cc
+  - target:
+      kind: Ingress
+      name: vinylvault-ingress
+    patch: |-
+      - op: replace
+        path: /metadata/annotations
+        value:
+          cert-manager.io/cluster-issuer: letsencrypt-production
+          nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      - op: replace
+        path: /spec/ingressClassName
+        value: nginx
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: vinylvault.cloudforge.cc
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: vinylvault-cloudforge-cc-tls
+      - op: replace
+        path: /spec/rules/0/host
+        value: vinylvault.cloudforge.cc
+
+  # Single-node Typesense
+  - target:
+      kind: ConfigMap
+      name: typesense-nodes
+    patch: |-
+      - op: replace
+        path: /data/nodes
+        value: "typesense-0.typesense-headless:8107:8108"
+
+  # Use Longhorn for Typesense PVC
+  - target:
+      kind: StatefulSet
+      name: typesense
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: longhorn
+
+  # Use Longhorn for MongoDB PVC
+  - target:
+      kind: StatefulSet
+      name: mongodb
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: longhorn
+
+  # Add GHCR imagePullSecret to all app Deployments
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull-secret
+
+  # Scale HPA to single replica for homelab
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2

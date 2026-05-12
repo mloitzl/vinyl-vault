@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-rs-init
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-mongodb
+          image: mongo
+          command:
+            - sh
+            - -c
+            - |
+              MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
+              until $MONGOSH --host mongodb:27017 --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do
+                echo "Waiting for MongoDB to be ready..."
+                sleep 5
+              done
+              echo "MongoDB is ready."
+      containers:
+        - name: rs-init
+          image: mongo
+          command:
+            - sh
+            - -c
+            - |
+              MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
+              STATUS=$($MONGOSH --host mongodb:27017 --quiet --eval "
+                try {
+                  var s = rs.status();
+                  if (s.ok === 1) { print('initialized'); } else { print('not-initialized'); }
+                } catch(e) {
+                  print('not-initialized');
+                }
+              ")
+              if echo "$STATUS" | grep -q "initialized"; then
+                echo "Replica set already initialized, skipping."
+                exit 0
+              fi
+              echo "Initializing replica set..."
+              $MONGOSH --host mongodb:27017 --eval "
+                rs.initiate({
+                  _id: 'rs0',
+                  members: [{ _id: 0, host: 'mongodb:27017' }]
+                })
+              "
+              echo "Replica set initialized."
