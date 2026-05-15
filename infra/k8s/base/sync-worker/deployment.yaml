@@ -39,6 +39,12 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: JWT_SECRET
+            - name: TYPESENSE_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: TYPESENSE_ENABLED
+                  optional: true
             - name: TYPESENSE_HOST
               valueFrom:
                 configMapKeyRef:
