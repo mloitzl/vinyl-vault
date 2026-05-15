@@ -15,7 +15,7 @@ replicas:
   - name: frontend
     count: 1
   - name: typesense
-    count: 0
+    count: 1
   - name: sync-worker
     count: 0
 
@@ -28,6 +28,8 @@ images:
     newTag: latest-production
   - name: ghcr.io/mloitzl/vinylvault-sync-worker
     newTag: latest-production
+  - name: typesense/typesense
+    newTag: 31.0.rc6-arm64-lg-page16
   - name: mongo
     newTag: "8.0"
 
@@ -45,7 +47,7 @@ configMapGenerator:
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_PROTOCOL=http
-      - TYPESENSE_ENABLED=false
+      - TYPESENSE_ENABLED=true
   - name: otel-config
     behavior: merge
     literals:
