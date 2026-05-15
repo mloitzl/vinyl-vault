@@ -21,6 +21,11 @@ import { startChangeStreamListener } from './change-stream-listener.js';
 async function main() {
   logger.info('Sync worker starting');
 
+  if (!config.typesense.enabled) {
+    logger.warn('TYPESENSE_ENABLED=false — sync worker is disabled. Set to true when Typesense is available.');
+    process.exit(0);
+  }
+
   // --- MongoDB connections -----------------------------------------------
   const tenantBaseClient = new MongoClient(config.mongodb.uriBase, {
     maxPoolSize: 20,

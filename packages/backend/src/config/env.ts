@@ -42,6 +42,7 @@ function getConfig() {
 
     // Typesense search
     typesense: {
+      enabled: process.env.TYPESENSE_ENABLED !== 'false',
       host: process.env.TYPESENSE_HOST || 'localhost',
       port: parseInt(process.env.TYPESENSE_PORT || '8108', 10),
       protocol: (process.env.TYPESENSE_PROTOCOL || 'http') as 'http' | 'https',
