@@ -91,19 +91,19 @@ spec:
         - name: DISCOGS_API_TOKEN
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: discogs-secrets
               key: DISCOGS_API_TOKEN
               optional: true
         - name: SPOTIFY_CLIENT_ID
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: spotify-secrets
               key: SPOTIFY_CLIENT_ID
               optional: true
         - name: SPOTIFY_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: spotify-secrets
               key: SPOTIFY_CLIENT_SECRET
               optional: true
         - name: ENABLE_TENANT_FEATURES

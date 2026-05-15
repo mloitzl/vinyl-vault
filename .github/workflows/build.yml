@@ -18,6 +18,7 @@ on:
 env:
   REGISTRY: ghcr.io
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   tests:
@@ -67,15 +68,19 @@ jobs:
 
           if [ "$BRANCH" = "main" ]; then
             TAG="latest-production"
+            LATEST_TAG="latest-production"
             OTEL_ENV="demo"
           elif [ "$BRANCH" = "develop" ]; then
             TAG="latest-staging"
+            LATEST_TAG="latest-staging"
             OTEL_ENV="staging"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             TAG="pr-${{ github.event.pull_request.number }}"
+            LATEST_TAG="latest-staging"
             OTEL_ENV="staging"
           else
             TAG="$COMMIT_SHA"
+            LATEST_TAG=""
             OTEL_ENV="dev"
           fi
 
@@ -83,6 +88,7 @@ jobs:
           echo "image=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "commit-tag=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "latest-tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
           echo "otel-env=${OTEL_ENV}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
@@ -94,6 +100,7 @@ jobs:
           tags: |
             ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}
             ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}
+            ${{ steps.image-tag.outputs.latest-tag != '' && format('{0}:{1}', steps.image-tag.outputs.image, steps.image-tag.outputs.latest-tag) || '' }}
           # VITE_* vars must be baked into the frontend bundle at build time
           # (Vite resolves them statically; they cannot come from k8s ConfigMaps).
           build-args: |
@@ -107,6 +114,17 @@ jobs:
           echo "Built image: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}"
           echo "Commit tag: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}"
 
+
+  deploy_production:
+    name: Deploy to Production
+    runs-on: self-hosted
+    needs: [tests, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - name: Trigger Flux reconcile
+        run: flux reconcile kustomization vinyl-vault --with-source --timeout=5m
 
   deploy_pr_to_staging:
     name: Deploy PR to Staging
@@ -148,6 +166,14 @@ jobs:
         run: |
           kubectl apply -k ${{ env.KUSTOMIZE_PATH }}
           echo "✓ Kustomize apply completed"
+
+      - name: Restore kustomization.yaml
+        if: always()
+        run: |
+          if [ -f "${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak" ]; then
+            cp ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
+            rm ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml.bak
+          fi
 
       - name: Wait for rollout
         run: |

@@ -26,8 +26,13 @@ ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-# Use the repository-pinned pnpm version via corepack.
-RUN corepack enable
+# Activate the workspace-pinned pnpm version so Corepack does not fall back to
+# the latest release (which may require a newer Node.js than our base image).
+# The version is read dynamically from the root package.json packageManager field.
+COPY --from=builder /app/package.json /tmp/root-pkg.json
+RUN corepack enable && \
+    corepack prepare "$(node -p "require('/tmp/root-pkg.json').packageManager")" --activate && \
+    rm /tmp/root-pkg.json
 
 # Copy built files
 COPY --from=builder /app/packages/backend/dist ./dist
