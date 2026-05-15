@@ -17,7 +17,7 @@ replicas:
   - name: typesense
     count: 1
   - name: sync-worker
-    count: 0
+    count: 1
 
 images:
   - name: ghcr.io/mloitzl/vinylvault-backend
