@@ -10,12 +10,26 @@ spec:
       initContainers:
         - name: wait-for-mongodb
           image: mongo
+          env:
+            - name: MONGODB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_ROOT_USERNAME
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_ROOT_PASSWORD
           command:
             - sh
             - -c
             - |
               MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
-              until $MONGOSH --host mongodb:27017 --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do
+              until $MONGOSH --host mongodb:27017 \
+                -u "$MONGODB_ROOT_USERNAME" -p "$MONGODB_ROOT_PASSWORD" \
+                --authenticationDatabase admin \
+                --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do
                 echo "Waiting for MongoDB to be ready..."
                 sleep 5
               done
@@ -23,28 +37,45 @@ spec:
       containers:
         - name: rs-init
           image: mongo
+          env:
+            - name: MONGODB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_ROOT_USERNAME
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_ROOT_PASSWORD
           command:
             - sh
             - -c
             - |
               MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
-              STATUS=$($MONGOSH --host mongodb:27017 --quiet --eval "
-                try {
-                  var s = rs.status();
-                  if (s.ok === 1) { print('initialized'); } else { print('not-initialized'); }
-                } catch(e) {
-                  print('not-initialized');
-                }
-              ")
+              STATUS=$($MONGOSH --host mongodb:27017 \
+                -u "$MONGODB_ROOT_USERNAME" -p "$MONGODB_ROOT_PASSWORD" \
+                --authenticationDatabase admin \
+                --quiet --eval "
+                  try {
+                    var s = rs.status();
+                    if (s.ok === 1) { print('initialized'); } else { print('not-initialized'); }
+                  } catch(e) {
+                    print('not-initialized');
+                  }
+                ")
               if echo "$STATUS" | grep -q "initialized"; then
                 echo "Replica set already initialized, skipping."
                 exit 0
               fi
               echo "Initializing replica set..."
-              $MONGOSH --host mongodb:27017 --eval "
-                rs.initiate({
-                  _id: 'rs0',
-                  members: [{ _id: 0, host: 'mongodb:27017' }]
-                })
-              "
+              $MONGOSH --host mongodb:27017 \
+                -u "$MONGODB_ROOT_USERNAME" -p "$MONGODB_ROOT_PASSWORD" \
+                --authenticationDatabase admin \
+                --eval "
+                  rs.initiate({
+                    _id: 'rs0',
+                    members: [{ _id: 0, host: 'mongodb:27017' }]
+                  })
+                "
               echo "Replica set initialized."

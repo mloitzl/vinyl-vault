@@ -23,6 +23,17 @@ spec:
             - --replSet
             - rs0
             - --bind_ip_all
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secrets
+                  key: MONGODB_ROOT_PASSWORD
           ports:
             - containerPort: 27017
               name: mongodb
@@ -33,7 +44,9 @@ spec:
                 - -c
                 - |
                   MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
-                  $MONGOSH --quiet --eval "db.adminCommand('ping').ok" | grep -q 1
+                  $MONGOSH --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                    --authenticationDatabase admin \
+                    --eval "db.adminCommand('ping').ok" | grep -q 1
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 6
@@ -44,7 +57,9 @@ spec:
                 - -c
                 - |
                   MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
-                  $MONGOSH --quiet --eval "db.adminCommand('ping').ok" | grep -q 1
+                  $MONGOSH --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                    --authenticationDatabase admin \
+                    --eval "db.adminCommand('ping').ok" | grep -q 1
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 3
