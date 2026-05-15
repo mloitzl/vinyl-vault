@@ -92,3 +92,5 @@ applyTo: '**'
 - Prefer branch names under `bugfix/`, `feature/`, `chore/`, or `refactor/`.
 - Never commit secrets, `.env` files, or generated `dist/` output.
 - Prefer atomic commits scoped to a single concern.
+- **Never push directly to `main` or `develop`.** Always create a feature/bugfix/chore branch and open a pull request. Get a review before merging.
+- Always include the Co-authored-by trailer in commit messages: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
