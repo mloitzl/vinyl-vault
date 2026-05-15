@@ -25,15 +25,59 @@ spec:
                   matchLabels:
                     app: typesense
       terminationGracePeriodSeconds: 60
+      # Resolve headless-service hostnames to current pod IPs before Typesense starts.
+      # Typesense's braft Raft library stores peer IPs (not hostnames) in its persistent
+      # state. After pod reschedules the IPs change, breaking quorum. The sidecar keeps
+      # the nodes file current; Typesense re-reads it every ~30 s and reconciles peers.
+      initContainers:
+        - name: nodes-init
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              NODES_FILE=/etc/typesense/nodes
+              for attempt in $(seq 1 12); do
+                IPS=""
+                for i in 0 1 2; do
+                  IP=$(nslookup "typesense-${i}.typesense-headless.${NAMESPACE}.svc.cluster.local" 2>/dev/null \
+                       | grep '^Address:' | grep -v ':53' | awk '{print $2}' | head -1)
+                  [ -n "$IP" ] && IPS="${IPS:+${IPS},}${IP}:8107:8108"
+                done
+                if [ -n "$IPS" ]; then
+                  echo "$IPS" > "$NODES_FILE"
+                  echo "nodes-init: wrote $IPS"
+                  exit 0
+                fi
+                echo "nodes-init: attempt $attempt: no nodes resolved, retrying in 5s..."
+                sleep 5
+              done
+              echo "nodes-init: could not resolve any nodes after retries, writing empty file"
+              touch "$NODES_FILE"
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+          volumeMounts:
+            - name: typesense-nodes
+              mountPath: /etc/typesense
       containers:
         - name: typesense
-          image: typesense/typesense:26.0
+          image: typesense/typesense:30.2
           args:
             - --data-dir=/data
             - --api-key=$(TYPESENSE_API_KEY)
             - --nodes=/etc/typesense/nodes
             - --peering-port=8107
             - --api-port=8108
+            # Allows automatic quorum recovery when stored peer IPs become stale.
+            # This is a last-resort mechanism — the nodes-updater sidecar prevents
+            # the condition from arising under normal pod reschedules.
+            - --reset-peers-on-error
           env:
             - name: TYPESENSE_API_KEY
               valueFrom:
@@ -71,10 +115,38 @@ spec:
               mountPath: /data
             - name: typesense-nodes
               mountPath: /etc/typesense
+        - name: nodes-updater
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              while true; do
+                IPS=""
+                for i in 0 1 2; do
+                  IP=$(nslookup "typesense-${i}.typesense-headless.${NAMESPACE}.svc.cluster.local" 2>/dev/null \
+                       | grep '^Address:' | grep -v ':53' | awk '{print $2}' | head -1)
+                  [ -n "$IP" ] && IPS="${IPS:+${IPS},}${IP}:8107:8108"
+                done
+                [ -n "$IPS" ] && echo "$IPS" > /etc/typesense/nodes
+                sleep 20
+              done
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+          volumeMounts:
+            - name: typesense-nodes
+              mountPath: /etc/typesense
       volumes:
+        # emptyDir populated by nodes-init at startup and kept current by nodes-updater.
+        # Replaces the static ConfigMap that held stale hostnames.
         - name: typesense-nodes
-          configMap:
-            name: typesense-nodes
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
