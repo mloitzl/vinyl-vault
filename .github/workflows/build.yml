@@ -123,6 +123,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@main
+        with:
+          version: latest
+
       - name: Trigger Flux reconcile
         run: flux reconcile kustomization vinyl-vault --with-source --timeout=5m
 
