@@ -5,6 +5,7 @@ namespace: vinylvault
 
 resources:
   - ../../base
+  - ../../base/mongodb
 
 replicas:
   - name: backend

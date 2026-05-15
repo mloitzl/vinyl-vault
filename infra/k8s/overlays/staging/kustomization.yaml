@@ -19,8 +19,6 @@ replicas:
 images:
   - name: ghcr.io/mloitzl/vinylvault-backend
     newTag: latest-staging
-  - name: mongo
-    newTag: "4.4"
   - name: ghcr.io/mloitzl/vinylvault-bff
     newTag: latest-staging
   - name: ghcr.io/mloitzl/vinylvault-frontend
