@@ -67,6 +67,7 @@ spec:
                     --eval "db.adminCommand('ping').ok" | grep -q 1
             initialDelaySeconds: 60
             periodSeconds: 15
+            timeoutSeconds: 10
             failureThreshold: 10
           livenessProbe:
             exec:
@@ -80,6 +81,7 @@ spec:
                     --eval "db.adminCommand('ping').ok" | grep -q 1
             initialDelaySeconds: 120
             periodSeconds: 20
+            timeoutSeconds: 10
             failureThreshold: 5
           resources:
             requests:
