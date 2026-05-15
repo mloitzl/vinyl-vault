@@ -64,7 +64,7 @@ spec:
                     print('not-initialized');
                   }
                 ")
-              if echo "$STATUS" | grep -q "initialized"; then
+              if echo "$STATUS" | grep -qx "initialized"; then
                 echo "Replica set already initialized, skipping."
                 exit 0
               fi
