@@ -15,7 +15,7 @@ replicas:
   - name: frontend
     count: 1
   - name: typesense
-    count: 1
+    count: 0
   - name: sync-worker
     count: 1
 
