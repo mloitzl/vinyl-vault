@@ -6,6 +6,9 @@ on:
       - '**'
   workflow_call:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
     test-frontend:
         name: Frontend Tests
@@ -18,7 +21,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
                   version: 10
                   dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
@@ -67,7 +70,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
                   version: 10
                   dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
@@ -112,7 +115,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
               with:
                   version: 10
                   dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
