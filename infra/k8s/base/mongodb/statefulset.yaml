@@ -65,9 +65,9 @@ spec:
                   $MONGOSH --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
                     --authenticationDatabase admin \
                     --eval "db.adminCommand('ping').ok" | grep -q 1
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 6
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 10
           livenessProbe:
             exec:
               command:
@@ -78,9 +78,9 @@ spec:
                   $MONGOSH --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
                     --authenticationDatabase admin \
                     --eval "db.adminCommand('ping').ok" | grep -q 1
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            failureThreshold: 3
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            failureThreshold: 5
           resources:
             requests:
               memory: "256Mi"
