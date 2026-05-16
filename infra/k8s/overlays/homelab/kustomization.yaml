@@ -99,7 +99,9 @@ patches:
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
         value: longhorn
 
-  # Spread each app's replicas across nodes (self-referential via matchLabelKeys, k8s 1.32+).
+  # Enforce one pod per node for stateless deployments.
+  # DoNotSchedule guarantees pods never co-locate, so losing any single node
+  # always leaves at least one replica running.
   - target:
       kind: Deployment
     patch: |-
@@ -108,7 +110,7 @@ patches:
         value:
           - maxSkew: 1
             topologyKey: kubernetes.io/hostname
-            whenUnsatisfiable: ScheduleAnyway
+            whenUnsatisfiable: DoNotSchedule
             labelSelector: {}
             matchLabelKeys:
               - app
@@ -122,13 +124,14 @@ patches:
         value:
           - name: ghcr-pull-secret
 
-  # Scale HPA to single replica for homelab
+  # Homelab HPA: min=2 ensures one pod survives any single node loss.
+  # max=3 allows HPA to scale to fill all 3 nodes under load.
   - target:
       kind: HorizontalPodAutoscaler
     patch: |-
       - op: replace
         path: /spec/minReplicas
-        value: 1
+        value: 2
       - op: replace
         path: /spec/maxReplicas
-        value: 2
+        value: 3
