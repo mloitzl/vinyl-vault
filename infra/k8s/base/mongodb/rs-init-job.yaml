@@ -26,14 +26,21 @@ spec:
             - -c
             - |
               MONGOSH=$(command -v mongosh 2>/dev/null || command -v mongo)
-              until $MONGOSH --host mongodb:27017 \
-                -u "$MONGODB_ROOT_USERNAME" -p "$MONGODB_ROOT_PASSWORD" \
-                --authenticationDatabase admin \
-                --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do
-                echo "Waiting for MongoDB to be ready..."
-                sleep 5
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              # Wait for all 3 members to be reachable before initiating.
+              for host in \
+                "mongodb-0.mongodb-headless.${NAMESPACE}.svc.cluster.local" \
+                "mongodb-1.mongodb-headless.${NAMESPACE}.svc.cluster.local" \
+                "mongodb-2.mongodb-headless.${NAMESPACE}.svc.cluster.local"; do
+                until $MONGOSH --host "${host}:27017" \
+                  -u "$MONGODB_ROOT_USERNAME" -p "$MONGODB_ROOT_PASSWORD" \
+                  --authenticationDatabase admin \
+                  --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do
+                  echo "Waiting for ${host}..."
+                  sleep 5
+                done
+                echo "${host} is ready."
               done
-              echo "MongoDB is ready."
       containers:
         - name: rs-init
           image: mongo
@@ -68,14 +75,19 @@ spec:
                 echo "Replica set already initialized, skipping."
                 exit 0
               fi
-              echo "Initializing replica set..."
+              echo "Initializing replica set with 3 members..."
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
               $MONGOSH --host mongodb:27017 \
                 -u "$MONGODB_ROOT_USERNAME" -p "$MONGODB_ROOT_PASSWORD" \
                 --authenticationDatabase admin \
                 --eval "
                   rs.initiate({
                     _id: 'rs0',
-                    members: [{ _id: 0, host: 'mongodb:27017' }]
+                    members: [
+                      { _id: 0, host: 'mongodb-0.mongodb-headless.${NAMESPACE}.svc.cluster.local:27017' },
+                      { _id: 1, host: 'mongodb-1.mongodb-headless.${NAMESPACE}.svc.cluster.local:27017' },
+                      { _id: 2, host: 'mongodb-2.mongodb-headless.${NAMESPACE}.svc.cluster.local:27017' }
+                    ]
                   })
                 "
               echo "Replica set initialized."

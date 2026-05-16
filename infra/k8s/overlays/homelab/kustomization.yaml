@@ -15,9 +15,11 @@ replicas:
     count: 2
   - name: frontend
     count: 2
-  # Stateful services stay at 1 until 3rd node arrives, then scale to 3 (odd quorum).
+  # 3-node Raft quorum (2/3) — works on 2 physical nodes (asymmetric), symmetric HA with 3 nodes.
   - name: typesense
-    count: 1
+    count: 3
+  - name: mongodb
+    count: 3
   - name: sync-worker
     count: 1
 
@@ -78,15 +80,6 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: vinylvault.cloudforge.cc
-
-  # Single-node Typesense
-  - target:
-      kind: ConfigMap
-      name: typesense-nodes
-    patch: |-
-      - op: replace
-        path: /data/nodes
-        value: "typesense-0.typesense-headless:8107:8108"
 
   # Use Longhorn for Typesense PVC
   - target:
