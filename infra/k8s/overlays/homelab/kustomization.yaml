@@ -8,12 +8,14 @@ resources:
   - ../../base/mongodb
 
 replicas:
+  # 2 replicas for stateless app pods — spread across both server nodes for zero-downtime deploys.
   - name: backend
-    count: 1
+    count: 2
   - name: bff
-    count: 1
+    count: 2
   - name: frontend
-    count: 1
+    count: 2
+  # Stateful services stay at 1 until 3rd node arrives, then scale to 3 (odd quorum).
   - name: typesense
     count: 1
   - name: sync-worker
@@ -103,6 +105,19 @@ patches:
       - op: add
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
         value: longhorn
+
+  # Spread each app's replicas across nodes (self-referential via matchLabelKeys, k8s 1.32+).
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            matchLabelKeys:
+              - app
 
   # Add GHCR imagePullSecret to all app Deployments
   - target:
