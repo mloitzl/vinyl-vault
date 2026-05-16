@@ -81,23 +81,23 @@ patches:
         path: /spec/rules/0/host
         value: vinylvault.cloudforge.cc
 
-  # Use Longhorn for Typesense PVC
+  # Use local-path for Typesense PVC — Typesense has built-in Raft HA, no need for Longhorn replication.
   - target:
       kind: StatefulSet
       name: typesense
     patch: |-
       - op: add
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
-        value: longhorn
+        value: local-path
 
-  # Use Longhorn for MongoDB PVC
+  # Use local-path for MongoDB PVC — MongoDB RS provides its own replication, Longhorn adds unnecessary I/O overhead.
   - target:
       kind: StatefulSet
       name: mongodb
     patch: |-
       - op: add
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
-        value: longhorn
+        value: local-path
 
   # Enforce one pod per node for stateless deployments.
   # DoNotSchedule guarantees pods never co-locate, so losing any single node
