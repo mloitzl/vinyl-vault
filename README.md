@@ -129,9 +129,9 @@ vinylvault/
 
 Vinyl Vault is deployed in two distinct environments with different scaling and deployment strategies:
 
-### 1. Production/Staging - Kubernetes on Raspberry Pi 4 (vinylvault.antisocializer.org)
+### 1. Production/Staging - Kubernetes on Raspberry Pi 5 (vinylvault.antisocializer.org)
 
-A self-hosted Kubernetes setup running on a local Raspberry Pi 4 cluster using K3s.
+A self-hosted Kubernetes setup running on a local Raspberry Pi 5 cluster using K3s.
 
 **Architecture:**
 - **Compute**: K3s cluster on Raspberry Pi 5

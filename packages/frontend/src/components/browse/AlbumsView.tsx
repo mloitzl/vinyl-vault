@@ -30,7 +30,7 @@ function AlbumCard({ album }: { album: AlbumNode }) {
 
       {/* Info */}
       <div className="p-3">
-        <p className="font-semibold text-gray-900 truncate text-sm leading-snug">{album.title}</p>
+        <h3 className="font-semibold text-gray-900 truncate text-sm leading-snug">{album.title}</h3>
         <p className="text-xs text-gray-600 truncate mt-0.5">{album.artist}</p>
         <div className="flex flex-wrap gap-1 mt-1.5 items-center">
           {album.year && (

@@ -1,4 +1,4 @@
-# Kubernetes Base Manifests - Phase 4
+# Kubernetes Base Manifests
 
 This directory contains the base Kubernetes manifests for Vinyl Vault deployment.
 
@@ -101,22 +101,6 @@ Expected image names:
 - `ghcr.io/mloitzl/vinyl-vault-backend:latest`
 - `ghcr.io/mloitzl/vinyl-vault-bff:latest`
 - `ghcr.io/mloitzl/vinyl-vault-frontend:latest`
-
-Images will be built in Phase 6 (CI/CD Pipeline).
-
-## Next Steps
-
-1. **Phase 5**: Create staging and production overlays with:
-   - Environment-specific domains
-   - Namespace patches
-   - Resource adjustments
-   - Replica count overrides (staging: 2, production: 4)
-
-2. **Before Deployment**: 
-   - Complete Phase 1 (add `/health` endpoints)
-   - Complete Phase 2 (optimize Dockerfiles)
-   - Build and push Docker images to ghcr.io
-   - Generate and apply secrets to cluster
 
 ## Deployment Preview
 

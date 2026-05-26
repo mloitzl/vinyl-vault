@@ -1,0 +1,20 @@
+{
+  "name": "@vinylvault/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright end-to-end tests for Vinyl Vault",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui --project chromium",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install --with-deps chromium",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^20.0.0",
+    "dotenv": "^16.4.7",
+    "typescript": "^5.3.0"
+  }
+}
