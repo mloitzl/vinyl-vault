@@ -114,23 +114,6 @@ jobs:
           echo "Built image: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.tag }}"
           echo "Commit tag: ${{ steps.image-tag.outputs.image }}:${{ steps.image-tag.outputs.commit-tag }}"
 
-
-  deploy_production:
-    name: Deploy to Production
-    runs-on: self-hosted
-    needs: [tests, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-    steps:
-      - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@main
-        with:
-          version: latest
-
-      - name: Trigger Flux reconcile
-        run: flux reconcile kustomization vinyl-vault --with-source --timeout=5m
-
   deploy_pr_to_staging:
     name: Deploy PR to Staging
     runs-on: self-hosted
