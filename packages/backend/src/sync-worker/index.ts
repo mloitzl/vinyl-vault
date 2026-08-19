@@ -17,6 +17,21 @@ import { ensureCollection, isCollectionEmpty } from '../services/typesense.js';
 import { loadResumeToken } from './token-store.js';
 import { runInitialSync } from './initial-sync.js';
 import { startChangeStreamListener } from './change-stream-listener.js';
+import {
+  acquireLeaderLease,
+  getSyncWorkerIdentity,
+  releaseLeaderLease,
+  renewLeaderLease,
+  LEADER_LEASE_INTERVAL_MS,
+  LEADER_LEASE_RETRY_DELAY_MS,
+  LEADER_LEASE_DURATION_MS,
+} from './leader-election.js';
+
+import type { Db } from 'mongodb';
+
+let registryDbRef: Db | null = null;
+let leaderLeaseInterval: ReturnType<typeof setInterval> | null = null;
+let leaderLeaseOwnerId: string | null = null;
 
 async function main() {
   logger.info('Sync worker starting');
@@ -35,7 +50,40 @@ async function main() {
   await tenantBaseClient.connect();
   logger.info('Connected to tenant MongoDB cluster');
 
+  const podIdentity = getSyncWorkerIdentity();
   const registryDb = await getRegistryDb();
+  registryDbRef = registryDb;
+
+  while (!(await acquireLeaderLease(registryDb, podIdentity))) {
+    logger.info(
+      { podIdentity, retryDelayMs: LEADER_LEASE_RETRY_DELAY_MS },
+      'Another sync-worker replica is active — waiting for leadership',
+    );
+    await new Promise((resolve) => setTimeout(resolve, LEADER_LEASE_RETRY_DELAY_MS));
+  }
+
+  leaderLeaseOwnerId = podIdentity;
+  logger.info({ podIdentity, leaseDurationMs: LEADER_LEASE_DURATION_MS }, 'Acquired sync-worker leadership');
+
+  let renewing = false;
+  leaderLeaseInterval = setInterval(() => {
+    if (renewing || !leaderLeaseOwnerId || !registryDbRef) return;
+    renewing = true;
+    void renewLeaderLease(registryDbRef, leaderLeaseOwnerId)
+      .then((ok) => {
+        if (!ok) {
+          logger.error({ podIdentity: leaderLeaseOwnerId }, 'Lost sync-worker leadership — exiting');
+          process.exit(1);
+        }
+      })
+      .catch((err) => {
+        logger.error({ err, podIdentity: leaderLeaseOwnerId }, 'Could not renew sync-worker leadership — exiting');
+        process.exit(1);
+      })
+      .finally(() => {
+        renewing = false;
+      });
+  }, LEADER_LEASE_INTERVAL_MS);
 
   // --- Typesense collection ------------------------------------------------
   await ensureCollection();
@@ -64,6 +112,13 @@ async function main() {
 // Graceful shutdown
 async function shutdown(signal: string) {
   logger.info({ signal }, 'Sync worker shutting down');
+  if (leaderLeaseInterval) {
+    clearInterval(leaderLeaseInterval);
+    leaderLeaseInterval = null;
+  }
+  if (registryDbRef && leaderLeaseOwnerId) {
+    await releaseLeaderLease(registryDbRef, leaderLeaseOwnerId).catch(() => {});
+  }
   try {
     await closeRegistryDb();
   } catch { /* ignore */ }

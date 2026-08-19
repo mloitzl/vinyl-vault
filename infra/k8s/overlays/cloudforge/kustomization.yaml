@@ -21,7 +21,7 @@ replicas:
   - name: mongodb
     count: 3
   - name: sync-worker
-    count: 1
+    count: 2
 
 images:
   - name: ghcr.io/mloitzl/vinylvault-backend

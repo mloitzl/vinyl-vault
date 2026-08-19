@@ -3,21 +3,22 @@ kind: Deployment
 metadata:
   name: sync-worker
 spec:
-  # Must be 1 — multiple instances would each open a change stream cursor,
-  # causing duplicate writes. Add leader election before increasing.
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: sync-worker
-  strategy:
-    # Recreate ensures the old pod stops before the new one starts,
-    # so there is never a window with two active change stream listeners.
-    type: Recreate
   template:
     metadata:
       labels:
         app: sync-worker
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: sync-worker
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: sync-worker
           image: ghcr.io/mloitzl/vinylvault-sync-worker:latest
