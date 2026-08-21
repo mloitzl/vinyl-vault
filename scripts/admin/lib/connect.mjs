@@ -6,6 +6,8 @@
  *   STAGING – fetches passwords from k8s Secrets and opens kubectl port-forwards
  *             automatically (cleans them up on process exit)
  *   DEMO    – reads URIs from .env.demo at the repo root, or from env vars
+ *   CLOUDFORGE – reads MongoDB credentials from Kubernetes and port-forwards
+ *                the shared MongoDB service
  *
  * Returns an object with three ready-to-use MongoClient instances:
  *   registryClient  – vinylvault_registry  (users, tenants, roles)
@@ -14,7 +16,7 @@
  */
 
 import { MongoClient } from 'mongodb';
-import { execSync, spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
@@ -23,6 +25,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../../..');
 
 const STAGING_NAMESPACE = 'vinylvault-staging';
+const CLOUDFORGE_NAMESPACE = 'vinylvault';
 const activePortForwards = [];
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -44,10 +47,11 @@ function loadDotEnv(file) {
 
 function k8sSecretValue(secretName, key, namespace) {
   try {
-    const raw = execSync(
-      `kubectl get secret ${secretName} -n ${namespace} -o jsonpath='{.data.${key}}'`,
-      { stdio: ['pipe', 'pipe', 'pipe'] }
-    ).toString().trim().replace(/^'|'$/g, '');
+    const raw = execFileSync(
+      'kubectl',
+      ['get', 'secret', secretName, '-n', namespace, '-o', `jsonpath={.data.${key}}`],
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
     return Buffer.from(raw, 'base64').toString('utf8');
   } catch (err) {
     throw new Error(
@@ -57,11 +61,40 @@ function k8sSecretValue(secretName, key, namespace) {
   }
 }
 
+function findCloudforgePrimary(username, password) {
+  const pods = execFileSync(
+    'kubectl',
+    ['get', 'pods', '-n', CLOUDFORGE_NAMESPACE, '-l', 'app=mongodb', '-o', 'jsonpath={.items[*].metadata.name}'],
+    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+  ).trim().split(/\s+/).filter(Boolean);
+
+  for (const pod of pods) {
+    const result = execFileSync(
+      'kubectl',
+      [
+        'exec', '-n', CLOUDFORGE_NAMESPACE, pod, '--',
+        'mongosh', '--quiet', '-u', username, '-p', password,
+        '--authenticationDatabase', 'admin',
+        '--eval', 'db.hello().isWritablePrimary',
+      ],
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+    ).trim();
+
+    if (result === 'true') return pod;
+  }
+
+  throw new Error(
+    'Could not find a writable Cloudforge MongoDB primary. ' +
+    'Check the replica-set status with: kubectl get pods -n vinylvault'
+  );
+}
+
 function startPortForward(service, localPort, remotePort, namespace) {
   return new Promise((resolve, reject) => {
+    const target = service.includes('/') ? service : `svc/${service}`;
     const pf = spawn(
       'kubectl',
-      ['port-forward', `svc/${service}`, `${localPort}:${remotePort}`, '-n', namespace],
+      ['port-forward', target, `${localPort}:${remotePort}`, '-n', namespace],
       { stdio: ['ignore', 'pipe', 'pipe'] }
     );
 
@@ -148,9 +181,29 @@ async function demoUris() {
   return { registryUri, uriBase, bffUri };
 }
 
+async function cloudforgeUris() {
+  console.log('Fetching Cloudforge MongoDB credentials...');
+  const username = k8sSecretValue('mongodb-secrets', 'MONGODB_ROOT_USERNAME', CLOUDFORGE_NAMESPACE);
+  const password = k8sSecretValue('mongodb-secrets', 'MONGODB_ROOT_PASSWORD', CLOUDFORGE_NAMESPACE);
+  const credentials = `${encodeURIComponent(username)}:${encodeURIComponent(password)}`;
+  const primaryPod = findCloudforgePrimary(username, password);
+
+  console.log(`Starting Cloudforge port-forward through primary ${primaryPod}...`);
+  const portForward = await startPortForward(`pod/${primaryPod}`, 27020, 27017, CLOUDFORGE_NAMESPACE);
+  activePortForwards.push(portForward);
+  console.log('Cloudforge port-forward ready (mongodb -> 27020)');
+
+  const baseUri = `mongodb://${credentials}@localhost:27020?authSource=admin&directConnection=true`;
+  return {
+    registryUri: baseUri.replace('?', '/vinylvault_registry?'),
+    uriBase: baseUri,
+    bffUri: baseUri.replace('?', '/vinylvault_bff?'),
+  };
+}
+
 // ─── public API ─────────────────────────────────────────────────────────────
 
-export const VALID_STAGES = ['DEV', 'STAGING', 'DEMO'];
+export const VALID_STAGES = ['DEV', 'STAGING', 'DEMO', 'CLOUDFORGE'];
 
 export function parseStage(raw) {
   const stage = (raw ?? 'DEV').toUpperCase();
@@ -166,9 +219,10 @@ export function parseStage(raw) {
  */
 export async function connect(stage) {
   let uris;
-  if      (stage === 'DEV')     uris = await devUris();
+  if (stage === 'DEV') uris = await devUris();
   else if (stage === 'STAGING') uris = await stagingUris();
-  else if (stage === 'DEMO')    uris = await demoUris();
+  else if (stage === 'DEMO') uris = await demoUris();
+  else if (stage === 'CLOUDFORGE') uris = await cloudforgeUris();
   else throw new Error(`Unsupported stage: ${stage}`);
 
   const [registryClient, tenantClient, bffClient] = await Promise.all([

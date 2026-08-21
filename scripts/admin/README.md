@@ -135,6 +135,21 @@ node scripts/admin/migrate-cluster.mjs \
   [-y]                  # skip the confirmation prompt
 ```
 
+To migrate the live DEMO data into CLOUDFORGE, use stage-based connections:
+
+```bash
+# Preview first, then run the migration
+node scripts/admin/migrate-cluster.mjs \
+  --src-stage DEMO --dst-stage CLOUDFORGE --dry-run
+node scripts/admin/migrate-cluster.mjs \
+  --src-stage DEMO --dst-stage CLOUDFORGE -y
+```
+
+The DEMO connection reads `.env.demo` (or the `MONGODB_*` variables exported in
+the shell). The CLOUDFORGE connection requires `kubectl` configured for the
+Cloudforge cluster and access to namespace `vinylvault`; it reads the
+`mongodb-secrets` secret and opens a local port-forward to `svc/mongodb`.
+
 **Keeping secrets out of `ps`** — pass the URIs via environment variables instead of
 CLI arguments so they never appear in the process list:
 
@@ -185,6 +200,15 @@ MONGODB_REGISTRY_URI=mongodb+srv://.../<vinylvault_registry>
 ```
 
 Or export the same variables in your shell before running the script.
+
+### CLOUDFORGE
+The CLOUDFORGE stage uses the Kubernetes context for the productive cluster:
+```bash
+kubectl config current-context
+kubectl auth can-i get secret/mongodb-secrets -n vinylvault
+```
+The migration script obtains the MongoDB root credentials from that secret and
+temporarily forwards `svc/mongodb` to local port `27020`. Ensure that port is free.
 
 ---
 

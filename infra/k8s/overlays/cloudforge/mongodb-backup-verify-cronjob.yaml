@@ -1,0 +1,263 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup-verify
+  labels:
+    app: mongodb-backup-verify
+    component: database-backup
+spec:
+  schedule: "0 4 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: mongodb-backup-verify
+            component: database-backup
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: install-mc
+              image: minio/mc:RELEASE.2026-07-23T15-54-02Z
+              command:
+                - sh
+                - -c
+                - cp /usr/bin/mc /tools/mc && chmod +x /tools/mc
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+          containers:
+            - name: verify
+              image: mongo:8.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: MONGODB_HOST
+                  value: mongodb:27017
+                - name: REGISTRY_DB_NAME
+                  value: vinylvault_registry
+                - name: MONGODB_ROOT_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-secrets
+                      key: MONGODB_ROOT_USERNAME
+                - name: MONGODB_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-secrets
+                      key: MONGODB_ROOT_PASSWORD
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: AWS_ENDPOINTS
+                - name: BUCKET_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: BUCKET_NAME
+              command:
+                - bash
+                - -ceu
+                - |
+                  export PATH="/tools:${PATH}"
+
+                  MONGO_SHELL="$(command -v mongosh 2>/dev/null || command -v mongo 2>/dev/null)"
+                  if [ -z "${MONGO_SHELL}" ]; then
+                    echo "mongosh/mongo not found" >&2
+                    exit 1
+                  fi
+
+                  ADMIN_URI="mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/admin?authSource=admin"
+                  REGISTRY_URI="mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/${REGISTRY_DB_NAME}?authSource=admin"
+                  TEST_URI="mongodb://127.0.0.1:27018/admin"
+
+                  until "${MONGO_SHELL}" "${TEST_URI}" --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep -q 1; do
+                    echo "Waiting for temporary MongoDB test instance..."
+                    sleep 2
+                  done
+
+                  mc alias set backup-target "${S3_ENDPOINT}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" >/dev/null
+
+                  tenant_dbs="$(
+                    "${MONGO_SHELL}" "${REGISTRY_URI}" --quiet --eval "
+                      db.getCollection('tenants')
+                        .find({ databaseName: { \$type: 'string' } }, { _id: 0, databaseName: 1 })
+                        .forEach(function(doc) {
+                          if (doc.databaseName) print(doc.databaseName);
+                        });
+                    " | grep -E '^vv_[a-z0-9]+' | sort -u || true
+                  )"
+
+                  if [ -z "${tenant_dbs}" ]; then
+                    echo "Registry lookup empty, using admin listDatabases fallback" >&2
+                    tenant_dbs="$(
+                      "${MONGO_SHELL}" "${ADMIN_URI}" --quiet --eval "
+                        db.adminCommand({ listDatabases: 1 }).databases.forEach(function(d) {
+                          print(d.name);
+                        });
+                      " | grep -E '^vv_[a-z0-9]+' | sort -u
+                    )"
+                  fi
+
+                  if [ -z "${tenant_dbs}" ]; then
+                    echo "No tenant databases found for verification." >&2
+                    exit 1
+                  fi
+
+                  tmp_sizes_file="$(mktemp)"
+                  trap 'rm -f "${tmp_sizes_file}"' EXIT
+
+                  printf '%s\n' "${tenant_dbs}" | while IFS= read -r db; do
+                    [ -n "${db}" ] || continue
+                    size="$(
+                      "${MONGO_SHELL}" "mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/${db}?authSource=admin" --quiet --eval "
+                        var s = db.stats();
+                        print(s && s.dataSize ? s.dataSize : 0);
+                      " | tail -n1
+                    )"
+                    [ -n "${size}" ] || size=0
+                    printf '%s\t%s\n' "${size}" "${db}" >> "${tmp_sizes_file}"
+                  done
+
+                  sort -n "${tmp_sizes_file}" -o "${tmp_sizes_file}"
+                  mapfile -t ordered < "${tmp_sizes_file}"
+
+                  total="${#ordered[@]}"
+                  if [ "${total}" -eq 0 ]; then
+                    echo "Could not compute tenant sizes." >&2
+                    exit 1
+                  fi
+
+                  small="$(printf '%s\n' "${ordered[0]}" | awk -F '\t' '{print $2}')"
+                  medium_index="$((total / 2))"
+                  medium="$(printf '%s\n' "${ordered[${medium_index}]}" | awk -F '\t' '{print $2}')"
+                  large="$(printf '%s\n' "${ordered[$((total - 1))]}" | awk -F '\t' '{print $2}')"
+
+                  selected="$(
+                    printf '%s\n%s\n%s\n' "${small}" "${medium}" "${large}" \
+                    | awk 'NF && !seen[$0]++'
+                  )"
+
+                  echo "Selected tenant pilot set:"
+                  printf '%s\n' "${selected}"
+
+                  failures=0
+                  while IFS= read -r db; do
+                    [ -n "${db}" ] || continue
+
+                    latest_object="$(
+                      mc ls --recursive "backup-target/${BUCKET_NAME}/${db}/" \
+                        2>/dev/null \
+                        | awk '/\.archive\.gz$/ {print $1" "$2" "$NF}' \
+                        | sort \
+                        | tail -n1 \
+                        | awk '{print $3}'
+                    )"
+
+                    if [ -z "${latest_object}" ]; then
+                      echo "No backup object found for ${db}" >&2
+                      failures=$((failures + 1))
+                      continue
+                    fi
+
+                    local_archive="/tmp/${db}.archive.gz"
+                    mc cp "backup-target/${BUCKET_NAME}/${latest_object}" "${local_archive}" >/dev/null
+
+                    scratch_db="${db}_verify_$(date -u +%Y%m%d%H%M%S)"
+                    mongorestore \
+                      --uri="${TEST_URI}" \
+                      --archive="${local_archive}" \
+                      --gzip \
+                      --nsFrom="${db}.*" \
+                      --nsTo="${scratch_db}.*" \
+                      --drop >/dev/null
+
+                    source_count="$(
+                      "${MONGO_SHELL}" "mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/${db}?authSource=admin" --quiet --eval "
+                        var total = 0;
+                        db.getCollectionNames().forEach(function(c) {
+                          total += db.getCollection(c).countDocuments({});
+                        });
+                        print(total);
+                      " | tail -n1 | tr -d '[:space:]'
+                    )"
+
+                    restore_count="$(
+                      "${MONGO_SHELL}" "${TEST_URI}" --quiet --eval "
+                        var target = db.getSiblingDB('${scratch_db}');
+                        var total = 0;
+                        target.getCollectionNames().forEach(function(c) {
+                          total += target.getCollection(c).countDocuments({});
+                        });
+                        print(total);
+                      " | tail -n1 | tr -d '[:space:]'
+                    )"
+
+                    if [ "${source_count}" != "${restore_count}" ]; then
+                      echo "Count mismatch for ${db}: source=${source_count}, restore=${restore_count}" >&2
+                      failures=$((failures + 1))
+                    else
+                      echo "Verification passed for ${db} (${source_count} documents)"
+                    fi
+
+                    "${MONGO_SHELL}" "${TEST_URI}" --quiet --eval "db.getSiblingDB('${scratch_db}').dropDatabase();" >/dev/null
+                    rm -f "${local_archive}"
+                  done <<< "${selected}"
+
+                  if [ "${failures}" -gt 0 ]; then
+                    echo "Backup verification failed for ${failures} tenant(s)." >&2
+                    exit 1
+                  fi
+
+                  echo "Backup verification passed."
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+                - name: tmp
+                  mountPath: /tmp
+            - name: restore-test-mongodb
+              image: mongo:8.0
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -ceu
+                - |
+                  mongod --bind_ip_all --port 27018 --dbpath /scratchdb
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+              volumeMounts:
+                - name: scratchdb
+                  mountPath: /scratchdb
+          volumes:
+            - name: tools
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+            - name: scratchdb
+              emptyDir: {}
