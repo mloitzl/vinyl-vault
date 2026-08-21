@@ -135,28 +135,64 @@ kubectl top pod -n vinylvault-staging -l component=database
 kubectl get pvc -n vinylvault-staging
 ```
 
-### Backup Database
+### Automated Backup (mongodb-backend only)
 
 ```bash
-# Backup BFF database
-kubectl exec -n vinylvault-staging mongodb-bff-0 -- mongodump --out=/tmp/backup
-kubectl cp vinylvault-staging/mongodb-bff-0:/tmp/backup ./backup-bff-$(date +%Y%m%d)
+# Cloudforge production uses CronJobs in namespace vinylvault
+kubectl get cronjob -n vinylvault mongodb-backup mongodb-backup-verify
 
-# Backup Backend database
-kubectl exec -n vinylvault-staging mongodb-backend-0 -- mongodump --out=/tmp/backup
-kubectl cp vinylvault-staging/mongodb-backend-0:/tmp/backup ./backup-backend-$(date +%Y%m%d)
+# Trigger ad-hoc backup run
+kubectl create job --from=cronjob/mongodb-backup mongodb-backup-manual-1 -n vinylvault
+kubectl logs -n vinylvault job/mongodb-backup-manual-1 -f
 ```
 
-### Restore Database
+Backup object layout:
+
+```text
+s3://vinylvault-mongodb-backups/<db-name>/<timestamp>.archive.gz
+```
+
+Retention is controlled by bucket lifecycle policies (not in-job pruning).
+
+### Automated Weekly Restore Verification (non-destructive)
 
 ```bash
-# Restore to BFF
-kubectl cp ./backup-bff-20241213 vinylvault-staging/mongodb-bff-0:/tmp/restore
-kubectl exec -n vinylvault-staging mongodb-bff-0 -- mongorestore /tmp/restore
+# Trigger ad-hoc verify run
+kubectl create job --from=cronjob/mongodb-backup-verify mongodb-backup-verify-manual-1 -n vinylvault
+kubectl logs -n vinylvault job/mongodb-backup-verify-manual-1 -f
+```
 
-# Restore to Backend
-kubectl cp ./backup-backend-20241213 vinylvault-staging/mongodb-backend-0:/tmp/restore
-kubectl exec -n vinylvault-staging mongodb-backend-0 -- mongorestore /tmp/restore
+`mongodb-backup-verify` restores backups into a temporary MongoDB instance inside the Job pod (not
+the production instance), validates document counts, then drops temporary data.
+
+### Manual Tenant Restore Runbook
+
+```bash
+# Safe default: restore to a scratch database (no overwrite)
+infra/k8s/scripts/restore-mongodb-tenant.sh \
+  vv_<tenant_db_hash> \
+  vv_<tenant_db_hash>/20260821-030000.archive.gz \
+  --namespace vinylvault \
+  --pod mongodb-0
+
+# Live overwrite restore (explicit + confirmation required)
+infra/k8s/scripts/restore-mongodb-tenant.sh \
+  vv_<tenant_db_hash> \
+  vv_<tenant_db_hash>/20260821-030000.archive.gz \
+  --namespace vinylvault \
+  --pod mongodb-0 \
+  --target-db vv_<tenant_db_hash> \
+  --live-restore
+```
+
+List tenant DB names from registry:
+
+```bash
+MONGODB_HOST=mongodb:27017 \
+MONGODB_ROOT_USERNAME=root \
+MONGODB_ROOT_PASSWORD='<root-password>' \
+REGISTRY_DB_NAME=vinylvault_registry \
+infra/k8s/scripts/list-tenant-dbs.sh
 ```
 
 ## Scaling Considerations
@@ -200,12 +236,14 @@ kubectl edit pvc mongodb-data-mongodb-backend-0 -n vinylvault-staging
 ### Secrets Management
 
 MongoDB passwords are stored in Kubernetes secrets:
-- `mongodb-bff-secret`: BFF root password
-- `mongodb-backend-secret`: Backend root password
+- `mongodb-secrets`: root credentials for the cloudforge overlay MongoDB StatefulSet
+- `mongodb-bff-secret`: BFF root password (legacy split deployment)
+- `mongodb-backend-secret`: Backend root password (legacy split deployment)
+- `mongodb-backup-s3`: S3 endpoint/bucket/access credentials for backup upload
 
 To view secrets:
 ```bash
-kubectl get secret mongodb-bff-secret -n vinylvault-staging -o jsonpath='{.data.mongodb-root-password}' | base64 -d
+kubectl get secret mongodb-secrets -n vinylvault -o jsonpath='{.data.MONGODB_ROOT_PASSWORD}' | base64 -d
 ```
 
 To rotate passwords:

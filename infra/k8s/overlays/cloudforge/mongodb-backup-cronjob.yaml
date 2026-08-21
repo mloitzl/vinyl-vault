@@ -1,0 +1,143 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup
+  labels:
+    app: mongodb-backup
+    component: database-backup
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: mongodb-backup
+            component: database-backup
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: install-mc
+              image: minio/mc:RELEASE.2026-07-23T15-54-02Z
+              command:
+                - sh
+                - -c
+                - cp /usr/bin/mc /tools/mc && chmod +x /tools/mc
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+          containers:
+            - name: backup
+              image: mongo:8.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: MONGODB_HOST
+                  value: mongodb:27017
+                - name: REGISTRY_DB_NAME
+                  value: vinylvault_registry
+                - name: MONGODB_ROOT_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-secrets
+                      key: MONGODB_ROOT_USERNAME
+                - name: MONGODB_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-secrets
+                      key: MONGODB_ROOT_PASSWORD
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: AWS_ENDPOINTS
+                - name: BUCKET_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongodb-backup-s3
+                      key: BUCKET_NAME
+              command:
+                - bash
+                - -ceu
+                - |
+                  export PATH="/tools:${PATH}"
+
+                  MONGO_SHELL="$(command -v mongosh 2>/dev/null || command -v mongo 2>/dev/null)"
+                  if [ -z "${MONGO_SHELL}" ]; then
+                    echo "mongosh/mongo not found" >&2
+                    exit 1
+                  fi
+
+                  TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
+                  ADMIN_URI="mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/admin?authSource=admin"
+                  REGISTRY_URI="mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/${REGISTRY_DB_NAME}?authSource=admin"
+
+                  mc alias set backup-target "${S3_ENDPOINT}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" >/dev/null
+
+                  tenant_dbs="$(
+                    "${MONGO_SHELL}" "${REGISTRY_URI}" --quiet --eval "
+                      db.getCollection('tenants')
+                        .find({ databaseName: { \$type: 'string' } }, { _id: 0, databaseName: 1 })
+                        .forEach(function(doc) {
+                          if (doc.databaseName) print(doc.databaseName);
+                        });
+                    " | grep -E '^vv_[a-z0-9]+' | sort -u || true
+                  )"
+
+                  if [ -z "${tenant_dbs}" ]; then
+                    echo "Registry lookup empty, using admin listDatabases fallback" >&2
+                    tenant_dbs="$(
+                      "${MONGO_SHELL}" "${ADMIN_URI}" --quiet --eval "
+                        db.adminCommand({ listDatabases: 1 }).databases.forEach(function(d) {
+                          print(d.name);
+                        });
+                      " | grep -E '^vv_[a-z0-9]+' | sort -u
+                    )"
+                  fi
+
+                  dbs="$(printf '%s\n%s\n' "${REGISTRY_DB_NAME}" "${tenant_dbs}" | awk 'NF' | sort -u)"
+
+                  echo "Backing up databases:"
+                  printf '%s\n' "${dbs}"
+
+                  while IFS= read -r db; do
+                    [ -n "${db}" ] || continue
+
+                    archive="/tmp/${db}-${TIMESTAMP}.archive.gz"
+                    dump_uri="mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@${MONGODB_HOST}/${db}?authSource=admin"
+
+                    echo "Dumping ${db}..."
+                    mongodump --uri="${dump_uri}" --archive="${archive}" --gzip
+
+                    object_path="${db}/${TIMESTAMP}.archive.gz"
+                    echo "Uploading ${object_path}..."
+                    mc cp "${archive}" "backup-target/${BUCKET_NAME}/${object_path}" >/dev/null
+
+                    rm -f "${archive}"
+                  done <<< "${dbs}"
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+          volumes:
+            - name: tools
+              emptyDir: {}

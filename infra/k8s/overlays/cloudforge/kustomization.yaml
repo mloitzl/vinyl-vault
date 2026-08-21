@@ -6,6 +6,8 @@ namespace: vinylvault
 resources:
   - ../../base
   - ../../base/mongodb
+  - mongodb-backup-cronjob.yaml
+  - mongodb-backup-verify-cronjob.yaml
 
 replicas:
   # 2 replicas for stateless app pods — spread across both server nodes for zero-downtime deploys.

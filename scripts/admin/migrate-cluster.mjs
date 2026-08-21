@@ -15,12 +15,20 @@
  *   node scripts/admin/migrate-cluster.mjs \
  *     --src  <source-mongodb-uri> \
  *     --dst  <destination-mongodb-uri> \
+ *     [--src-stage DEMO] \
+ *     [--dst-stage CLOUDFORGE] \
  *     [--batch-size 1000] \
  *     [--skip-bff] \
  *     [--dry-run] \
  *     [-y]
  *
  * Examples:
+ *   # DEMO → CLOUDFORGE (requires .env.demo and kubectl access)
+ *   node scripts/admin/migrate-cluster.mjs \
+ *     --src-stage DEMO --dst-stage CLOUDFORGE --dry-run
+ *   node scripts/admin/migrate-cluster.mjs \
+ *     --src-stage DEMO --dst-stage CLOUDFORGE -y
+ *
  *   # Atlas → Atlas (set env vars to keep credentials out of `ps`)
  *   export VV_SRC_URI="mongodb+srv://user:pass@source.mongodb.net"
  *   export VV_DST_URI="mongodb+srv://user:pass@dest.mongodb.net"
@@ -31,6 +39,7 @@
 import { parseArgs } from 'node:util';
 import { MongoClient } from 'mongodb';
 import readline from 'readline/promises';
+import { connect, parseStage } from './lib/connect.mjs';
 import { getTenantDbName } from './lib/tenant.mjs';
 
 const REGISTRY_DB = 'vinylvault_registry';
@@ -42,24 +51,29 @@ const BFF_DB = 'vinylvault_bff';
 
 const { values } = parseArgs({
   options: {
-    src:           { type: 'string' },
-    dst:           { type: 'string' },
-    'batch-size':  { type: 'string',  default: '1000' },
-    'skip-bff':    { type: 'boolean', default: false },
-    'dry-run':     { type: 'boolean', default: false },
-    yes:           { type: 'boolean', short: 'y', default: false },
+    src: { type: 'string' },
+    dst: { type: 'string' },
+    'src-stage': { type: 'string' },
+    'dst-stage': { type: 'string' },
+    'batch-size': { type: 'string', default: '1000' },
+    'skip-bff': { type: 'boolean', default: false },
+    'dry-run': { type: 'boolean', default: false },
+    yes: { type: 'boolean', short: 'y', default: false },
   },
   strict: false,
 });
 
 const srcUri = values.src ?? process.env.VV_SRC_URI;
 const dstUri = values.dst ?? process.env.VV_DST_URI;
+const srcStage = values['src-stage'] ? parseStage(values['src-stage']) : null;
+const dstStage = values['dst-stage'] ? parseStage(values['dst-stage']) : null;
 
-if (!srcUri || !dstUri) {
+if ((!srcUri && !srcStage) || (!dstUri && !dstStage)) {
   console.error(
-    'Usage: migrate-cluster.mjs --src <uri> --dst <uri> ' +
-    '[--batch-size N] [--skip-bff] [--dry-run] [-y]\n' +
-    'Alternatively set VV_SRC_URI and VV_DST_URI environment variables.'
+    'Usage: migrate-cluster.mjs (--src <uri> | --src-stage STAGE) ' +
+      '(--dst <uri> | --dst-stage STAGE) ' +
+      '[--batch-size N] [--skip-bff] [--dry-run] [-y]\n' +
+      'Alternatively set VV_SRC_URI and VV_DST_URI environment variables, or use stage options.'
   );
   process.exit(1);
 }
@@ -154,15 +168,29 @@ async function migrateDatabase(srcClient, dstClient, dbName) {
 
 // ─── main ─────────────────────────────────────────────────────────────────────
 
-const srcClient = new MongoClient(srcUri);
-const dstClient = new MongoClient(dstUri);
+async function openCluster(stage, uri) {
+  if (stage) {
+    const connection = await connect(stage);
+    return { client: connection.registryClient, close: connection.close };
+  }
+
+  const client = new MongoClient(uri);
+  await client.connect();
+  return { client, close: () => client.close() };
+}
+
+let srcConnection;
+let dstConnection;
 
 try {
   console.log('\n🔌  Connecting to source and destination clusters...');
-  await Promise.all([srcClient.connect(), dstClient.connect()]);
+  [srcConnection, dstConnection] = await Promise.all([
+    openCluster(srcStage, srcUri),
+    openCluster(dstStage, dstUri),
+  ]);
   console.log('✅  Connected\n');
 
-  const dbs = await listMigratableDbs(srcClient);
+  const dbs = await listMigratableDbs(srcConnection.client);
 
   if (dbs.length === 0) {
     console.log('ℹ️   No Vinyl Vault databases found on the source cluster.');
@@ -191,10 +219,10 @@ try {
   );
 
   for (const dbName of dbs) {
-    await migrateDatabase(srcClient, dstClient, dbName);
+    await migrateDatabase(srcConnection.client, dstConnection.client, dbName);
   }
 
   console.log(DRY_RUN ? '\n✅  Dry-run complete.' : '\n✅  Migration complete.');
 } finally {
-  await Promise.allSettled([srcClient.close(), dstClient.close()]);
+  await Promise.allSettled([srcConnection?.close(), dstConnection?.close()]);
 }
